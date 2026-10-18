@@ -58,17 +58,22 @@ Claude Code writes each session as JSONL, one event per line with a timestamp, u
 | 4 | The final report makes the split between human and agent work easy to see, derived from the transcript timestamps, alongside the agent-pair estimates the workspace rule asks for. |
 | 5 | PRs carry one label taken from the branch prefix (`CONTRIBUTING.md` § 2). |
 | 6 | One monorepo: `backend/`, `frontend/`, and later `e2e/` and `deploy/`, with one root `.claude/`. |
-| 7 | The challenge brief (`TASK.md`) stays local and untracked; this file carries its requirements. |
+| 7 | The challenge brief (`TASK.md`) is committed at the repo root, unchanged. |
+| 8 | Every change reaches `main` through a branch and a PR. The agent shows the PR card and waits for a yes; the human reviews and merges each PR. |
+| 9 | Three rounds: round 1 runs in containers (`docker compose`), round 2 on a local k3d cluster, round 3 live on AKS. Each round starts after the previous one is proven and signed off. |
+| 10 | The session transcript is snapshotted before every compaction, so no compaction can lose its contents (`.claude/hooks/transcript-backup.py`). |
+| 11 | High-level choices and a solution diagram are specced and signed off (a Claude artifact) before the detailed coding plan is written. |
 
 ## 4. Sequence and gates
 
 1. Repo skeleton: the Claude Code setup adapted from the template repo and upgraded with the rules above. Pause for review.
-2. Spec and detailed coding plan in `docs/plans/`: data model, auth, ordering, search, API endpoints, screens, test plan per layer, deployment shape.
-3. **Gate:** walkthrough of the coding instructions with samples; the human signs off.
-4. Build, test-first: backend, then frontend, then containers, with the human reviewing at regular points.
-5. **Gate:** containers proven, code reviewed, every suite green → local k3d.
-6. **Gate:** k3d proven and the human satisfied → AKS through GitHub Actions, if time permits. Every deployment artifact reviewed before it is applied.
-7. README, the transcript export and the human-versus-agent time report.
+2. Spec of the high-level choices with a solution diagram, published as a Claude artifact and kept in `docs/specs/`. The human signs off.
+3. Detailed coding plan in `docs/plans/`: data model, endpoints, screens, test plan per layer.
+4. **Gate:** walkthrough of the coding instructions with samples; the human signs off.
+5. Build, test-first: backend, then frontend, then containers, with the human reviewing at regular points.
+6. **Gate:** round 1 (containers) proven, code reviewed, every suite green → round 2, local k3d.
+7. **Gate:** round 2 (k3d) proven and the human satisfied → round 3, AKS through GitHub Actions, if time permits. Every deployment artifact reviewed before it is applied.
+8. README, the transcript export and the human-versus-agent time report.
 
 ## 5. Open for the spec phase
 

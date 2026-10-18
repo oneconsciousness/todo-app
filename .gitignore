@@ -1,8 +1,5 @@
 .DS_Store
 
-# The challenge brief stays local; docs/kickoff.md carries the requirements.
-TASK.md
-
 # Python
 __pycache__/
 *.py[cod]
