@@ -206,6 +206,7 @@ For Claude Code users, the rules above are enforced by hooks wired in `.claude/s
 | `pr-title.py` | Bash | `gh pr create` / `gh pr edit` with a title that is not Conventional Commits |
 | `docs-check.py` | Bash | `gh pr create` when the branch touched a path in `.claude/skills/claude-docs-check/map.json` and carries no docs decision |
 | `lint.py` | after Edit, Write | nothing; it reports lint findings on the changed lines back to the agent |
+| `transcript-backup.py` | PreCompact, PostCompact, SessionEnd | compaction, when the transcript snapshot fails; it copies the session transcript to `.ai-transcripts/` and reports a rewritten transcript |
 
 They do **not** catch:
 - Anyone running git outside Claude Code (terminal, IDE git pane, GitHub Desktop)

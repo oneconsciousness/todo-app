@@ -30,6 +30,7 @@ Each app's own commands are in its `CLAUDE.md`; `CONTRIBUTING.md` § 5 lists eve
 This repo sits inside a larger workspace whose `.claude/rules/` also load. The general rules there apply (PR card, assignee, no auto-reviewers, typed boundaries, failure handling). The product-specific protocols do not: seed compile and migrate, planner templates, ThinkingBlock, user cleanup scripts, turbo logs, and sibling contract repos. There are no sibling repos here.
 
 ## Gotchas
+- `transcript-backup.py` snapshots the session transcript into `.ai-transcripts/` before and after every compaction and at session end, and blocks a compaction it could not back up. The snapshots are the record of AI use; never delete them.
 - macOS ships bash 3.2. Repo scripts are Python 3 standard library, like the hooks, so they run on a reviewer's Mac and in CI.
 - The branch-protection hook blocks every commit on `main`. Branch first.
 - FastAPI answers validation errors with 422 unless the app's handler maps them. Keep the handler; the contract says 400.

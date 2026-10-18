@@ -6,6 +6,7 @@ description: Run the checks that make "done" true before reporting a task comple
 
 1. Gates. Run what CI runs for every part the change touched, from the repo root. Skip a part only when it does not exist yet, and say so.
    - Hygiene: `python3 scripts/check_hygiene.py`
+   - Hooks, when `.claude/hooks/` changed: `python3 -m unittest discover -s .claude/hooks/tests`
    - Backend: `cd backend && uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pytest`
    - Frontend: `cd frontend && npm run check && npm run test && npm run build`
    - When the change touches the running stack (Dockerfiles, compose, manifests, config, CORS, routing): bring the stack up and run the live-server e2e and Playwright suites against it, following `CONTRIBUTING.md` § 14 for restarts.
