@@ -1,0 +1,45 @@
+.DS_Store
+
+# The challenge brief stays local; docs/kickoff.md carries the requirements.
+TASK.md
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Node
+node_modules/
+dist/
+coverage/
+playwright-report/
+test-results/
+*.tsbuildinfo
+
+# Claude Code per-user overrides (project-level settings.json is committed)
+.claude/settings.local.json
+# Local git worktrees created by Claude Code sessions
+.claude/worktrees/
+# Personal Claude Code notes
+CLAUDE.local.md
+.claude/hooks/__pycache__/
+# Scratch folders agents may create
+_temp/
+_ignore/
+
+# Secrets. The same patterns the secrets hook protects.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials.*
+secrets.*
+# The patterns above would hide rule docs with those names; keep the rules visible.
+!.claude/rules/*.md
