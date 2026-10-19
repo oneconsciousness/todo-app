@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -33,6 +34,16 @@ BASH_DENIED = (
     "docker compose exec api env", "docker compose exec api printenv JWT_SECRET",
     "cat server.pem", "head -n 5 ~/.aws/credentials", "grep TOKEN secrets.json", "awk '{print}' id_rsa",
     'cat "server.key"', "/bin/cat id_rsa", "sed -n p server.key", "base64 id_rsa", "cat config/credentials.yaml",
+    "grep --recur SECRET .", "grep --dir=recurse SECRET .", "find . -type f -exec sh -c 'cat \"$0\"' {} \\;",
+    "find . -exec env cat {} +", "find . -type f -exec perl -pe1 {} +", "cat .e{m..o}v", "cat .(env|x)",
+    "env grep -r SECRET .", "command -p grep -r x .", "sudo -u x grep -r x .", "{ grep -r x .; }",
+    "if true; then grep -r x .; fi", "echo `grep -r x .`", "git grep --no-inde x", "ugrep -r x .", "ug -. x",
+    "git add -f . && git diff --cached", "git add --force .", "git stash -a", "git stash push --all",
+    "tar -cf - . | tar -xOf -", "docker compose convert", "docker compose exec api cat /proc/1/environ",
+    "docker compose exec api sh -c 'printenv'",
+    "paste server.key", "tr -d x < server.key", "openssl rsa -in server.key", "dd if=server.key",
+    "perl -pe1 server.key", "ln -s server.key x.txt", "sudo -u x cat server.key", "{ cat server.key; }",
+    "echo `cat server.key`", "git diff --no-index /dev/null server.key",
 )
 
 BASH_ALLOWED = (
@@ -45,7 +56,13 @@ BASH_ALLOWED = (
     "docker compose config --no-interpolate", "docker compose ps", "docker compose logs api",
     "cat environment.md", "ls src", "python3 scripts/check_hygiene.py", "uv run pytest", "ls -la server.pem",
     "sed -i 's/a/b/' server.key", "cat backend/app/auth/credentials.py", "cat frontend/src/lib/secrets.ts", "cat README.md",
+    "find backend -name '*.py' -exec grep -l create_app {} +", "git ls-files '*.py' | xargs grep -n x",
+    "rg -l old | xargs sed -i '' 's/old/new/g'", "find . -name '*.pyc' -exec rm -f {} +", "git add -A", "git add backend/app/main.py",
+    "git stash push -m wip", "git diff", "git diff --stat HEAD~1", "tar -czf backup.tgz backend", "docker compose exec api alembic upgrade head",
+    "env FOO=1 uv run pytest", "if true; then echo ok; fi", "{ echo a; echo b; }",
 )
+
+BRACE_BOMB = "cat " + "{a,b}" * 30
 
 PATH_DENIED = (
     "/repo/.env", "/repo/.env.local", "/repo/backend/.env", "/repo/.ENV", "/repo/.env.example.bak", "/repo/.env.examples",
@@ -111,6 +128,11 @@ class EnvExampleIsTheOnlyOpening(unittest.TestCase):
         for tool_input in GREP_ALLOWED:
             with self.subTest(tool_input=tool_input):
                 self.assertFalse(run("secrets-protection.py", "Grep", {"pattern": "x", **tool_input}))
+
+    def test_a_brace_expansion_too_large_to_check_is_refused_quickly(self) -> None:
+        started = time.monotonic()
+        self.assertTrue(run("env-protection.py", "Bash", {"command": BRACE_BOMB}))
+        self.assertLess(time.monotonic() - started, 5)
 
     def test_an_unreadable_payload_is_refused(self) -> None:
         for hook in BASH_HOOKS:

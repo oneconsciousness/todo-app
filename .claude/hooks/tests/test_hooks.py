@@ -82,13 +82,26 @@ class BranchProtection(unittest.TestCase):
                 "git push origin feature/x:refs/heads/main", "git push origin refs/heads/main", "git push origin +HEAD:main",
                 "git push origin feature/x main", "git push origin --all", "git push --mirror origin",
                 "git push --force origin main", "git push -f origin main", "git checkout main && git commit -m x",
+                "sudo git push origin main", "env git push origin main", "command git push origin main", "FOO=1 git push origin main",
+                "{ git push origin main; }", "if true; then git push origin main; fi", "echo `git push origin main`",
+                "git -c remote.origin.push=HEAD:main push origin", "git -c alias.p=push p origin main",
+                "git push origin 'refs/heads/*'", "git push -f origin 'refs/tags/*'", "git commit -u -n -m x", "git commit --no-verif -m x",
+                "git update-ref refs/heads/main HEAD", "git update-ref -d refs/tags/v1.0.0",
             ),
             (
                 "git commit -m x", "git commit -m 'handle the -n flag'", "git commit -am 'tidy -n output'",
                 "git push -u origin feature/x", "git push -n origin feature/x", "git push origin feature/x:feature/x",
-                "git checkout main && git pull",
+                "git checkout main && git pull", "git -c core.editor=true commit -m x", "env GIT_TRACE=1 git status",
+                "git update-ref refs/heads/feature/y HEAD",
             ),
         )
+
+    def test_a_commit_through_a_worktree_on_main_is_refused(self) -> None:
+        git(self.repo, "checkout", "-q", "-b", "feature/x")
+        worktree = Path(tempfile.mkdtemp(prefix="hooks-wt-")) / "wt"
+        self.addCleanup(shutil.rmtree, worktree.parent, ignore_errors=True)
+        git(self.repo, "worktree", "add", "-q", str(worktree), "main")
+        self.assert_decisions((f"git -C {worktree} commit -m x", f"cd {worktree} && git commit -m x"), (f"git -C {worktree} status",))
 
     def test_round_branches_are_protected_like_main(self) -> None:
         git(self.repo, "checkout", "-q", "-b", "feature/x")

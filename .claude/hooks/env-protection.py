@@ -10,28 +10,25 @@ the committed template, holds no real secrets, and agents keep it in
 sync with the settings. Its access is exact: `.env.example.bak`,
 `.env.example*` or a command that also names `.env` stays blocked.
 
-The command is read the way the shell reads it: split into words and
-commands, quotes removed, braces expanded. Each check fails closed:
-  - every `.env…` word must be exactly `.env.example` (case-insensitive,
-    since macOS file systems are)
+The command is read the way the shell reads it (shell_words.py). Each
+check fails closed:
+  - every `.env…` word, after quote removal and brace or range
+    expansion, must be exactly `.env.example` (case-insensitive)
   - no glob the shell would expand to a dotfile like `.env`
-    (`.e*`, `.[e]nv`, `.*`)
-  - no bulk read that would sweep `.env` up: `find -exec <reader>`,
-    `xargs <reader>`, recursive grep (`-r`, `-d recurse`), `git grep
-    --no-index`, or `rg` searching hidden or ignored files
-  - no `docker compose config` without `--no-interpolate`, `docker
-    inspect`, or `env` / `printenv` inside a container, which print the
-    values compose read from `.env`
+  - no bulk read that could sweep `.env` up. `find -exec` and `xargs`
+    may run only programs that print no file contents (or a quiet grep,
+    or sed -i), unless xargs reads from a gitignore-aware lister such as
+    `git ls-files` or `rg -l`. Recursive grep or ugrep, `git grep
+    --no-index`, `rg` or `ug` on hidden or ignored files, `git add
+    --force`, `git stash --all` and `tar` writing an archive to stdout
+    are blocked, long options matched by any abbreviation git or grep
+    accepts.
+  - no docker command that prints the values compose read from `.env`
   - an unreadable payload or a crash in this hook denies the command
 
-String matching cannot see a path built at run time (`printf '\\x2eenv'`,
-a script that opens it). CONTRIBUTING.md § 12.1 rule 3 is the contract for
-that case.
-
-Returns Claude Code's PreToolUse deny shape:
-  {"hookSpecificOutput": {"hookEventName": "PreToolUse",
-                          "permissionDecision": "deny",
-                          "permissionDecisionReason": "..."}}
+What string matching cannot see (a path built at run time, a loop
+reading file names, a script that opens the file) is listed in
+CONTRIBUTING.md § 12.6, with the backstops that cover it.
 
 No allow rule in any settings file can override a hook deny.
 """
@@ -41,33 +38,8 @@ import fnmatch
 import json
 import posixpath
 import re
-import shlex
 import sys
 from typing import Iterable, NoReturn
-
-# --- config ---------------------------------------------------------------
-ALLOWED_ENV_FILES = frozenset({".env.example"})  # exact basenames agents may touch
-# --------------------------------------------------------------------------
-
-ENV_TOKEN_RE = re.compile(r"(?<![A-Za-z0-9_\-\\])(\.env[^\s'\"`;|&<>()]*)", re.IGNORECASE)
-GLOB_CHARS = frozenset("*?[")
-DOTFILE_PROBES = (".env", ".env.local", ".env.production")
-SEPARATORS = frozenset({";", "&&", "||", "|", "&", "(", ")", ";;", "|&"})
-COMMAND_PREFIXES = frozenset({"sudo", "command", "exec", "time", "nice", "nohup"})
-READERS = frozenset({
-    "cat", "head", "tail", "less", "more", "nl", "xxd", "od", "strings", "bat", "tac", "grep", "egrep", "fgrep",
-    "rg", "awk", "sed", "base64", "cut", "sort", "uniq", "diff", "jq", "hexdump", "python", "python3", "node",
-})
-FIND_EXEC = frozenset({"-exec", "-execdir", "-ok", "-okdir"})
-XARGS_VALUE_OPTS = frozenset({"-I", "-L", "-n", "-P", "-s", "-d", "-E", "-a", "--delimiter", "--max-args", "--max-procs"})
-GREP_VALUE_LETTERS = frozenset("efmABCdD")
-RG_VALUE_LETTERS = frozenset("efgtTmABCjMrE")
-MAX_BRACE_EXPANSIONS = 256
-DOCKER_LEAK_RES = (
-    (re.compile(r"\bdocker[\s-]+compose\b(?![^|;&]*--no-interpolate)[^|;&]*\sconfig\b"), "`docker compose config` prints the values compose read from `.env`; add `--no-interpolate`"),
-    (re.compile(r"\bdocker\s+(?:container\s+)?inspect\b"), "`docker inspect` prints a container's environment"),
-    (re.compile(r"\bdocker[\s-]+(?:compose\s+)?(?:exec|run)\b[^|;&]*\s(?:env|printenv)\b"), "`env` or `printenv` in a container prints its secrets"),
-)
 
 
 def deny(reason: str) -> NoReturn:
@@ -81,50 +53,41 @@ def deny(reason: str) -> NoReturn:
     sys.exit(0)
 
 
-def allow() -> NoReturn:
-    sys.exit(0)
+try:
+    from shell_words import Command, commands, expand, expansion_count, long_option, program
+except Exception as exc:  # fail closed: without its reader the hook cannot check anything
+    deny(f"Blocked: env-protection could not load shell_words.py ({exc}), so the command could not be checked.")
 
+# --- config ---------------------------------------------------------------
+ALLOWED_ENV_FILES = frozenset({".env.example"})  # exact basenames agents may touch
+# --------------------------------------------------------------------------
 
-def shell_tokens(command: str) -> list[str]:
-    """Split like the shell: quotes removed, operators as their own tokens; fall back to whitespace."""
-    lexer = shlex.shlex(command, posix=True, punctuation_chars=True)
-    lexer.whitespace_split = True
-    try:
-        return list(lexer)
-    except ValueError:
-        return command.split()
-
-
-def commands(tokens: list[str]) -> list[list[str]]:
-    """Group tokens into the simple commands the operators separate."""
-    groups: list[list[str]] = [[]]
-    for token in tokens:
-        if token in SEPARATORS:
-            groups.append([])
-        else:
-            groups[-1].append(token)
-    return [g for g in groups if g]
-
-
-def expand_braces(word: str) -> list[str]:
-    """Expand `{a,b}` groups the way the shell would, innermost first."""
-    match = re.search(r"\{([^{}]*,[^{}]*)\}", word)
-    if not match:
-        return [word]
-    head, tail = word[:match.start()], word[match.end():]
-    return [e for part in match.group(1).split(",") for e in expand_braces(head + part + tail)]
-
-
-def program(words: list[str]) -> tuple[str, list[str]]:
-    """Return the command's program name and its arguments, past assignments and prefixes like `sudo`."""
-    rest = [w for w in words]
-    while rest and ("=" in rest[0] and not rest[0].startswith("-") or posixpath.basename(rest[0]) in COMMAND_PREFIXES):
-        rest = rest[1:]
-    return (posixpath.basename(rest[0]), rest[1:]) if rest else ("", [])
+ENV_WORD_RE = re.compile(r"(?<![A-Za-z0-9_\-\\])(\.env[^\s'\"`;|&<>()]*)", re.IGNORECASE)
+GLOB_CHARS = frozenset("*?[")
+DOTFILE_PROBES = (".env", ".env.local", ".env.production")
+MAX_EXPANSIONS = 512
+GREP_FAMILY = frozenset({"grep", "egrep", "fgrep", "ugrep", "ug"})
+GREP_VALUE_LETTERS = frozenset("efmABCdD")
+GREP_LONG = ("--recursive", "--dereference-recursive", "--directories", "--hidden")
+RG_VALUE_LETTERS = frozenset("efgtTmABCjMrE")
+RG_LONG = ("--hidden", "--no-ignore", "--no-ignore-vcs", "--no-ignore-dot", "--no-ignore-parent", "--no-ignore-global", "--no-ignore-files", "--unrestricted")
+GIT_GREP_LONG = ("--no-index", "--no-exclude-standard", "--exclude-standard")
+GIT_ADD_LONG = ("--force",)
+GIT_STASH_LONG = ("--all",)
+QUIET_GREP = frozenset({"-l", "-L", "-c", "-q", "--files-with-matches", "--files-without-match", "--count", "--quiet", "--silent"})
+SAFE_EXEC = frozenset({"rm", "rmdir", "chmod", "chown", "touch", "mkdir", "ls", "stat", "file", "wc", "du", "echo", "true", "test", "basename", "dirname", "realpath"})
+SAFE_SOURCES = frozenset({"git", "rg", "fd", "echo", "printf"})  # listers that skip gitignored and hidden files, or print only what they are told
+FIND_EXEC = frozenset({"-exec", "-execdir", "-ok", "-okdir"})
+XARGS_VALUE_OPTIONS = frozenset({"-I", "-L", "-n", "-P", "-s", "-d", "-E", "-a", "--delimiter", "--max-args", "--max-procs", "--replace"})
+DOCKER_LEAK_RES = (
+    (re.compile(r"\bdocker[\s-]+compose\b(?![^|;&]*--no-interpolate)[^|;&]*\s(?:config|convert)\b"), "`docker compose config` or `convert` prints the values compose read from `.env`; add `--no-interpolate`"),
+    (re.compile(r"\bdocker\s+(?:container\s+)?inspect\b"), "`docker inspect` prints a container's environment"),
+    (re.compile(r"\bdocker[\s-]+(?:compose\s+)?(?:exec|run)\b[^|;&]*(?:\bprintenv\b|(?<![-\w])env\b|environ)"), "printing a container's environment shows its secrets"),
+)
 
 
 def short_letters(arg: str, value_letters: frozenset[str]) -> str:
-    """Return the flag letters of a short-option cluster, stopping at the first letter that takes a value."""
+    """Return the flag letters of a short-option cluster, up to the first letter that takes a value."""
     if not arg.startswith("-") or arg.startswith("--") or arg == "-":
         return ""
     letters = ""
@@ -137,7 +100,7 @@ def short_letters(arg: str, value_letters: frozenset[str]) -> str:
 
 def forbidden_env_word(command: str, words: Iterable[str]) -> str | None:
     """Return the first `.env…` word that is not exactly an allowed file."""
-    found = ENV_TOKEN_RE.findall(command) + [t for w in words for t in ENV_TOKEN_RE.findall(w)]
+    found = ENV_WORD_RE.findall(command) + [t for w in words for t in ENV_WORD_RE.findall(w)]
     return next((t for t in found if t.lower() not in ALLOWED_ENV_FILES), None)
 
 
@@ -149,65 +112,93 @@ def dotfile_glob(words: Iterable[str]) -> str | None:
     return next((w for w in words if GLOB_CHARS & set(w) and reaches_env(w)), None)
 
 
-def recursive_grep(args: list[str]) -> bool:
-    """True for grep run recursively, in any spelling."""
-    pairs = zip(args, args[1:] + [""])
+def prints_nothing(words: list[str]) -> bool:
+    """True when a program run by find or xargs would print no file contents."""
+    name, args = program(words)
+    if name in SAFE_EXEC:
+        return True
+    if name in GREP_FAMILY or name == "rg":
+        return bool(QUIET_GREP & {long_option(a, QUIET_GREP) for a in args})
+    return name == "sed" and any(a == "-i" or a.startswith(("-i", "--in-place")) for a in args)
+
+
+def recursive_grep(name: str, args: list[str]) -> bool:
+    """True for grep or ugrep searching recursively or into hidden files, in any spelling."""
+    resolved = [(long_option(a, GREP_LONG), a) for a in args]
+    pairs = zip(resolved, resolved[1:] + [("", "")])
     return any(
-        a in ("--recursive", "--dereference-recursive", "--directories=recurse")
-        or (a in ("-d", "--directories") and b == "recurse")
-        or a == "-drecurse"
-        or bool(set(short_letters(a, GREP_VALUE_LETTERS)) & {"r", "R"})
-        for a, b in pairs
+        r in ("--recursive", "--dereference-recursive", "--hidden")
+        or (r == "--directories" and (raw.endswith("=recurse") or nxt[1] == "recurse"))
+        or (raw == "-d" and nxt[1] == "recurse") or raw == "-drecurse"
+        or bool(set(short_letters(raw, GREP_VALUE_LETTERS)) & ({"r", "R", "."} if name in ("ugrep", "ug") else {"r", "R"}))
+        for (r, raw), nxt in pairs
     )
 
 
 def rg_reaches_hidden(args: list[str]) -> bool:
     """True when rg would search hidden or ignored files."""
-    unrestricted = sum(short_letters(a, RG_VALUE_LETTERS).count("u") for a in args) + args.count("--unrestricted")
-    return unrestricted > 0 or "-." in args or any(a == "--hidden" or a.startswith("--no-ignore") or "." in short_letters(a, RG_VALUE_LETTERS) for a in args)
+    resolved = [long_option(a, RG_LONG) for a in args]
+    letters = "".join(short_letters(a, RG_VALUE_LETTERS) for a in args)
+    return "u" in letters or "." in letters or any(r in RG_LONG for r in resolved)
 
 
-def runs_reader(args: list[str], markers: frozenset[str]) -> bool:
-    """True when one of the marker arguments is followed by a program that prints files."""
-    return any(a in markers and i + 1 < len(args) and posixpath.basename(args[i + 1]) in READERS for i, a in enumerate(args))
+def runs_unsafe_program(args: list[str]) -> bool:
+    """True when find runs, through -exec or -ok, a program that could print file contents."""
+    starts = [i + 1 for i, a in enumerate(args) if a in FIND_EXEC]
+    return any(not prints_nothing(args[i:]) for i in starts)
 
 
-def xargs_reader(args: list[str]) -> bool:
-    """True when xargs runs a program that prints its file arguments."""
+def xargs_unsafe(cmd: Command, args: list[str]) -> bool:
+    """True when xargs runs a program that prints files, fed by something that could list `.env`."""
     rest = list(args)
     while rest and rest[0].startswith("-"):
-        rest = rest[2:] if rest[0] in XARGS_VALUE_OPTS else rest[1:]
-    return bool(rest) and posixpath.basename(rest[0]) in READERS
+        rest = rest[2:] if rest[0] in XARGS_VALUE_OPTIONS else rest[1:]
+    source, source_args = program(cmd.piped_from)
+    safe_source = source in SAFE_SOURCES and not (source == "rg" and rg_reaches_hidden(source_args))
+    return bool(rest) and not prints_nothing(rest) and not safe_source
 
 
-def bulk_read(words: list[str]) -> str | None:
-    """Return why a single command would sweep env files into its output, or None."""
-    name, args = program(words)
-    if name in ("grep", "egrep", "fgrep") and recursive_grep(args):
+def tar_to_stdout(args: list[str]) -> bool:
+    """True when tar creates an archive and writes it to stdout (`-` as the file, or no file at all)."""
+    clusters = [a.lstrip("-") for a in args if a.startswith("-") and not a.startswith("--")] + ([args[0]] if args and not args[0].startswith("-") else [])
+    creates = "--create" in args or any("c" in c for c in clusters)
+    names_file = "--file" in args or any("f" in c for c in clusters)
+    return creates and ("-" in args or "--to-stdout" in args or not names_file)
+
+
+def bulk_read(cmd: Command) -> str | None:
+    """Return why one command would sweep env files into its output or into git, or None."""
+    name, args = program(cmd.words)
+    if name in GREP_FAMILY and recursive_grep(name, args):
         return "recursive grep reads hidden files such as `.env`; use `rg` (skips hidden and gitignored files) or `git grep`"
     if name == "rg" and rg_reaches_hidden(args):
         return "`rg` with hidden or ignored files enabled would read `.env`"
-    if name == "git" and "grep" in args and ({"--no-index", "--no-exclude-standard"} & set(args)):
-        return "`git grep --no-index` or `--no-exclude-standard` reads gitignored files such as `.env`"
-    if name == "find" and runs_reader(args, FIND_EXEC):
-        return "`find -exec` with a program that prints files would read `.env`; use `rg` or name the files"
-    if name == "xargs" and xargs_reader(args):
-        return "`xargs` feeding a program that prints files would read `.env`; use `rg` or name the files"
+    if name == "git":
+        sub = next((a for a in args if not a.startswith("-")), "")
+        resolved = {long_option(a, GIT_GREP_LONG + GIT_ADD_LONG + GIT_STASH_LONG) for a in args}
+        letters = "".join(short_letters(a, frozenset("m")) for a in args)
+        if sub == "grep" and {"--no-index", "--no-exclude-standard"} & resolved:
+            return "`git grep --no-index` or `--no-exclude-standard` reads gitignored files such as `.env`"
+        if sub == "add" and ("--force" in resolved or "f" in letters):
+            return "`git add --force` stages gitignored files such as `.env`"
+        if sub == "stash" and ("--all" in resolved or "a" in letters):
+            return "`git stash --all` stashes gitignored files such as `.env`, and the stash can then be printed"
+    if name == "find" and runs_unsafe_program(args):
+        return "`find -exec` may only run programs that print no file contents; use `rg`, or name the files"
+    if name == "xargs" and xargs_unsafe(cmd, args):
+        return "`xargs` may feed files to a printing program only from `git ls-files` or `rg -l`; use those, or name the files"
+    if name == "tar" and tar_to_stdout(args):
+        return "`tar` writing an archive to stdout would carry `.env` along"
     return None
-
-
-def leak_reason(command: str, groups: list[list[str]]) -> str | None:
-    """Return why the command would read env files indirectly, or None."""
-    reasons = (bulk_read(words) for words in groups)
-    return next((r for r in reasons if r), None) or next((why for pattern, why in DOCKER_LEAK_RES if pattern.search(command)), None)
 
 
 def decide(command: str) -> None:
     """Deny the command when it could reach an env file other than the example."""
-    tokens = shell_tokens(command)
-    expanded = [e for t in tokens for e in expand_braces(t)]
-    if len(expanded) > MAX_BRACE_EXPANSIONS * max(len(tokens), 1):
+    cmds = commands(command)
+    words = [w for c in cmds for w in c.words]
+    if any(expansion_count(w) > MAX_EXPANSIONS for w in words):
         deny("Blocked: the command's brace expansion is too large to check. Name the files directly.")
+    expanded = [e for w in words for e in expand(w)]
     target = forbidden_env_word(command, expanded) or dotfile_glob(expanded)
     if target:
         deny(
@@ -217,9 +208,9 @@ def decide(command: str) -> None:
             f"or git history. Only `.env.example` is open to agents, by its "
             f"exact name. If you need a value, ask the human directly; to "
             f"create `.env` from the example, ask the human to run the copy. "
-            f"A commit message that mentions env files goes through `git commit -F <file>`."
+            f"For text that mentions env files, use the Write tool and `git commit -F <file>`."
         )
-    reason = leak_reason(command, commands(tokens))
+    reason = next((r for r in (bulk_read(c) for c in cmds) if r), None) or next((why for pattern, why in DOCKER_LEAK_RES if pattern.search(command)), None)
     if reason:
         deny(f"Blocked: {reason}. See CONTRIBUTING.md § 12 (Secrets discipline).")
 
@@ -232,7 +223,7 @@ def main() -> None:
     command = ((payload.get("tool_input") or {}).get("command") or "")
     if command:
         decide(command)
-    allow()
+    sys.exit(0)
 
 
 if __name__ == "__main__":

@@ -61,8 +61,6 @@
       "Bash(k3d cluster list*)",
       "Bash(python3 scripts/check_hygiene.py*)",
       "Bash(ls *)",
-      "Bash(grep *)",
-      "Bash(find *)",
       "Bash(wc *)",
       "Bash(git status *)",
       "Bash(git diff *)",

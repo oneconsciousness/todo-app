@@ -23,11 +23,10 @@ Returns Claude Code's PreToolUse deny shape on stdout with exit 0:
 """
 from __future__ import annotations
 
+import fnmatch
 import json
 import os
-import posixpath
 import re
-import shlex
 import subprocess
 import sys
 from typing import NoReturn
@@ -41,12 +40,16 @@ TAG_RE = r"v\d+\.\d+\.\d+"  # release tags are never moved; set to "" to skip th
 
 PROTECTED_ALT = "|".join(f"(?:{b})" for b in PROTECTED)
 PROTECTED_LIST = "`main` and every `round/<n>-<name>` integration branch"
-SEPARATORS = frozenset({";", "&&", "||", "|", "&", "(", ")", ";;", "|&"})
 GIT_VALUE_OPTIONS = frozenset({"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--config-env", "--super-prefix", "--exec-path"})
-COMMIT_VALUE_LETTERS = frozenset("mFCctSu")  # short options that take the rest of the cluster or the next word
+COMMIT_VALUE_LETTERS = frozenset("mFCct")  # short options that take the rest of the cluster or the next word
+COMMIT_ATTACHED_LETTERS = frozenset("Su")  # short options whose value can only be attached (`-Skey`, `-uno`)
 COMMIT_VALUE_OPTIONS = frozenset({"--message", "--file", "--reuse-message", "--reedit-message", "--template", "--author", "--date", "--trailer", "--fixup", "--squash", "--cleanup"})
 PUSH_VALUE_OPTIONS = frozenset({"-o", "--push-option", "--repo", "--receive-pack", "--exec"})
 TAG_VALUE_LETTERS = frozenset("mFu")
+COMMIT_LONG = ("--no-verify", "--message", "--file", "--reuse-message", "--reedit-message", "--template", "--author", "--date", "--trailer", "--fixup", "--squash", "--cleanup", "--all", "--amend")
+PUSH_LONG = ("--no-verify", "--all", "--mirror", "--branches", "--tags", "--force", "--force-with-lease", "--force-if-includes", "--delete", "--dry-run", "--set-upstream", "--push-option", "--repo")
+UNSAFE_CONFIG_KEYS = ("remote.", "alias.", "core.hookspath", "push.", "branch.")  # `git -c` keys that redirect a push, rename a command or skip hooks
+PROBE_PROTECTED = ("main", "round/1-probe")  # names a wildcard refspec is tested against
 
 
 def deny(reason: str) -> NoReturn:
@@ -64,6 +67,12 @@ def deny(reason: str) -> NoReturn:
 def allow() -> NoReturn:
     """Exit without a decision."""
     sys.exit(0)
+
+
+try:
+    from shell_words import commands, long_option, program
+except Exception as exc:  # fail closed: without its reader the hook cannot check anything
+    deny(f"Blocked: branch-protection could not load shell_words.py ({exc}), so the command could not be checked.")
 
 
 def current_branch(cwd: str) -> str | None:
@@ -90,45 +99,33 @@ def is_release_tag(name: str) -> bool:
     return bool(TAG_RE) and re.fullmatch(TAG_RE, name.removeprefix("refs/tags/")) is not None
 
 
-def shell_commands(command: str) -> list[list[str]]:
-    """Split the line the way the shell does, into simple commands with quotes removed."""
-    lexer = shlex.shlex(command, posix=True, punctuation_chars=True)
-    lexer.whitespace_split = True
-    try:
-        tokens = list(lexer)
-    except ValueError:
-        tokens = command.split()
-    groups: list[list[str]] = [[]]
-    for token in tokens:
-        if token in SEPARATORS:
-            groups.append([])
-        else:
-            groups[-1].append(token)
-    return [g for g in groups if g]
-
-
-def git_subcommand(words: list[str]) -> tuple[str, list[str]]:
-    """Return git's subcommand and its arguments, skipping global options; ("", []) when not git."""
-    if not words or posixpath.basename(words[0]) != "git":
-        return "", []
-    rest = words[1:]
+def git_parts(args: list[str]) -> tuple[dict[str, list[str]], str, list[str]]:
+    """Split git's arguments into its global options with values, the subcommand, and the subcommand's arguments."""
+    options: dict[str, list[str]] = {}
+    rest = list(args)
     while rest and rest[0].startswith("-"):
-        rest = rest[2:] if rest[0] in GIT_VALUE_OPTIONS else rest[1:]
-    return (rest[0], rest[1:]) if rest else ("", [])
+        name = rest[0].split("=", 1)[0]
+        takes_value = name in GIT_VALUE_OPTIONS and "=" not in rest[0]
+        value = rest[1] if takes_value and len(rest) > 1 else rest[0].split("=", 1)[-1]
+        options.setdefault(name, []).append(value)
+        rest = rest[2:] if takes_value else rest[1:]
+    return (options, rest[0], rest[1:]) if rest else (options, "", [])
 
 
-def short_flags(arg: str, value_letters: frozenset[str]) -> tuple[str, bool]:
+def short_flags(arg: str, value_letters: frozenset[str], attached_letters: frozenset[str] = frozenset()) -> tuple[str, bool]:
     """Return a short-option cluster's flag letters, and whether its last letter takes the next word as a value."""
     if not arg.startswith("-") or arg.startswith("--") or arg == "-":
         return "", False
     for i, ch in enumerate(arg[1:], start=1):
         if ch in value_letters:
             return arg[1:i + 1], i == len(arg) - 1
+        if ch in attached_letters:
+            return arg[1:i + 1], False
     return arg[1:], False
 
 
-def parse_options(args: list[str], value_letters: frozenset[str], value_options: frozenset[str]) -> tuple[set[str], list[str]]:
-    """Split arguments into the option names used (short letters and long names) and the positional words."""
+def parse_options(args: list[str], value_letters: frozenset[str], value_options: frozenset[str], known_long: tuple[str, ...] = (), attached_letters: frozenset[str] = frozenset()) -> tuple[set[str], list[str]]:
+    """Split arguments into the option names used (short letters, long names resolved from abbreviations) and the positional words."""
     used: set[str] = set()
     positional: list[str] = []
     skip = False
@@ -138,11 +135,11 @@ def parse_options(args: list[str], value_letters: frozenset[str], value_options:
         elif arg == "--":
             skip = False
         elif arg.startswith("--"):
-            name = arg.split("=", 1)[0]
+            name = long_option(arg, known_long) if known_long else arg.split("=", 1)[0]
             used.add(name)
             skip = name in value_options and "=" not in arg
         elif arg.startswith("-") and arg != "-":
-            letters, takes_next = short_flags(arg, value_letters)
+            letters, takes_next = short_flags(arg, value_letters, attached_letters)
             used.update(f"-{ch}" for ch in letters)
             skip = takes_next or arg in value_options
         else:
@@ -161,7 +158,7 @@ def refspec_target(spec: str, branch: str | None) -> tuple[str, bool]:
 
 def check_commit(args: list[str], branch: str | None, chained_checkout: bool) -> None:
     """Deny a commit that skips hooks or lands on a protected branch."""
-    used, _ = parse_options(args, COMMIT_VALUE_LETTERS, COMMIT_VALUE_OPTIONS)
+    used, _ = parse_options(args, COMMIT_VALUE_LETTERS, COMMIT_VALUE_OPTIONS, COMMIT_LONG, COMMIT_ATTACHED_LETTERS)
     if {"--no-verify", "-n"} & used:
         deny(f"`--no-verify` skips the repo's git hooks. That is blocked here; fix what the hook reports instead. See {SECTION_REF}.")
     if branch is not None and is_protected(branch):
@@ -181,7 +178,7 @@ def check_commit(args: list[str], branch: str | None, chained_checkout: bool) ->
 
 def check_push(args: list[str], branch: str | None) -> None:
     """Deny a push that skips hooks, reaches a protected branch, or moves or deletes a release tag."""
-    used, positional = parse_options(args, frozenset(), PUSH_VALUE_OPTIONS)
+    used, positional = parse_options(args, frozenset(), PUSH_VALUE_OPTIONS, PUSH_LONG)
     flags = used | {f"-{ch}" for a in args if a.startswith("-") and not a.startswith("--") for ch in a[1:]}
     if "--no-verify" in flags:
         deny(f"`--no-verify` skips the repo's git hooks. That is blocked here; fix what the hook reports instead. See {SECTION_REF}.")
@@ -196,6 +193,8 @@ def check_push(args: list[str], branch: str | None) -> None:
         deny(f"Blocked: force-pushing tags would move release tags. A release tag is never moved; cut the next version. See {SECTION_REF}.")
     for spec in specs:
         target, forced_spec = refspec_target(spec, branch)
+        if any(c in target for c in "*?[") and (any(fnmatch.fnmatchcase(p, target) for p in PROBE_PROTECTED) or (forced or forced_spec) and fnmatch.fnmatchcase("refs/tags/v1.0.0", target)):
+            deny(f"Blocked: the wildcard refspec `{spec}` would push protected branches or move release tags. Push your one branch by name. See {SECTION_REF}.")
         if is_release_tag(target) and (forced or forced_spec or deleting or spec.startswith(":")):
             deny(f"Blocked: this would move or delete the release tag `{target}` on the remote. A release tag is never moved or deleted; cut the next version. See {SECTION_REF}.")
         if is_protected(target):
@@ -232,20 +231,45 @@ def checkout_target(args: list[str]) -> str:
     return new or next((a for a in args if not a.startswith("-")), "")
 
 
+def check_config(options: dict[str, list[str]]) -> None:
+    """Deny `git -c` settings that could redirect a push, rename a command or switch off hooks."""
+    keys = [v.split("=", 1)[0].lower() for v in options.get("-c", []) + options.get("--config-env", [])]
+    bad = next((k for k in keys if k.startswith(UNSAFE_CONFIG_KEYS)), None)
+    if bad:
+        deny(f"Blocked: `git -c {bad}=…` can redirect a push, rename a command or skip hooks. Use the command itself. See {SECTION_REF}.")
+
+
+def check_update_ref(args: list[str]) -> None:
+    """Deny moving or deleting a protected branch or a release tag through plumbing."""
+    refs = [a for a in args if a.startswith("refs/")]
+    if any(is_protected(r.removeprefix("refs/heads/")) for r in refs if r.startswith("refs/heads/")) or any(is_release_tag(r) for r in refs if r.startswith("refs/tags/")):
+        deny(f"Blocked: `git update-ref` on a protected branch or a release tag goes around every guard. See {SECTION_REF}.")
+
+
 def decide(command: str, cwd: str) -> None:
-    """Check every git command in the line."""
-    groups = [git_subcommand(words) for words in shell_commands(command)]
-    if not any(sub for sub, _ in groups):
-        return
-    branch = current_branch(cwd)
-    checks_out_protected = any(sub in ("checkout", "switch") and is_protected(checkout_target(args)) for sub, args in groups)
-    for sub, args in groups:
+    """Check every git command in the line, following `cd` and `git -C` to the repo each one runs in."""
+    here = cwd
+    planned: list[tuple[str, str, list[str]]] = []
+    for cmd in commands(command):
+        name, args = program(cmd.words)
+        if name == "cd":
+            here = os.path.normpath(os.path.join(here, os.path.expanduser(args[0] if args else "~")))
+        elif name == "git":
+            options, sub, sub_args = git_parts(args)
+            check_config(options)
+            where = os.path.normpath(os.path.join(here, *options["-C"])) if "-C" in options else here
+            planned.append((where, sub, sub_args))
+    checks_out_protected = any(sub in ("checkout", "switch") and is_protected(checkout_target(a)) for _, sub, a in planned)
+    for where, sub, sub_args in planned:
+        branch = current_branch(where)
         if sub == "commit":
-            check_commit(args, branch, checks_out_protected)
+            check_commit(sub_args, branch, checks_out_protected)
         elif sub == "push":
-            check_push(args, branch)
+            check_push(sub_args, branch)
         elif sub == "tag":
-            check_tag(args, cwd)
+            check_tag(sub_args, where)
+        elif sub == "update-ref":
+            check_update_ref(sub_args)
 
 
 def main() -> None:
@@ -256,7 +280,7 @@ def main() -> None:
         deny("Blocked: the hook payload could not be read, so the command could not be checked against branch protection.")
     tool_input = payload.get("tool_input") or {}
     command = (tool_input.get("command") or "").strip()
-    if command and "git" in command:
+    if command:
         decide(command, payload.get("cwd") or tool_input.get("cwd") or os.getcwd())
     allow()
 

@@ -25,7 +25,7 @@ may touch them at all, except `.env.example`.
 Secret patterns (matched case-insensitively against the basename, or against any path segment):
   - .env, .env.*  (any env file)
   - *.pem, *.key, *.crt, *.p12, *.pfx, *.jks  (cryptographic keys/certs)
-  - credentials.<data ext>, secrets.<data ext>, task-secrets.<data ext>
+  - credentials.<data ext>, secrets.<data ext>
     (named secret stores; source files such as credentials.py are not)
   - id_rsa, id_rsa.*, id_ed25519, id_ed25519.* (SSH keys)
   - .npmrc, .pypirc, .docker/config.json, .aws/credentials, .ssh/, .gnupg/, .kube/config
@@ -40,8 +40,6 @@ from __future__ import annotations
 import fnmatch
 import json
 import os
-import posixpath
-import shlex
 import sys
 from typing import NoReturn
 
@@ -54,22 +52,21 @@ DATA_EXTENSIONS = ("json", "yaml", "yml", "toml", "env", "ini", "cfg", "conf", "
 SECRET_BASENAME_GLOBS = (
     ".env", ".env.*", "*.pem", "*.key", "*.crt", "*.p12", "*.pfx", "*.jks",
     "id_rsa", "id_rsa.*", "id_ed25519", "id_ed25519.*", ".npmrc", ".pypirc",
-    *(f"{name}.{ext}" for name in ("credentials", "secrets", "task-secrets") for ext in DATA_EXTENSIONS),
+    *(f"{name}.{ext}" for name in ("credentials", "secrets") for ext in DATA_EXTENSIONS),
 )
 
 # Pattern matched against any path segment.
 SECRET_PATH_FRAGMENTS = (".docker/config.json", ".aws/credentials", ".aws/config", ".ssh/", ".gnupg/", ".kube/config")
 
 WRITE_TOOLS = frozenset({"Edit", "Write", "MultiEdit", "NotebookEdit"})
-SEPARATORS = frozenset({";", "&&", "||", "|", "&", "(", ")", ";;", "|&"})
-COMMAND_PREFIXES = frozenset({"sudo", "command", "exec", "time", "nice", "nohup"})
-
 # Programs that print the files they are given. grep and sed need their flags read first.
 PRINTING_READERS = frozenset({
-    "cat", "head", "tail", "less", "more", "nl", "xxd", "od", "strings", "bat", "tac", "awk",
-    "base64", "cut", "sort", "uniq", "diff", "jq", "hexdump", "rev", "fold", "cp", "rg", "egrep", "fgrep",
+    "cat", "head", "tail", "less", "more", "nl", "xxd", "od", "strings", "bat", "tac", "awk", "base64", "cut", "sort",
+    "uniq", "diff", "jq", "hexdump", "rev", "fold", "cp", "rg", "egrep", "fgrep", "ugrep", "ug", "paste", "openssl", "dd",
+    "perl", "python", "python3", "node", "ruby", "ln", "tee", "column", "comm", "join", "split", "zcat", "gzip", "zip",
 })
-GREP_LIKE = frozenset({"grep", "egrep", "fgrep", "rg"})
+GIT_PRINTING = frozenset({"diff", "show", "blame", "cat-file", "grep", "log", "format-patch"})
+GREP_LIKE = frozenset({"grep", "egrep", "fgrep", "rg", "ugrep", "ug"})
 GREP_QUIET = frozenset({"-l", "--files-with-matches", "-L", "--files-without-match", "-c", "--count", "-q", "--quiet", "--silent"})
 
 
@@ -86,6 +83,12 @@ def deny(reason: str) -> NoReturn:
 
 def allow() -> NoReturn:
     sys.exit(0)
+
+
+try:
+    from shell_words import commands, program
+except Exception as exc:  # fail closed: without its reader the hook cannot check Bash commands
+    deny(f"Blocked: secrets-protection could not load shell_words.py ({exc}), so the call could not be checked.")
 
 
 def is_secret_path(path: str) -> bool:
@@ -108,34 +111,9 @@ def targets_env_dotfiles(glob: str) -> bool:
     return (pattern.startswith(".") or "env" in pattern) and any(fnmatch.fnmatchcase(p, pattern) for p in ENV_DOTFILE_PROBES)
 
 
-def shell_commands(command: str) -> list[list[str]]:
-    """Split the command the way the shell does, into simple commands with quotes removed."""
-    lexer = shlex.shlex(command, posix=True, punctuation_chars=True)
-    lexer.whitespace_split = True
-    try:
-        tokens = list(lexer)
-    except ValueError:
-        tokens = command.split()
-    groups: list[list[str]] = [[]]
-    for token in tokens:
-        if token in SEPARATORS:
-            groups.append([])
-        else:
-            groups[-1].append(token)
-    return [g for g in groups if g]
-
-
-def program(words: list[str]) -> tuple[str, list[str]]:
-    """Return the program's base name and its arguments, past assignments and prefixes like `sudo`."""
-    rest = list(words)
-    while rest and ("=" in rest[0] and not rest[0].startswith("-") or posixpath.basename(rest[0]) in COMMAND_PREFIXES):
-        rest = rest[1:]
-    return (posixpath.basename(rest[0]), rest[1:]) if rest else ("", [])
-
-
 def prints_its_files(name: str, args: list[str]) -> bool:
     """True when this program, with these flags, prints the content of the files it is given."""
-    if name == "grep":
+    if name in GREP_LIKE:
         return not (GREP_QUIET & set(args))
     if name == "sed":
         return not any(a == "-i" or a.startswith(("-i", "--in-place")) for a in args)
@@ -143,20 +121,34 @@ def prints_its_files(name: str, args: list[str]) -> bool:
 
 
 def file_operands(name: str, args: list[str]) -> list[str]:
-    """Return the arguments that name files: for grep-like programs the first word is the pattern, unless -e or -f gives it."""
+    """Return the arguments that name files, including values after `=` (`if=key`, `--in=key`); for grep-like programs the first word is the pattern, unless -e or -f gives it."""
     positional = [a for a in args if not a.startswith("-")]
+    values = [a.split("=", 1)[1] for a in args if "=" in a]
     pattern_given = any(a in ("-e", "-f", "--regexp", "--file") or a.startswith(("--regexp=", "--file=")) for a in args)
-    return positional[1:] if name in GREP_LIKE and not pattern_given else positional
+    return (positional[1:] if name in GREP_LIKE and not pattern_given else positional) + values
+
+
+def redirected_secret(words: tuple[str, ...]) -> str | None:
+    """Return a secrets path the command reads through input redirection (`< key`), or None."""
+    return next((words[i + 1] for i, w in enumerate(words[:-1]) if w in ("<", "<<<", "<>") and is_secret_path(words[i + 1])), None)
 
 
 def printed_secret(command: str) -> str | None:
-    """Return the first secrets path a printing program in the command is given, or None."""
-    for words in shell_commands(command):
-        name, args = program(words)
-        if prints_its_files(name, args):
+    """Return the first secrets path the command would print or copy, or None."""
+    for cmd in commands(command):
+        name, args = program(cmd.words)
+        redirected = redirected_secret(cmd.words)
+        if redirected:
+            return redirected
+        if name == "git":
+            sub = next((a for a in args if not a.startswith("-")), "")
+            secret = next((a for a in args if sub in GIT_PRINTING and is_secret_path(a)), None)
+        elif prints_its_files(name, args):
             secret = next((a for a in file_operands(name, args) if is_secret_path(a)), None)
-            if secret:
-                return secret
+        else:
+            secret = None
+        if secret:
+            return secret
     return None
 
 
