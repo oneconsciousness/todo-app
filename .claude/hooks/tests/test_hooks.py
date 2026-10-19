@@ -87,12 +87,16 @@ class BranchProtection(unittest.TestCase):
                 "git -c remote.origin.push=HEAD:main push origin", "git -c alias.p=push p origin main",
                 "git push origin 'refs/heads/*'", "git push -f origin 'refs/tags/*'", "git commit -u -n -m x", "git commit --no-verif -m x",
                 "git update-ref refs/heads/main HEAD", "git update-ref -d refs/tags/v1.0.0",
+                "git diff --output=x.txt", "git log --output=.claude/settings.json", "git show --outp=a HEAD",
+                "git branch -f main HEAD", "git branch -f round/1-containers HEAD", "git branch -D main", "git branch -M main",
+                "git branch --force main HEAD",
             ),
             (
                 "git commit -m x", "git commit -m 'handle the -n flag'", "git commit -am 'tidy -n output'",
                 "git push -u origin feature/x", "git push -n origin feature/x", "git push origin feature/x:feature/x",
                 "git checkout main && git pull", "git -c core.editor=true commit -m x", "env GIT_TRACE=1 git status",
-                "git update-ref refs/heads/feature/y HEAD",
+                "git update-ref refs/heads/feature/y HEAD", "git branch -D feature/old", "git branch -f feature/y HEAD",
+                "git branch --show-current", "git branch -m feature/x feature/z", "git diff --stat HEAD~1", "git log --oneline -5",
             ),
         )
 

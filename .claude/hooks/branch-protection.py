@@ -239,6 +239,21 @@ def check_config(options: dict[str, list[str]]) -> None:
         deny(f"Blocked: `git -c {bad}=…` can redirect a push, rename a command or skip hooks. Use the command itself. See {SECTION_REF}.")
 
 
+def check_output_option(sub: str, args: list[str]) -> None:
+    """Deny `--output` (or an abbreviation) on git's display commands, which writes any file without the Edit permission."""
+    if sub in ("diff", "log", "show", "format-patch", "range-diff") and any("--output".startswith(a.split("=", 1)[0]) and len(a.split("=", 1)[0]) >= 5 for a in args if a.startswith("--")):
+        deny(f"Blocked: `git {sub} --output` writes a file, which goes around the Edit permission and could overwrite a hook. Print to stdout instead. See {SECTION_REF}.")
+
+
+def check_branch(args: list[str]) -> None:
+    """Deny force-moving, deleting, renaming or copying onto a protected branch with `git branch`."""
+    used, positional = parse_options(args, frozenset(), frozenset(), ("--force", "--delete", "--move", "--copy"))
+    rewrites = {"-f", "-d", "-D", "-m", "-M", "-c", "-C", "--force", "--delete", "--move", "--copy"} & used
+    target = next((p for p in positional if is_protected(p)), None)
+    if rewrites and target:
+        deny(f"Blocked: `git branch {sorted(rewrites)[0]}` on the protected branch `{target}` rewrites a shared branch locally. See {SECTION_REF}.")
+
+
 def check_update_ref(args: list[str]) -> None:
     """Deny moving or deleting a protected branch or a release tag through plumbing."""
     refs = [a for a in args if a.startswith("refs/")]
@@ -270,6 +285,9 @@ def decide(command: str, cwd: str) -> None:
             check_tag(sub_args, where)
         elif sub == "update-ref":
             check_update_ref(sub_args)
+        elif sub == "branch":
+            check_branch(sub_args)
+        check_output_option(sub, sub_args)
 
 
 def main() -> None:

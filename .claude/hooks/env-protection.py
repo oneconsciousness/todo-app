@@ -72,6 +72,8 @@ GREP_LONG = ("--recursive", "--dereference-recursive", "--directories", "--hidde
 RG_VALUE_LETTERS = frozenset("efgtTmABCjMrE")
 RG_LONG = ("--hidden", "--no-ignore", "--no-ignore-vcs", "--no-ignore-dot", "--no-ignore-parent", "--no-ignore-global", "--no-ignore-files", "--unrestricted")
 GIT_GREP_LONG = ("--no-index", "--no-exclude-standard", "--exclude-standard")
+RUFF_LONG = ("--no-respect-gitignore", "--respect-gitignore", "--config")
+KUBE_SECRET_KINDS = frozenset({"secret", "secrets"})
 GIT_ADD_LONG = ("--force",)
 GIT_STASH_LONG = ("--all",)
 QUIET_GREP = frozenset({"-l", "-L", "-c", "-q", "--files-with-matches", "--files-without-match", "--count", "--quiet", "--silent"})
@@ -158,6 +160,21 @@ def xargs_unsafe(cmd: Command, args: list[str]) -> bool:
     return bool(rest) and not prints_nothing(rest) and not safe_source
 
 
+def ruff_widened(args: list[str]) -> bool:
+    """True when ruff is told to ignore .gitignore or to include files it normally skips."""
+    resolved = [long_option(a, RUFF_LONG) for a in args]
+    configs = [a.split("=", 1)[1] for a in args if a.startswith("--config=")] + [args[i + 1] for i, r in enumerate(resolved[:-1]) if r == "--config" and "=" not in args[i]]
+    return "--no-respect-gitignore" in resolved or any(re.search(r"include|respect-gitignore", c) for c in configs)
+
+
+def kube_reads_secrets(args: list[str]) -> bool:
+    """True for `kubectl get` naming Secrets in any form (`secret`, `secrets`, `secret/x`, `pods,secrets`)."""
+    if "get" not in args:
+        return False
+    kinds = {part.split("/", 1)[0].split(".", 1)[0].lower() for a in args[args.index("get") + 1:] if not a.startswith("-") for part in a.split(",")}
+    return bool(kinds & KUBE_SECRET_KINDS)
+
+
 def tar_to_stdout(args: list[str]) -> bool:
     """True when tar creates an archive and writes it to stdout (`-` as the file, or no file at all)."""
     clusters = [a.lstrip("-") for a in args if a.startswith("-") and not a.startswith("--")] + ([args[0]] if args and not args[0].startswith("-") else [])
@@ -177,12 +194,16 @@ def bulk_read(cmd: Command) -> str | None:
         sub = next((a for a in args if not a.startswith("-")), "")
         resolved = {long_option(a, GIT_GREP_LONG + GIT_ADD_LONG + GIT_STASH_LONG) for a in args}
         letters = "".join(short_letters(a, frozenset("m")) for a in args)
-        if sub == "grep" and {"--no-index", "--no-exclude-standard"} & resolved:
-            return "`git grep --no-index` or `--no-exclude-standard` reads gitignored files such as `.env`"
+        if sub in ("grep", "diff") and {"--no-index", "--no-exclude-standard"} & resolved:
+            return f"`git {sub} --no-index` reads files outside git, gitignored ones such as `.env` included"
         if sub == "add" and ("--force" in resolved or "f" in letters):
             return "`git add --force` stages gitignored files such as `.env`"
         if sub == "stash" and ("--all" in resolved or "a" in letters):
             return "`git stash --all` stashes gitignored files such as `.env`, and the stash can then be printed"
+    if name == "ruff" and ruff_widened(args):
+        return "ruff told to ignore .gitignore or to include every file would print `.env` in its error snippets"
+    if name == "kubectl" and kube_reads_secrets(args):
+        return "`kubectl get secret` prints Secret data; use `kubectl describe secret`, which shows only key names and sizes"
     if name == "find" and runs_unsafe_program(args):
         return "`find -exec` may only run programs that print no file contents; use `rg`, or name the files"
     if name == "xargs" and xargs_unsafe(cmd, args):

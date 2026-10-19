@@ -44,6 +44,10 @@ BASH_DENIED = (
     "paste server.key", "tr -d x < server.key", "openssl rsa -in server.key", "dd if=server.key",
     "perl -pe1 server.key", "ln -s server.key x.txt", "sudo -u x cat server.key", "{ cat server.key; }",
     "echo `cat server.key`", "git diff --no-index /dev/null server.key",
+    "git diff --no-index /tmp/empty .", "git diff --no-ind /dev/null certs", "git diff --stat --no-index /tmp/empty .",
+    "uv run ruff check --no-respect-gitignore .", "uv run ruff check --config \"extend-include=['*']\" .",
+    "uvx ruff check --no-respect-gitignore .", "kubectl get secret app -o yaml", "kubectl get secrets -o jsonpath='{.data}'",
+    "kubectl get secret/app -o json", "kubectl -n todo get secrets",
 )
 
 BASH_ALLOWED = (
@@ -60,6 +64,8 @@ BASH_ALLOWED = (
     "rg -l old | xargs sed -i '' 's/old/new/g'", "find . -name '*.pyc' -exec rm -f {} +", "git add -A", "git add backend/app/main.py",
     "git stash push -m wip", "git diff", "git diff --stat HEAD~1", "tar -czf backup.tgz backend", "docker compose exec api alembic upgrade head",
     "env FOO=1 uv run pytest", "if true; then echo ok; fi", "{ echo a; echo b; }",
+    "uv run ruff check .", "uv run ruff format --check .", "kubectl get pods -o wide", "kubectl describe secret app",
+    "git diff --stat", "git diff origin/round/1-containers...HEAD -- backend",
 )
 
 BRACE_BOMB = "cat " + "{a,b}" * 30
