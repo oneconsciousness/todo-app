@@ -21,6 +21,7 @@ from app.domain.ranks import (
     uses_only_base62_digits,
     validate_rank,
 )
+from tests.support.ranks import insert_at
 
 # An integer part: a head letter followed by the number of digits it announces.
 integer_parts = st.sampled_from(ascii_letters).flatmap(
@@ -42,14 +43,6 @@ ranks_sharing_an_integer = integer_parts.flatmap(
     lambda integer: st.lists(fractions.map(lambda fraction: as_key(integer, fraction)), min_size=2, unique=True)
 )
 sorted_ranks = st.one_of(st.lists(valid_ranks, min_size=2, unique=True), ranks_sharing_an_integer).map(sorted)
-
-
-def insert_at(ranks: tuple[str, ...], slot: int) -> tuple[str, ...]:
-    """Insert a new rank between the neighbours of a slot, the way a move or create would."""
-    index = slot % (len(ranks) + 1)
-    lower = ranks[index - 1] if index > 0 else None
-    upper = ranks[index] if index < len(ranks) else None
-    return (*ranks[:index], rank_between(lower, upper), *ranks[index:])
 
 
 def insertion_states(slots: list[int]) -> list[tuple[str, ...]]:
