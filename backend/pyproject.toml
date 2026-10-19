@@ -1,0 +1,45 @@
+[project]
+name = "todo-api"
+version = "0.1.0"
+description = "REST API for the to do app."
+requires-python = "~=3.14.8"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "hypothesis==6.168.5",
+    "mypy==2.4.0",
+    "pytest==9.1.1",
+    "pytest-asyncio==1.4.0",
+    "pytest-cov==7.1.0",
+    "ruff==0.16.10",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py314"
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "ANN", "B", "UP", "SIM", "I", "T20", "RUF"]
+
+[tool.mypy]
+python_version = "3.14"
+strict = true
+files = ["app", "tests"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = ["--strict-markers", "--strict-config", "--cov", "--cov-report=term-missing"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
+markers = ["loop_guard_off: the test exercises the loop guard itself, so the autouse guard stands aside"]
+
+[tool.coverage.run]
+branch = true
+source = ["app"]
+
+[tool.coverage.report]
+fail_under = 90
+show_missing = true
+skip_covered = true
