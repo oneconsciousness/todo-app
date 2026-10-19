@@ -9,11 +9,13 @@ import {
 import { NavigationProvider } from "../components/ui/link.tsx";
 import { AuthProvider } from "../lib/auth/auth-context.tsx";
 import { routes, signInPath } from "../lib/routes.ts";
+import { NotFoundPage } from "../pages/not-found-page.tsx";
 import { SignInPage } from "../pages/sign-in-page.tsx";
 import { SignUpPage } from "../pages/sign-up-page.tsx";
 import { TaskDetailPage } from "../pages/task-detail-page.tsx";
 import { TaskListPage } from "../pages/task-list-page.tsx";
 import { RequireAuth } from "./require-auth.tsx";
+import { RouteErrorPage } from "./route-error.tsx";
 
 // Every page gets the session, and every `Link` navigates through the router instead of reloading the page.
 function AppRoot() {
@@ -35,6 +37,7 @@ function AppRoot() {
 export const appRoutes: RouteObject[] = [
   {
     element: <AppRoot />,
+    errorElement: <RouteErrorPage />,
     children: [
       { path: "/", element: <Navigate to={routes.tasks} replace /> },
       { path: routes.signIn, element: <SignInPage /> },
@@ -46,6 +49,7 @@ export const appRoutes: RouteObject[] = [
           { path: routes.task(":taskId"), element: <TaskDetailPage /> },
         ],
       },
+      { path: "*", element: <NotFoundPage /> },
     ],
   },
 ];
