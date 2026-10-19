@@ -1,5 +1,17 @@
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { listTasks } from "../api/tasks.ts";
+import {
+  type MutationKey,
+  type QueryClient,
+  type QueryKey,
+  keepPreviousData,
+  useMutation,
+  useMutationState,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import { useState } from "react";
+import { type ApiError, ApiErrorCode } from "../api/client.ts";
+import { listTasks, updateTask } from "../api/tasks.ts";
+import type { Task } from "../schema/task.ts";
 import { taskKeys } from "./keys.ts";
 
 /**
@@ -13,3 +25,148 @@ export const useTasks = (q: string) =>
     queryFn: ({ signal }) => listTasks(q, signal),
     placeholderData: keepPreviousData,
   });
+
+/** Every cached task list as it was before an optimistic change, to put back if the change fails. */
+export type ListSnapshot = readonly (readonly [QueryKey, readonly Task[] | undefined])[];
+
+/**
+ * Build the first step of an optimistic change from a pure list transform: stop list fetches that would overwrite it,
+ * keep a snapshot, apply `apply` to every cached list, and hand back the snapshot for a rollback.
+ */
+export const optimisticListUpdate =
+  <V>(client: QueryClient, apply: (items: readonly Task[], vars: V) => readonly Task[]) =>
+  async (vars: V): Promise<ListSnapshot> => {
+    await client.cancelQueries({ queryKey: taskKeys.lists() });
+    const snapshot = client.getQueriesData<readonly Task[]>({ queryKey: taskKeys.lists() });
+    client.setQueriesData<readonly Task[]>(
+      { queryKey: taskKeys.lists() },
+      (items) => items && apply(items, vars),
+    );
+    return snapshot;
+  };
+
+/** Put every cached list back as the snapshot had it. */
+export const restoreLists = (client: QueryClient, snapshot: ListSnapshot): void => {
+  snapshot.forEach(([key, items]) => {
+    client.setQueryData(key, items);
+  });
+};
+
+/** A tick or untick from a list or the detail screen. */
+export interface ToggleVariables {
+  readonly taskId: string;
+  readonly completed: boolean;
+}
+
+const toggleIn = (items: readonly Task[], { taskId, completed }: ToggleVariables) =>
+  items.map((task) => (task.id === taskId ? { ...task, completed } : task));
+
+// A task the server no longer has leaves every list and its detail entry.
+const forgetTask = (client: QueryClient, taskId: string): void => {
+  client.setQueriesData<readonly Task[]>({ queryKey: taskKeys.lists() }, (items) =>
+    items?.filter((task) => task.id !== taskId),
+  );
+  client.removeQueries({ queryKey: taskKeys.detail(taskId) });
+};
+
+const isNotFound = (error: ApiError): boolean => error.code === ApiErrorCode.NotFound;
+
+/**
+ * Tick a task off, or reopen it, at once: every cached list and the detail show the change before the server answers.
+ * A failure puts them back; a 404 means the task was deleted elsewhere, so it leaves the screen instead. No `If-Match`
+ * is sent, because a tick sets an absolute value and the latest one should win.
+ */
+export const useToggleTask = () => {
+  const client = useQueryClient();
+  const updateLists = optimisticListUpdate(client, toggleIn);
+  return useMutation({
+    mutationKey: taskKeys.mutations.toggle,
+    mutationFn: ({ taskId, completed }: ToggleVariables) => updateTask(taskId, { completed }),
+    onMutate: async (vars) => {
+      const detailKey = taskKeys.detail(vars.taskId);
+      await client.cancelQueries({ queryKey: detailKey });
+      const detail = client.getQueryData<Task>(detailKey);
+      const lists = await updateLists(vars);
+      client.setQueryData<Task>(
+        detailKey,
+        (task) => task && { ...task, completed: vars.completed },
+      );
+      return { lists, detail };
+    },
+    onSuccess: (task) => {
+      client.setQueryData(taskKeys.detail(task.id), task);
+    },
+    onError: (error, { taskId }, snapshot) => {
+      if (isNotFound(error)) {
+        forgetTask(client, taskId);
+        return;
+      }
+      if (!snapshot) return;
+      restoreLists(client, snapshot.lists);
+      client.setQueryData(taskKeys.detail(taskId), snapshot.detail);
+    },
+    // Not awaited: the user hears about a failure as soon as it happens, not after the lists have reloaded.
+    onSettled: () => {
+      void client.invalidateQueries({ queryKey: taskKeys.lists() });
+    },
+  });
+};
+
+type NoticeKind = "toggle";
+
+const noticeKinds: Readonly<Record<string, NoticeKind>> = {
+  [taskKeys.mutations.toggle[1]]: "toggle",
+};
+
+const failedTo: Readonly<Record<NoticeKind, string>> = {
+  toggle: "Couldn't update the task, so it's back as it was.",
+};
+
+// A 404 means someone deleted the task elsewhere; anything else says what was undone and why.
+const noticeFor = (kind: NoticeKind, error: ApiError): string =>
+  isNotFound(error) ? "That task was deleted elsewhere." : `${failedTo[kind]} ${error.message}`;
+
+const kindOf = (key: MutationKey | undefined): NoticeKind | undefined => {
+  const [, name] = key ?? [];
+  return typeof name === "string" ? noticeKinds[name] : undefined;
+};
+
+interface FailedChange {
+  readonly kind: NoticeKind;
+  readonly error: ApiError;
+  readonly submittedAt: number;
+}
+
+/**
+ * The newest failed list change, wherever it was started (the detail screen included), until the user dismisses it.
+ * It is read from the mutation cache, so no other store holds it.
+ */
+export const useTaskNotices = (): {
+  readonly notice: string | null;
+  readonly dismiss: () => void;
+} => {
+  const [dismissed, setDismissed] = useState<ReadonlySet<number>>(new Set());
+  const failures = useMutationState({
+    filters: { mutationKey: taskKeys.all, status: "error" },
+    select: (mutation) => ({
+      kind: kindOf(mutation.options.mutationKey),
+      error: mutation.state.error,
+      submittedAt: mutation.state.submittedAt,
+    }),
+  });
+  const newest = failures
+    .filter(
+      (failure): failure is FailedChange =>
+        failure.kind !== undefined && failure.error !== null && !dismissed.has(failure.submittedAt),
+    )
+    .reduce<FailedChange | null>(
+      (latest, failure) => (latest && latest.submittedAt >= failure.submittedAt ? latest : failure),
+      null,
+    );
+  return {
+    notice: newest && noticeFor(newest.kind, newest.error),
+    dismiss: () => {
+      if (newest) setDismissed((current) => new Set([...current, newest.submittedAt]));
+    },
+  };
+};

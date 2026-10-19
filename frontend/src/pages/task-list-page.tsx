@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useDebouncedValue } from "../hooks/use-debounced-value.ts";
 import { localIsoDate } from "../lib/due-date.ts";
 import type { ApiError } from "../lib/api/client.ts";
-import { useTasks } from "../lib/query/tasks.ts";
+import { useTaskNotices, useTasks, useToggleTask } from "../lib/query/tasks.ts";
 import type { Task } from "../lib/schema/task.ts";
 import { type TaskListContent, TaskListView } from "../views/task-list-view.tsx";
 
@@ -25,6 +25,8 @@ export function TaskListPage() {
   const [query, setQuery] = useState("");
   const term = useDebouncedValue(query.trim(), searchDelayMs);
   const list = useTasks(term);
+  const toggle = useToggleTask();
+  const { notice, dismiss } = useTaskNotices();
 
   return (
     <TaskListView
@@ -33,15 +35,17 @@ export function TaskListPage() {
       query={query}
       searchPending={query.trim() !== term || list.isPlaceholderData}
       pendingCreate={null}
-      failure={null}
+      failure={notice === null ? null : { message: notice }}
       onQueryChange={setQuery}
       onCreate={ignore}
-      onToggle={ignore}
+      onToggle={(taskId, completed) => {
+        toggle.mutate({ taskId, completed });
+      }}
       onMove={ignore}
       onRetry={() => {
         void list.refetch();
       }}
-      onDismissFailure={ignore}
+      onDismissFailure={dismiss}
     />
   );
 }
