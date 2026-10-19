@@ -1,10 +1,11 @@
 """Sign and check the session token (an HS256 JWT) that the session cookie carries."""
 
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from typing import Final
 from uuid import UUID
 
 import jwt
+from pydantic import ValidationError
 
 from app.domain.errors import NotAuthenticated
 from app.domain.types import SessionClaims
@@ -36,12 +37,8 @@ def decode_session(token: str, *, now: datetime, secret: str) -> SessionClaims:
             algorithms=[ALGORITHM],
             options={"verify_exp": False, "verify_iat": False, "require": ["sub", "iat", "exp"]},
         )
-        claims = SessionClaims(
-            user_id=UUID(payload["sub"]),
-            issued_at=datetime.fromtimestamp(payload["iat"], UTC),
-            expires_at=datetime.fromtimestamp(payload["exp"], UTC),
-        )
-    except (jwt.InvalidTokenError, ValueError, TypeError, OverflowError) as error:
+        claims = SessionClaims.model_validate(payload)
+    except (jwt.InvalidTokenError, ValidationError) as error:
         raise NotAuthenticated from error
     if claims.expires_at <= now:
         raise NotAuthenticated

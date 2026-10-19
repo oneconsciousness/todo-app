@@ -6,6 +6,8 @@ from enum import Enum, auto
 from typing import TypedDict
 from uuid import UUID
 
+from pydantic import BaseModel, ConfigDict, Field
+
 
 class Unset(Enum):
     """Marks a patch field the client did not send, which differs from sending `null`."""
@@ -32,10 +34,12 @@ class TaskChanges(TypedDict, total=False):
     due_date: date | None
 
 
-@dataclass(frozen=True)
-class SessionClaims:
-    """Who a session token belongs to, and when it was issued and expires."""
+class SessionClaims(BaseModel):
+    """Who a session token belongs to, and when it was issued and expires, read from the JWT's claims."""
 
-    user_id: UUID
-    issued_at: datetime
-    expires_at: datetime
+    # JWT times are whole seconds since the epoch, never milliseconds (https://www.rfc-editor.org/rfc/rfc7519#section-2).
+    model_config = ConfigDict(frozen=True, val_temporal_unit="seconds")
+
+    user_id: UUID = Field(alias="sub")
+    issued_at: datetime = Field(alias="iat")
+    expires_at: datetime = Field(alias="exp")
