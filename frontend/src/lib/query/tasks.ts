@@ -40,6 +40,16 @@ export const useTask = (taskId: string | null) =>
     throwOnError: (error) => !isNotFound(error),
   });
 
+const isMoving = (client: QueryClient): boolean =>
+  client.isMutating({ mutationKey: taskKeys.mutations.move }) > 0;
+
+/**
+ * Reload every cached list, except while moves are queued: their answers would show an order from part way through
+ * the queue. The last move reloads the lists itself, which picks up this change too.
+ */
+const refreshListsUnlessMoving = (client: QueryClient): Promise<void> =>
+  isMoving(client) ? Promise.resolve() : client.invalidateQueries({ queryKey: taskKeys.lists() });
+
 /** A save from the detail screen: the changed fields, and the version the edit started from. */
 export interface UpdateVariables {
   readonly taskId: string;
@@ -59,7 +69,7 @@ export const useUpdateTask = () => {
       updateTask(taskId, changes, version),
     onSuccess: (task) => {
       client.setQueryData(taskKeys.detail(task.id), task);
-      void client.invalidateQueries({ queryKey: taskKeys.lists() });
+      void refreshListsUnlessMoving(client);
     },
     onError: (error, { taskId }) => {
       if (error.code === ApiErrorCode.VersionMismatch)
@@ -159,7 +169,7 @@ export const useToggleTask = () => {
     }),
     // Not awaited: the user hears about a failure as soon as it happens, not after the lists have reloaded.
     onSettled: () => {
-      void client.invalidateQueries({ queryKey: taskKeys.lists() });
+      void refreshListsUnlessMoving(client);
     },
   });
 };
@@ -209,7 +219,7 @@ export const useCreateTask = () => {
   return useMutation({
     mutationKey: taskKeys.mutations.create,
     mutationFn: createTask,
-    onSuccess: () => client.invalidateQueries({ queryKey: taskKeys.lists() }),
+    onSuccess: () => refreshListsUnlessMoving(client),
   });
 };
 
@@ -235,7 +245,7 @@ export const useDeleteTask = () => {
       if (!isNotFound(error) && snapshot) restoreLists(client, snapshot);
     }),
     onSettled: () => {
-      void client.invalidateQueries({ queryKey: taskKeys.lists() });
+      void refreshListsUnlessMoving(client);
     },
   });
 };

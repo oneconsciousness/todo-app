@@ -1,9 +1,9 @@
 import type { QueryClient } from "@tanstack/react-query";
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { HttpResponse, delay, http } from "msw";
 import { describe, expect, it, vi } from "vitest";
 import { detailTask, searchMatches, tasks } from "../../test/fixtures.ts";
-import { errorReply } from "../../test/handlers.ts";
+import { type OrderServerTiming, errorReply, orderKeepingServer } from "../../test/handlers.ts";
 import { queryWrapper } from "../../test/query-wrapper.tsx";
 import { server } from "../../test/server.ts";
 import { taskKeys } from "./keys.ts";
@@ -105,5 +105,72 @@ describe("when the session ends during a change", () => {
     await run(hooks.current).catch(() => undefined);
 
     expect(cachedTaskData(client)).toEqual([]);
+  });
+});
+
+const idAt = (index: number): string => {
+  const task = tasks[index];
+  if (!task) throw new Error(`the fixtures have no task at ${String(index)}`);
+  return task.id;
+};
+
+const settled = async (client: QueryClient): Promise<void> => {
+  await waitFor(
+    () => {
+      expect(client.isMutating() + client.isFetching()).toBe(0);
+    },
+    { timeout: 2000 },
+  );
+};
+
+// The list, the move and the toggle hooks over one server that keeps the order, recording every order the list shows.
+const renderOrderedList = async (timing: OrderServerTiming) => {
+  const order = orderKeepingServer(timing);
+  server.use(
+    ...order.handlers,
+    http.patch("/api/v1/tasks/:taskId", async () => {
+      await delay(10);
+      return HttpResponse.json(detailTask);
+    }),
+  );
+  const { client, wrapper } = queryWrapper();
+  const shown: string[] = [];
+  const { result } = renderHook(
+    () => {
+      const list = useTasks("");
+      if (list.data) shown.push(list.data.map((task) => task.id).join());
+      return { list, move: useMoveTask(), toggle: useToggleTask() };
+    },
+    { wrapper },
+  );
+  await waitFor(() => {
+    expect(result.current.list.data).toBeDefined();
+  });
+  const showing = () => result.current.list.data?.map((task) => task.id).join();
+  return { client, order, hooks: result, shown, showing };
+};
+
+describe("queued moves", () => {
+  it("never show the old order while a toggle settles between them", async () => {
+    const { client, hooks, shown, showing } = await renderOrderedList({
+      moveDelaysMs: [100, 100],
+      listDelayMs: 0,
+    });
+    const original = tasks.map((task) => task.id).join();
+
+    act(() => {
+      hooks.current.move.mutate({ taskId: idAt(0), afterId: idAt(1) });
+      hooks.current.move.mutate({ taskId: idAt(2), afterId: null });
+    });
+    await waitFor(() => {
+      expect(showing()?.startsWith([idAt(2), idAt(1), idAt(0)].join())).toBe(true);
+    });
+    const fromQueued = shown.length;
+    act(() => {
+      hooks.current.toggle.mutate({ taskId: idAt(3), completed: true });
+    });
+    await settled(client);
+
+    expect(shown.slice(fromQueued)).not.toContain(original);
   });
 });

@@ -2,12 +2,11 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, delay, http } from "msw";
 import { describe, expect, it, vi } from "vitest";
-import { z } from "zod";
 import { taskKeys } from "../lib/query/keys.ts";
 import { routes } from "../lib/routes.ts";
 import { moveOnePlace, stackRows } from "../test/drag.ts";
 import { detailTask, makeTask, tasks } from "../test/fixtures.ts";
-import { errorReply } from "../test/handlers.ts";
+import { errorReply, orderKeepingServer } from "../test/handlers.ts";
 import { renderApp } from "../test/render-app.tsx";
 import { server } from "../test/server.ts";
 
@@ -22,34 +21,9 @@ const titleAt = (index: number): string => {
   return task.title;
 };
 
-const moveBodySchema = z.object({ afterId: z.string().nullable() });
-
-// The server's side of a move: take the task out, then put it back right after `afterId`.
-const serverMove = (ids: readonly string[], id: string, afterId: string | null) => {
-  const rest = ids.filter((other) => other !== id);
-  return rest.toSpliced(afterId === null ? 0 : rest.indexOf(afterId) + 1, 0, id);
-};
-
-// A server that keeps the order in memory and answers each move later than the one sent after it.
+// Each move answers later than the one sent after it, so only a queue keeps them in order.
 const reorderingServer = () => {
-  const byId = new Map(tasks.map((task) => [task.id, task]));
-  const state = { ids: tasks.map((task) => task.id), movesReceived: 0 };
-  const moveDelaysMs = [300, 200, 100];
-  server.use(
-    http.get("/api/v1/tasks", async () => {
-      await delay(150);
-      return HttpResponse.json({ items: state.ids.map((id) => byId.get(id)) });
-    }),
-    http.put("/api/v1/tasks/:taskId/position", async ({ params, request }) => {
-      const taskId = String(params.taskId);
-      const { afterId } = moveBodySchema.parse(await request.json());
-      const wait = moveDelaysMs[state.movesReceived] ?? 0;
-      state.movesReceived += 1;
-      await delay(wait);
-      state.ids = serverMove(state.ids, taskId, afterId);
-      return HttpResponse.json(byId.get(taskId));
-    }),
-  );
+  server.use(...orderKeepingServer({ moveDelaysMs: [300, 200, 100], listDelayMs: 150 }).handlers);
 };
 
 const tickBox = (title: string) => screen.getByRole("checkbox", { name: `Completed: ${title}` });
