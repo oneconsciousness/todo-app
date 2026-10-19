@@ -24,6 +24,7 @@ The REST contract between `backend/` and `frontend/`. Change both sides in the s
 | Conflict with current state, such as an email already registered | 409 |
 | `If-Match` names an old version of the task | 412 |
 | Overloaded (in-flight limit, no free database connection) or database unreachable | 503 |
+| Any other HTTP-level error the framework raises (for example 415): the envelope with code `http_error` and the original status | as raised |
 
 - JSON field names are camelCase on the wire (`dueDate`, `createdAt`). Pydantic models use `alias_generator=to_camel` with `populate_by_name=True`; Python code keeps snake_case.
 - Tasks carry an integer `version`, returned as the `ETag` header. `PATCH` honours `If-Match` (412 on mismatch) and changes only the fields sent.

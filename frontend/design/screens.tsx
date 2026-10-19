@@ -159,6 +159,22 @@ export const screens: readonly Screen[] = [
         }),
       },
       {
+        id: "sign-up-server-field-error",
+        title: "Email refused by the server (400)",
+        note: "The server refuses some addresses the form allows, such as a reserved domain. Its message sits where the form's own would, until the field is edited.",
+        draw: signUp(signUpIdle, async (steps) => {
+          await steps.fill("Email", "maya@example.test");
+          await steps.fill("Password", "correct horse battery");
+          await steps.press("Create account");
+          await steps.update({
+            fieldErrors: {
+              email:
+                "The part after the @-sign is a special-use or reserved name that cannot be used with email.",
+            },
+          });
+        }),
+      },
+      {
         id: "sign-up-email-taken",
         title: "Email already registered (409)",
         note: "Offers to sign in instead, right where the problem is reported.",

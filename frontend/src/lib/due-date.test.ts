@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { dueLabel, formatDay, longDate } from "./due-date.ts";
+import { dueLabel, formatDay, localIsoDate, longDate } from "./due-date.ts";
 
 const today = "2026-10-19";
+
+describe("localIsoDate", () => {
+  it("names the day on the user's own clock, late at night included", () => {
+    expect(localIsoDate(new Date(2026, 9, 19, 23, 30))).toBe("2026-10-19");
+  });
+});
 
 describe("longDate", () => {
   it("spells out the weekday and date, the way a ledger page is headed", () => {

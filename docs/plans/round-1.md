@@ -226,6 +226,7 @@ Domain errors (`app/domain/errors.py`) carry no HTTP knowledge. `app/api/errors.
 | Email registered | `EmailTaken` | 409 | `email_taken` | `details` names `email` |
 | Version mismatch | `VersionMismatch` | 412 | `version_mismatch` | |
 | Pool wait, statement timeout, database down | `sqlalchemy.exc.TimeoutError`, `OperationalError`, `InterfaceError`, `ConnectionError` | 503 | `service_unavailable` | WARNING with `where=`, `why=`, `then=503` |
+| Any other `StarletteHTTPException` | n/a | its own status | `http_error` | The envelope keeps the original status |
 | Anything else | `Exception` | 500 | `internal_error` | ERROR with the traceback |
 
 Handlers: `RequestValidationError` → 400 (logged at WARNING with the field names, never the values). `DomainError` → the map. `StarletteHTTPException` → the envelope. The database errors → 503. `Exception` → 500. A unit test walks every `DomainError` subclass and asserts it has an entry in the map.
