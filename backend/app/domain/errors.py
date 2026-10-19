@@ -7,3 +7,7 @@ class DomainError(Exception):
 
 class EmptyPatch(DomainError):
     """An update sent no fields to change."""
+
+
+class NotAuthenticated(DomainError):
+    """The request has no session, or its session token is invalid or expired."""

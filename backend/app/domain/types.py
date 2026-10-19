@@ -1,9 +1,10 @@
 """Values that flow through the domain core."""
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from enum import Enum, auto
 from typing import TypedDict
+from uuid import UUID
 
 
 class Unset(Enum):
@@ -29,3 +30,12 @@ class TaskChanges(TypedDict, total=False):
     notes: str
     completed: bool
     due_date: date | None
+
+
+@dataclass(frozen=True)
+class SessionClaims:
+    """Who a session token belongs to, and when it was issued and expires."""
+
+    user_id: UUID
+    issued_at: datetime
+    expires_at: datetime
