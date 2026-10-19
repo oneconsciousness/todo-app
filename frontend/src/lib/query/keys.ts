@@ -17,5 +17,12 @@ export const taskKeys = {
   },
 } as const;
 
-/** Cache keys for the signed-in user. */
-export const authKeys = { me: ["auth", "me"] as const };
+/** Cache keys for the signed-in user, and keys naming the auth mutations in logs. */
+export const authKeys = {
+  me: ["auth", "me"],
+  mutations: {
+    signIn: ["auth", "sign-in"],
+    signUp: ["auth", "sign-up"],
+    signOut: ["auth", "sign-out"],
+  },
+} as const;

@@ -3,7 +3,7 @@ import { renderHook } from "@testing-library/react";
 import { http } from "msw";
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { tasks } from "../../test/fixtures.ts";
+import { tasks, user } from "../../test/fixtures.ts";
 import { errorReply } from "../../test/handlers.ts";
 import { server } from "../../test/server.ts";
 import { login } from "../api/auth.ts";
@@ -11,7 +11,6 @@ import { listTasks } from "../api/tasks.ts";
 import { createQueryClient } from "./client.ts";
 import { authKeys, taskKeys } from "./keys.ts";
 
-const user = { id: "00000000-0000-4000-8000-0000000000aa", email: "maya@example.com" };
 const credentials = { email: user.email, password: "correct horse battery" };
 
 describe("createQueryClient", () => {

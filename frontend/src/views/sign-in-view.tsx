@@ -3,6 +3,7 @@ import { CredentialsForm, unreachableMessage } from "../components/credentials-f
 import { Link, textLinkClass } from "../components/ui/link.tsx";
 import { routes } from "../lib/routes.ts";
 import type { Credentials } from "../lib/schema/auth.ts";
+import type { FieldErrors } from "../lib/schema/field-errors.ts";
 
 /** Why the last sign-in failed: a 401, or no answer from the server. */
 export type SignInFailure = "wrong-credentials" | "unreachable";
@@ -11,6 +12,8 @@ export type SignInFailure = "wrong-credentials" | "unreachable";
 export interface SignInViewProps {
   readonly submitting: boolean;
   readonly failure: SignInFailure | null;
+  /** The server's problems with the email or password sent, shown next to each field. */
+  readonly fieldErrors?: FieldErrors<Credentials> | undefined;
   readonly initialEmail?: string | undefined;
   readonly onSubmit: (credentials: Credentials) => void;
 }
@@ -21,7 +24,13 @@ const messages: Readonly<Record<SignInFailure, string>> = {
 };
 
 /** The landing page: sign in, or go and create an account. */
-export function SignInView({ submitting, failure, initialEmail, onSubmit }: SignInViewProps) {
+export function SignInView({
+  submitting,
+  failure,
+  fieldErrors,
+  initialEmail,
+  onSubmit,
+}: SignInViewProps) {
   return (
     <AuthLayout
       title="Sign in"
@@ -40,6 +49,7 @@ export function SignInView({ submitting, failure, initialEmail, onSubmit }: Sign
         passwordAutoComplete="current-password"
         submitting={submitting}
         failure={failure && messages[failure]}
+        fieldErrors={fieldErrors}
         initialEmail={initialEmail}
         onSubmit={onSubmit}
       />

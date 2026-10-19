@@ -52,6 +52,14 @@ describe("CredentialsForm", () => {
     expect(email).toHaveAccessibleDescription("");
   });
 
+  it("shows the server's problem with a field next to it until the user edits that field", async () => {
+    renderForm({ fieldErrors: { email: "That domain can't receive email." } });
+    const email = screen.getByRole("textbox", { name: "Email" });
+    expect(email).toHaveAccessibleDescription("That domain can't receive email.");
+    await userEvent.type(email, "m");
+    expect(email).toHaveAccessibleDescription("");
+  });
+
   it("holds the form while it is submitting", () => {
     renderForm({ submitting: true });
     expect(screen.getByRole("button", { name: "Signing in…" })).toBeDisabled();
