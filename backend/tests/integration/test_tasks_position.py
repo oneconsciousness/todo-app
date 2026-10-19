@@ -78,3 +78,12 @@ async def test_move_another_users_task_returns_404(app: FastAPI) -> None:
         response = await bob.put(position_path(adas.id), json={"afterId": None})
     assert response.status_code == 404
     assert response.json()["error"]["code"] == "not_found"
+
+
+async def test_move_to_where_it_already_is_keeps_its_rank(app: FastAPI) -> None:
+    async with signed_in_client(app) as client:
+        a, b = await create_tasks(client, ["a", "b"])
+        after_its_predecessor = await client.put(position_path(a.id), json={"afterId": str(b.id)})
+        top_to_top = await client.put(position_path(b.id), json={"afterId": None})
+    assert after_its_predecessor.json()["rank"] == a.rank
+    assert top_to_top.json()["rank"] == b.rank
