@@ -180,7 +180,8 @@ What it settled:
 | Q-14, Q-15 | Python 3.14 and Postgres 18 replace 3.13 and 17 (spec revision 3.2, D1 and D2). |
 | Q-16 | SQLAlchemy 2.0.55, asyncpg 0.32.0 and nginx 1.30.6 are pinned although under two weeks old, for the fixes they carry. |
 | Q-17, Q-18 | The design branch steps its young pins back and `userSchema.email` accepts any string, before its PR. |
-| PR model | One draft parent PR per round (`round/<n>-<name>` → `main`), merged only when the round is done and tested; child PRs into the round branch; the lead reviews every PR (`CONTRIBUTING.md` § 1). |
+| PR model | One draft parent PR per round (`round/<n>-<name>` → `main`), merged only when the round is done and tested; child PRs into the round branch; the human lead reviews every PR (`CONTRIBUTING.md` § 1). |
+| Merges | Asked how to merge, the lead answered: "yeah let's squash child PRs and rebase parent PRs." Child PRs are squash-merged into the round branch; each round's parent PR is rebase-merged into `main`. The human lead created `round/1-containers` from `main` on 2026-10-19. |
 | Plan | Approved (gate G0). Build starts after the instructions walkthrough (G1). |
 
 ## 6. Before submission

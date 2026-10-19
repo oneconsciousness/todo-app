@@ -696,7 +696,7 @@ footer { color: var(--muted); font-size: 0.88rem; border-top: 1px solid var(--li
       <li><b>In parallel:</b> the detailed coding plan (<code>docs/plans/round-1.md</code>), and a design artifact showing the tokens and every screen in every state.</li>
       <li><b>Gate:</b> you review the design tokens and the screens. Changes go into the tokens and components, and the artifact is republished.</li>
       <li><b>Gate:</b> the walkthrough of the coding instructions, with code, comment-style and type-checking samples.</li>
-      <li><b>PRs, each reviewed by you:</b> one draft parent PR for the round (<code>round/1-containers</code> → <code>main</code>), and child PRs into the round branch: skeleton, spec, plan, design system, backend foundation, backend tasks, frontend data layer, then containers with the live, browser and load tests. The parent merges only when the round is done and tested.</li>
+      <li><b>PRs, each reviewed by you:</b> one draft parent PR for the round (<code>round/1-containers</code> → <code>main</code>), and child PRs into the round branch: skeleton, spec, plan, design system, backend foundation, backend tasks, frontend data layer, then containers with the live, browser and load tests, and the README. Child PRs are squash-merged into the round branch; the parent is rebase-merged into <code>main</code> only when the round is done and tested.</li>
       <li><b>Gate:</b> round 1 is done (below), then round 2.</li>
     </ol>
     <div class="decisions">
