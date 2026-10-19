@@ -2,17 +2,13 @@
   "permissions": {
     "deny": [
       "Read(./.env)",
-      "Read(./.env.*)",
       "Read(./**/.env)",
-      "Read(./**/.env.*)",
       "Read(./**/*.pem)",
       "Read(./**/*.key)",
       "Read(./**/credentials.*)",
       "Read(./**/secrets.*)",
       "Edit(./.env)",
-      "Edit(./.env.*)",
       "Edit(./**/.env)",
-      "Edit(./**/.env.*)",
       "Edit(./**/*.pem)",
       "Edit(./**/*.key)",
       "Edit(./**/credentials.*)",
@@ -91,7 +87,7 @@
         ]
       },
       {
-        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "matcher": "Read|Grep|Edit|Write|MultiEdit|NotebookEdit",
         "hooks": [
           {
             "type": "command",

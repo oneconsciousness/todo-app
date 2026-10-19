@@ -54,7 +54,7 @@ Claude Code writes each session as JSONL, one event per line with a timestamp, u
 |---|---|
 | 1 | The repository is `todo-app`, local for now, public on GitHub later. Creating the remote waits for the human's go. |
 | 2 | The frontend uses Node and npm (no Bun), so the reviewers need nothing beyond Node, plus `docker compose up` as a one-command run. ESLint and Prettier for style. |
-| 3 | The env and secrets hooks stay as they are, `.env.example` included. The agent posts the exact lines in chat and the human creates or edits the file. |
+| 3 | ~~The env and secrets hooks stay as they are, `.env.example` included.~~ Changed by the lead on 2026-10-19: "I would like you to carefully update the hook such that you can create and edit only the .env.example. Ensure to test to ensure there are no loopholes." Agents now create and edit `.env.example` by its exact name; every other env file stays closed, and `.claude/hooks/tests/test_secret_guards.py` pins the boundary (`CONTRIBUTING.md` § 12.2). |
 | 4 | The final report makes the split between human and agent work easy to see, derived from the transcript timestamps, alongside the agent-pair estimates the workspace rule asks for. |
 | 5 | PRs carry one label taken from the branch prefix (`CONTRIBUTING.md` § 2). |
 | 6 | One monorepo: `backend/`, `frontend/`, and later `e2e/` and `deploy/`, with one root `.claude/`. |

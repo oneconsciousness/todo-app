@@ -201,8 +201,8 @@ For Claude Code users, the rules above are enforced by hooks wired in `.claude/s
 | Hook | Event | Blocks |
 |---|---|---|
 | `branch-protection.py` | Bash | commits and pushes on `main` (any form, including `HEAD:main`), force pushes, `--no-verify`, chained `git checkout main && git commit`, moving or deleting a `vX.Y.Z` tag |
-| `env-protection.py` | Bash | any command that names a `.env*` path |
-| `secrets-protection.py` | Bash, Edit, Write, NotebookEdit | writes to key material and credential files, and Bash commands that print them (`cat`, `grep` without `-l/-c/-q`, `awk`, ...) |
+| `env-protection.py` | Bash | any command that names or globs a `.env*` path other than exactly `.env.example`, recursive `grep`, `rg --hidden`, and the `docker` commands that print resolved secrets |
+| `secrets-protection.py` | Bash, Read, Grep, Edit, Write, NotebookEdit | reads and writes of env files (except `.env.example`), key material and credential files, and Bash commands that print them (`cat`, `grep` without `-l/-c/-q`, `awk`, ...) |
 | `pr-title.py` | Bash | `gh pr create` / `gh pr edit` with a title that is not Conventional Commits |
 | `docs-check.py` | Bash | `gh pr create` when the branch touched a path in `.claude/skills/claude-docs-check/map.json` and carries no docs decision |
 | `lint.py` | after Edit, Write | nothing; it reports lint findings on the changed lines back to the agent |
@@ -328,9 +328,11 @@ Secrets files (`.env`, `.env.*`, `*.pem`, `*.key`, `*.crt`, `*.p12`, `credential
 2. **Agents never read-and-print secrets files via Bash.** `cat .env`, `head .env`, `grep <pattern> .env`, `awk ... .env`, `xxd key.pem`, all blocked. The contents would land in the agent's context window and become exposable through transcript replay or compaction.
 3. **Agents may write *scripts* that mutate secrets files, with one binding constraint: the script must not print secrets to stdout.** A `sed -i` that updates a token in place is fine. A script that opens `.env`, transforms it and writes back is fine *if* you've verified by reading it that nothing prints the value.
 
-### 12.2 `.env.example` is human-owned too
+### 12.2 `.env.example` is the one env file agents may touch
 
-The hooks and the deny list cover `.env.example` as well. When a change needs a new setting, the agent posts the exact lines for `.env.example` in chat and the human adds them. Do not loosen the hooks to let the agent write it.
+`.env.example` is the committed template: it lists every setting with a safe local value and never holds a real secret. Agents create and edit it, by that exact name only, so it stays in step with the settings class. Everything else in the family stays closed: `.env`, `.env.local`, `.env.example.bak`, a glob like `.env.example*`, a command that names `.env` alongside the example (`cp .env.example .env` is the human's to run), and a `.env.example` that is a symlink to a real secret. The tests in `.claude/hooks/tests/test_secret_guards.py` pin each of these.
+
+A real secret never goes into `.env.example`. If one ever lands there, treat it as leaked: rotate it.
 
 ### 12.3 Allowed patterns the hook still blocks
 
@@ -355,11 +357,11 @@ Use the § 8.2 shape with the rule reference `CONTRIBUTING.md § 12 (Secrets dis
 
 ### 12.6 Mechanical enforcement
 
-- `.claude/settings.json` denies `Read` and `Edit` (which covers Write, MultiEdit and NotebookEdit) on `.env*`, `*.pem`, `*.key`, `credentials.*` and `secrets.*` anywhere in the repo.
-- `env-protection.py` blocks any Bash command that names a `.env*` path, whatever the command.
-- `secrets-protection.py` blocks Edit, Write, MultiEdit and NotebookEdit on the full pattern list, and Bash commands that print one of those files.
+- `.claude/settings.json` denies `Read` and `Edit` (which covers Write, MultiEdit and NotebookEdit) on `.env`, `*.pem`, `*.key`, `credentials.*` and `secrets.*` anywhere in the repo. Permission rules cannot express "every `.env.*` except one", so the other `.env.*` names are enforced by the hook below.
+- `env-protection.py` blocks any Bash command whose `.env…` tokens, raw or after shell unquoting, are not exactly `.env.example` (case-insensitive, as macOS file systems are). It also blocks dotfile globs that would reach `.env` (`.e*`, `.[e]nv`), recursive `grep` (it reads hidden files; use `rg` or `git grep`), `rg --hidden` or `-uu`, `docker compose config` without `--no-interpolate`, `docker inspect`, and `env` or `printenv` inside a container.
+- `secrets-protection.py` blocks Read, Grep, Edit, Write, MultiEdit and NotebookEdit on the full pattern list, Grep globs aimed at env dotfiles, a `.env.example` that resolves to another file, and Bash commands that print one of those files.
 
-Not covered: a script the agent writes that prints a secret as a side effect. Rule 12.1.3 is the contract for that case.
+Not covered: a path built at run time (`printf '\x2eenv'`) or a script the agent writes that prints a secret as a side effect. String matching cannot see those. Rule 12.1.3 is the contract for that case.
 
 ---
 

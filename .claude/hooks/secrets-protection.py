@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 """
-PreToolUse hook for Claude Code's Edit / Write / MultiEdit / NotebookEdit / Bash tools.
-Blocks writes to secrets files AND blocks Bash reads-that-print secrets.
+PreToolUse hook for Claude Code's Read / Grep / Edit / Write / MultiEdit / NotebookEdit / Bash tools.
+Blocks reads and writes of secrets files AND blocks Bash reads-that-print secrets.
 
 See CONTRIBUTING.md § 12 (Secrets discipline) for the full rationale.
 
 Behavior summary:
-  - Edit/Write/MultiEdit/NotebookEdit on a secrets path                 -> DENY
+  - Read/Edit/Write/MultiEdit/NotebookEdit on a secrets path            -> DENY
+  - Grep on a secrets path, or with a glob aimed at env dotfiles        -> DENY
+  - `.env.example` (exact name, any case) is not a secrets path, unless
+    it is a symlink whose target is one                                  -> ALLOW
   - Bash command reading-and-printing a secrets path
     (cat / head / tail / less / more / nl / xxd / od / strings,
      grep without -l/-c/-q, awk on a secrets path)                       -> DENY
@@ -15,7 +18,7 @@ Behavior summary:
      secrets to stdout)                                                  -> ALLOW
   - everything else                                                      -> ALLOW
 
-Secret patterns (matched against the file_path basename or any path segment):
+Secret patterns (matched case-insensitively against the basename, or against any path segment):
   - .env, .env.*  (any env file)
   - *.pem, *.key, *.crt, *.p12, *.pfx, *.jks  (cryptographic keys/certs)
   - credentials.*, secrets.*, task-secrets.*  (named secret stores)
@@ -34,6 +37,8 @@ import re
 import sys
 
 SECTION_REF = "CONTRIBUTING.md § 12 (Secrets discipline)"
+ALLOWED_ENV_FILES = frozenset({".env.example"})  # the committed template; exact basenames only
+ENV_DOTFILE_PROBES = (".env", ".env.local", ".env.production")
 
 # Pattern matched against the basename. Using fnmatch globs.
 SECRET_BASENAME_GLOBS = (
@@ -67,6 +72,7 @@ SECRET_PATH_FRAGMENTS = (
 )
 
 WRITE_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
+READ_TOOLS = {"Read"}
 
 # Bash readers that print file contents to stdout — denied if their
 # argument matches a secrets path. The grep/awk cases need flag inspection.
@@ -95,7 +101,10 @@ def is_secret_path(path: str) -> bool:
     if not path:
         return False
     norm = path.replace("\\", "/")
-    base = os.path.basename(norm)
+    base = os.path.basename(norm.rstrip("/")).lower()
+    if base in ALLOWED_ENV_FILES:
+        real = os.path.realpath(norm)
+        return os.path.basename(real).lower() not in ALLOWED_ENV_FILES or any(frag in real for frag in SECRET_PATH_FRAGMENTS)
     if base:
         for glob in SECRET_BASENAME_GLOBS:
             if fnmatch.fnmatch(base, glob):
@@ -104,6 +113,14 @@ def is_secret_path(path: str) -> bool:
         if frag in norm:
             return True
     return False
+
+
+def targets_env_dotfiles(glob: str) -> bool:
+    """True when a search glob names or could expand to an env dotfile other than `.env.example`."""
+    pattern = os.path.basename(glob.replace("\\", "/").rstrip("/")).lower()
+    if not pattern or pattern in ALLOWED_ENV_FILES:
+        return False
+    return (pattern.startswith(".") or "env" in pattern) and any(fnmatch.fnmatchcase(p, pattern) for p in ENV_DOTFILE_PROBES)
 
 
 def bash_command_reads_and_prints_secret(command: str) -> tuple[bool, str | None]:
@@ -176,6 +193,28 @@ def main() -> None:
 
     tool_name = payload.get("tool_name") or ""
     tool_input = payload.get("tool_input") or {}
+
+    if tool_name in READ_TOOLS:
+        path = tool_input.get("file_path") or ""
+        if is_secret_path(path):
+            deny(
+                f"Heads up — `Read` on `{path}` is blocked because the path "
+                f"matches a secrets-file pattern. Its contents would land in "
+                f"the agent's context. Only `.env.example` is open to agents. "
+                f"Ask the human for the value you need.\n\nSee {SECTION_REF}."
+            )
+        allow()
+
+    if tool_name == "Grep":
+        path = tool_input.get("path") or ""
+        glob = tool_input.get("glob") or ""
+        if is_secret_path(path) or targets_env_dotfiles(glob):
+            deny(
+                f"Heads up — this `Grep` would search `{path or glob}`, which "
+                f"matches a secrets-file pattern, and print matching lines. "
+                f"Only `.env.example` is open to agents.\n\nSee {SECTION_REF}."
+            )
+        allow()
 
     if tool_name in WRITE_TOOLS:
         path = (

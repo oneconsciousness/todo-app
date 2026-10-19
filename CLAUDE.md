@@ -23,7 +23,7 @@ python3 scripts/check_hygiene.py      # task markers, debuggers, focused tests, 
 Each app's own commands are in its `CLAUDE.md`; `CONTRIBUTING.md` § 5 lists every gate.
 
 ## Config and secrets
-- Never read or edit `.env` files, `.env.example` or key material. Hooks and the deny list block it, and a Bash command that only names such a file is blocked too. When a setting is needed, post the exact lines in chat and the human adds them.
+- `.env.example` is the only env file an agent may read or edit, by that exact name; it holds safe local values and never a real secret. Never read or edit `.env` or any other `.env.*` file, or key material. Hooks and the deny list block them, and a Bash command that only names such a file is blocked too. When a setting is needed, add it to `.env.example` with a safe local value; the human copies it into `.env` and sets real values there.
 - `.mcp.json` configures Claude Code's own MCP servers. It is not the app's config.
 
 ## Workspace rules
