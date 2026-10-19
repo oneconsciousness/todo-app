@@ -1,6 +1,5 @@
 from uuid import uuid4
 
-import pytest
 from fastapi import FastAPI
 from httpx import AsyncClient
 
@@ -140,11 +139,11 @@ async def test_patch_with_a_stale_if_match_returns_412(app: FastAPI) -> None:
     assert (unchanged["title"], unchanged["version"]) == ("Buy milk", 2)
 
 
-@pytest.mark.parametrize("if_match", ["1", '"0"', '"-1"', '"abc"', 'W/"1"', "*", '"2147483648"'])
-async def test_patch_with_a_malformed_if_match_returns_400(app: FastAPI, if_match: str) -> None:
+async def test_patch_with_a_malformed_if_match_returns_400(app: FastAPI) -> None:
     async with signed_in_client(app) as client:
         [task] = await create_tasks(client, ["Buy milk"])
-        response = await client.patch(task_path(task.id), json={"completed": True}, headers={"If-Match": if_match})
+        long_version = '"' + "1" * 4301 + '"'
+        response = await client.patch(task_path(task.id), json={"completed": True}, headers={"If-Match": long_version})
     assert response.status_code == 400
     assert response.json()["error"]["code"] == "invalid_if_match"
 

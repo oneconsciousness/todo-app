@@ -14,7 +14,8 @@ from app.services import tasks as task_service
 
 # No title is longer than 200 characters, and the cap bounds the trigram work a search can cause.
 SearchTerm = Annotated[str | None, Query(max_length=200)]
-QUOTED_VERSION: Final = re.compile(r'"([1-9][0-9]*)"')
+# Ten digits at most, enough for any version, so int() never sees a huge number.
+QUOTED_VERSION: Final = re.compile(r'"([1-9][0-9]{0,9})"')
 # The version column is a Postgres integer.
 LARGEST_VERSION: Final = 2**31 - 1
 
@@ -70,7 +71,7 @@ async def delete_task(task_id: UUID, claims: CurrentUserDep, session: SessionDep
     await task_service.delete_task(session, claims.user_id, task_id)
 
 
-def expected_version(if_match: Annotated[str | None, Header()] = None) -> int | None:
+async def expected_version(if_match: Annotated[str | None, Header()] = None) -> int | None:
     """Read the version an edit is based on from If-Match, written as the ETag was: a quoted number.
 
     Raises:
