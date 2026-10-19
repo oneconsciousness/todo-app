@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import time
 
 import pytest
@@ -13,6 +14,19 @@ async def test_loop_guard_flags_a_callback_that_blocks_for_100_ms() -> None:
         async with blocked_loop_guard(threshold=0.05):
             time.sleep(0.1)
             await asyncio.sleep(0)
+
+
+async def test_loop_guard_flags_a_block_when_the_log_level_is_error() -> None:
+    root = logging.getLogger()
+    previous_level = root.level
+    root.setLevel(logging.ERROR)
+    try:
+        with pytest.raises(AssertionError, match="the event loop was blocked"):
+            async with blocked_loop_guard(threshold=0.05):
+                time.sleep(0.1)
+                await asyncio.sleep(0)
+    finally:
+        root.setLevel(previous_level)
 
 
 async def test_loop_guard_passes_code_that_awaits() -> None:

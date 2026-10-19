@@ -31,7 +31,10 @@ async def blocked_loop_guard(threshold: float = 0.05) -> AsyncIterator[None]:
     previous_debug, previous_threshold = loop.get_debug(), loop.slow_callback_duration
     collector = _RecordCollector()
     asyncio_logger = logging.getLogger("asyncio")
+    previous_level = asyncio_logger.level
     asyncio_logger.addHandler(collector)
+    # The slow-callback line is a WARNING; a quieter configured level would drop it before the collector sees it.
+    asyncio_logger.setLevel(logging.WARNING)
     loop.set_debug(True)
     loop.slow_callback_duration = threshold
     try:
@@ -42,6 +45,7 @@ async def blocked_loop_guard(threshold: float = 0.05) -> AsyncIterator[None]:
         loop.set_debug(previous_debug)
         loop.slow_callback_duration = previous_threshold
         asyncio_logger.removeHandler(collector)
+        asyncio_logger.setLevel(previous_level)
     slow = [record.getMessage() for record in collector.records if record.msg.startswith("Executing")]
     if slow:
         raise AssertionError("the event loop was blocked:\n" + "\n".join(slow))
