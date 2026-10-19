@@ -28,7 +28,7 @@ export function InlineConfirm({
   const messageId = useId();
   const cancel = useRef<HTMLButtonElement>(null);
   useEffect(() => {
-    cancel.current?.focus();
+    cancel.current?.focus({ preventScroll: true });
   }, []);
   return (
     <div
