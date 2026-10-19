@@ -1,5 +1,6 @@
 from uuid import uuid4
 
+import pytest
 from fastapi import FastAPI
 from httpx import AsyncClient
 
@@ -86,3 +87,88 @@ async def test_get_with_a_malformed_id_returns_400(app: FastAPI) -> None:
         response = await client.get(task_path("not-a-uuid"))
     assert response.status_code == 400
     assert response.json()["error"]["code"] == "validation_failed"
+
+
+async def test_patch_changes_only_sent_fields_and_bumps_version(app: FastAPI) -> None:
+    async with signed_in_client(app) as client:
+        created = (await client.post(TASKS, json={"title": "Buy milk", "notes": "two litres"})).json()
+        response = await client.patch(task_path(created["id"]), json={"completed": True})
+    task = response.json()
+    assert response.status_code == 200
+    assert response.headers["ETag"] == '"2"'
+    assert (task["title"], task["notes"], task["completed"], task["version"]) == ("Buy milk", "two litres", True, 2)
+    assert task["updatedAt"] > created["updatedAt"]
+
+
+async def test_patch_with_null_due_date_clears_it(app: FastAPI) -> None:
+    async with signed_in_client(app) as client:
+        created = (await client.post(TASKS, json={"title": "Pay rent", "dueDate": "2026-11-01"})).json()
+        response = await client.patch(task_path(created["id"]), json={"dueDate": None})
+    assert (response.status_code, response.json()["dueDate"]) == (200, None)
+
+
+async def test_patch_accepts_an_iso_due_date(app: FastAPI) -> None:
+    async with signed_in_client(app) as client:
+        [task] = await create_tasks(client, ["Pay rent"])
+        response = await client.patch(task_path(task.id), json={"dueDate": "2026-12-01"})
+    assert (response.status_code, response.json()["dueDate"]) == (200, "2026-12-01")
+
+
+async def test_patch_rejects_a_string_boolean_with_400(app: FastAPI) -> None:
+    async with signed_in_client(app) as client:
+        [task] = await create_tasks(client, ["Buy milk"])
+        response = await client.patch(task_path(task.id), json={"completed": "true"})
+    assert response.status_code == 400
+    assert response.json()["error"]["details"][0]["field"] == "completed"
+
+
+async def test_patch_with_the_current_if_match_succeeds(app: FastAPI) -> None:
+    async with signed_in_client(app) as client:
+        [task] = await create_tasks(client, ["Buy milk"])
+        response = await client.patch(task_path(task.id), json={"title": "Buy oat milk"}, headers={"If-Match": '"1"'})
+    assert (response.status_code, response.json()["title"]) == (200, "Buy oat milk")
+
+
+async def test_patch_with_a_stale_if_match_returns_412(app: FastAPI) -> None:
+    async with signed_in_client(app) as client:
+        [task] = await create_tasks(client, ["Buy milk"])
+        await client.patch(task_path(task.id), json={"notes": "from the other tab"})
+        response = await client.patch(task_path(task.id), json={"title": "Buy oat milk"}, headers={"If-Match": '"1"'})
+        unchanged = (await client.get(task_path(task.id))).json()
+    assert response.status_code == 412
+    assert response.json()["error"]["code"] == "version_mismatch"
+    assert (unchanged["title"], unchanged["version"]) == ("Buy milk", 2)
+
+
+@pytest.mark.parametrize("if_match", ["1", '"0"', '"-1"', '"abc"', 'W/"1"', "*", '"2147483648"'])
+async def test_patch_with_a_malformed_if_match_returns_400(app: FastAPI, if_match: str) -> None:
+    async with signed_in_client(app) as client:
+        [task] = await create_tasks(client, ["Buy milk"])
+        response = await client.patch(task_path(task.id), json={"completed": True}, headers={"If-Match": if_match})
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "invalid_if_match"
+
+
+async def test_patch_rejects_a_null_title_with_400(app: FastAPI) -> None:
+    async with signed_in_client(app) as client:
+        [task] = await create_tasks(client, ["Buy milk"])
+        response = await client.patch(task_path(task.id), json={"title": None})
+    assert response.status_code == 400
+    assert response.json()["error"]["details"][0]["field"] == "title"
+
+
+async def test_patch_rejects_an_empty_body_with_400(app: FastAPI) -> None:
+    async with signed_in_client(app) as client:
+        [task] = await create_tasks(client, ["Buy milk"])
+        response = await client.patch(task_path(task.id), json={})
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "validation_failed"
+
+
+async def test_patch_another_users_task_returns_404(app: FastAPI) -> None:
+    async with signed_in_client(app) as ada, signed_in_client(app) as bob:
+        [task] = await create_tasks(ada, ["Ada's task"])
+        response = await bob.patch(task_path(task.id), json={"completed": True})
+        untouched = (await ada.get(task_path(task.id))).json()
+    assert response.status_code == 404
+    assert (untouched["completed"], untouched["version"]) == (False, 1)

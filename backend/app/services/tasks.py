@@ -5,10 +5,11 @@ from uuid import UUID, uuid4
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import tasks as task_rows
-from app.domain.errors import TaskNotFound
+from app.domain.errors import TaskNotFound, VersionMismatch
+from app.domain.patch import apply_patch
 from app.domain.ranks import rank_between
 from app.domain.search import normalize_query, search_pattern
-from app.domain.types import NewTask, TaskRecord
+from app.domain.types import NewTask, TaskPatch, TaskRecord
 
 
 async def list_tasks(session: AsyncSession, owner_id: UUID, q: str | None) -> list[TaskRecord]:
@@ -26,6 +27,27 @@ async def get_task(session: AsyncSession, owner_id: UUID, task_id: UUID) -> Task
     """
     async with session.begin():
         task = await task_rows.get_task(session, owner_id, task_id)
+    if task is None:
+        raise TaskNotFound
+    return task
+
+
+async def update_task(
+    session: AsyncSession, owner_id: UUID, task_id: UUID, patch: TaskPatch, if_match: int | None
+) -> TaskRecord:
+    """Apply the fields the client sent; with `if_match`, only if the task is still that version.
+
+    Raises:
+        EmptyPatch: when no field was sent.
+        TaskNotFound: when the task is missing or belongs to someone else.
+        VersionMismatch: when the task exists but has moved past `if_match`.
+    """
+    changes = apply_patch(patch)
+    async with session.begin():
+        task = await task_rows.update_task(session, owner_id, task_id, changes, expected_version=if_match)
+        # Nothing matched: either the task is not this user's, or its version moved on.
+        if task is None and await task_rows.get_task(session, owner_id, task_id) is not None:
+            raise VersionMismatch
     if task is None:
         raise TaskNotFound
     return task

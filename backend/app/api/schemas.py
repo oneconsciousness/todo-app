@@ -4,10 +4,10 @@ from datetime import date, datetime
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, EmailStr, StringConstraints
+from pydantic import BaseModel, ConfigDict, EmailStr, StrictBool, StringConstraints, field_validator
 from pydantic.alias_generators import to_camel
 
-from app.domain.types import AccountCredentials, NewTask
+from app.domain.types import AccountCredentials, NewTask, TaskPatch
 
 
 class WireModel(BaseModel):
@@ -64,6 +64,31 @@ class TaskCreate(RequestModel):
     def to_domain(self) -> NewTask:
         """Return the validated values as the tasks service takes them."""
         return NewTask(title=self.title, notes=self.notes, due_date=self.due_date)
+
+
+class TaskUpdate(RequestModel):
+    """The fields to change on a task; any left out stay as they are.
+
+    Only `dueDate` may be sent as null, which clears it. `completed` must be a JSON boolean: a string
+    such as "true" is a client bug, so it fails validation instead of being coerced.
+    """
+
+    title: Title | None = None
+    notes: Notes | None = None
+    completed: StrictBool | None = None
+    due_date: date | None = None
+
+    @field_validator("title", "notes", "completed", mode="before")
+    @classmethod
+    def refuse_null(cls, value: object) -> object:
+        """Refuse an explicit null; leaving a field out is how a client keeps it."""
+        if value is None:
+            raise ValueError("may not be null")
+        return value
+
+    def to_patch(self) -> TaskPatch:
+        """Return only the fields the client sent, as the domain's patch."""
+        return TaskPatch(**{name: getattr(self, name) for name in self.model_fields_set})
 
 
 class TaskRead(WireModel):

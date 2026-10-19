@@ -3,11 +3,11 @@
 from datetime import date
 from uuid import UUID
 
-from sqlalchemy import ColumnElement, insert, or_, select
+from sqlalchemy import ColumnElement, func, insert, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Task
-from app.domain.types import TaskRecord
+from app.domain.types import TaskChanges, TaskRecord
 
 
 async def first_rank(session: AsyncSession, owner_id: UUID) -> str | None:
@@ -46,6 +46,25 @@ async def list_tasks(session: AsyncSession, owner_id: UUID, pattern: str | None)
     if pattern is not None:
         statement = statement.where(search_condition(pattern))
     return [TaskRecord.model_validate(task) for task in await session.scalars(statement)]
+
+
+async def update_task(
+    session: AsyncSession, owner_id: UUID, task_id: UUID, changes: TaskChanges, expected_version: int | None
+) -> TaskRecord | None:
+    """Write the changes, bump the version and stamp the time, in one conditional UPDATE.
+
+    With `expected_version`, the row changes only if it is still that version, so two edits from the
+    same version cannot both land. Returns `None` when no row matched.
+    """
+    version_check = (Task.version == expected_version,) if expected_version is not None else ()
+    statement = (
+        update(Task)
+        .where(Task.id == task_id, Task.owner_id == owner_id, *version_check)
+        .values(**changes, version=Task.version + 1, updated_at=func.now())
+        .returning(Task)
+    )
+    task = await session.scalar(statement)
+    return TaskRecord.model_validate(task) if task is not None else None
 
 
 async def get_task(session: AsyncSession, owner_id: UUID, task_id: UUID) -> TaskRecord | None:
