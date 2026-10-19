@@ -7,6 +7,7 @@ Applies to `backend/` (Python) and `frontend/` (TypeScript). The path-scoped rul
 - Concise but descriptive. A name says what a thing is or does; a reader should not need the comment to follow the code.
 - Prefer editing an existing file to adding one. Delete what is unused. No dead branches.
 - Every public function, class, component and type carries a one-line summary in the language's doc format (Google-style docstrings in Python, JSDoc in TypeScript). Sections (`Args:`, `@param`) only when they add something the signature does not say. Other comments are single line and only where the code cannot say it. No comment blocks. No commented-out code.
+- Comments are written for someone new to the codebase. A hard-to-follow part gets a single-line comment above it saying concisely what happens there. Never cite the spec, the plan, decision or question ids (`D14`, `Q-4`), review rounds or the history of a choice. Where a library's behaviour is the reason, link that library's docs; where a module has its own page under `docs/`, link that page.
 - Every change is verifiable. If you cannot test it, say so before shipping it.
 - Match the surrounding code's style, not its gaps.
 
