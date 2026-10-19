@@ -1,0 +1,97 @@
+{
+  "bases": [
+    "main",
+    "round/*"
+  ],
+  "artifact_prefixes": [
+    ".claude/rules/",
+    ".claude/skills/",
+    ".claude/agents/",
+    "CLAUDE.md",
+    "CONTRIBUTING.md",
+    "backend/CLAUDE.md",
+    "frontend/CLAUDE.md"
+  ],
+  "triggers": [
+    {
+      "paths": [
+        ".github/workflows/*",
+        "scripts/*",
+        "docker-compose*.yml",
+        "*/Dockerfile",
+        "deploy/*"
+      ],
+      "artifacts": [
+        "CLAUDE.md (Branches and deploy)",
+        ".claude/rules/deployment.md",
+        ".claude/rules/git-and-prs.md",
+        "CONTRIBUTING.md (section 1)"
+      ]
+    },
+    {
+      "paths": [
+        "backend/pyproject.toml",
+        "backend/uv.lock",
+        "backend/app/config.py",
+        "backend/app/main.py"
+      ],
+      "artifacts": [
+        "backend/CLAUDE.md (Commands, Config, Where things are)"
+      ]
+    },
+    {
+      "paths": [
+        "backend/app/api/*",
+        "frontend/src/lib/api/*",
+        "frontend/src/lib/schema/*"
+      ],
+      "artifacts": [
+        ".claude/rules/api-contract.md"
+      ]
+    },
+    {
+      "paths": [
+        "backend/alembic/*",
+        "backend/app/db/*"
+      ],
+      "artifacts": [
+        ".claude/rules/database.md"
+      ]
+    },
+    {
+      "paths": [
+        "backend/tests/conftest.py",
+        "frontend/src/test/*",
+        "frontend/vitest.config.ts",
+        "frontend/playwright.config.ts",
+        "e2e/*"
+      ],
+      "artifacts": [
+        ".claude/rules/testing.md",
+        ".claude/skills/verify/SKILL.md"
+      ]
+    },
+    {
+      "paths": [
+        "frontend/package.json",
+        "frontend/package-lock.json",
+        "frontend/vite.config.ts",
+        "frontend/tsconfig.json",
+        "frontend/eslint.config.js"
+      ],
+      "artifacts": [
+        "frontend/CLAUDE.md (Commands, Config, Where things are)"
+      ]
+    },
+    {
+      "paths": [
+        ".claude/hooks/*",
+        ".claude/settings.json"
+      ],
+      "artifacts": [
+        "CONTRIBUTING.md (sections 8.4 and 12)",
+        "CLAUDE.md (Config and secrets, Branches and deploy)"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,170 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(./.env)",
+      "Read(./**/.env)",
+      "Read(./**/*.pem)",
+      "Read(./**/*.key)",
+      "Edit(./.env)",
+      "Edit(./**/.env)",
+      "Edit(./**/*.pem)",
+      "Edit(./**/*.key)",
+      "Read(./**/credentials.json)",
+      "Read(./**/credentials.yaml)",
+      "Read(./**/credentials.yml)",
+      "Read(./**/credentials.toml)",
+      "Read(./**/secrets.json)",
+      "Read(./**/secrets.yaml)",
+      "Read(./**/secrets.yml)",
+      "Read(./**/secrets.toml)",
+      "Edit(./**/credentials.json)",
+      "Edit(./**/credentials.yaml)",
+      "Edit(./**/credentials.yml)",
+      "Edit(./**/credentials.toml)",
+      "Edit(./**/secrets.json)",
+      "Edit(./**/secrets.yaml)",
+      "Edit(./**/secrets.yml)",
+      "Edit(./**/secrets.toml)"
+    ],
+    "ask": [
+      "Bash(git push *)",
+      "Bash(gh pr create *)",
+      "Bash(gh repo create *)",
+      "Bash(kubectl apply *)",
+      "Bash(kubectl delete *)",
+      "Bash(kubectl rollout *)",
+      "Bash(helm *)",
+      "Bash(az *)"
+    ],
+    "allow": [
+      "Bash(cd *)",
+      "Bash(uv sync *)",
+      "Bash(uv run pytest *)",
+      "Bash(uv run pytest)",
+      "Bash(uv run ruff check .)",
+      "Bash(uv run ruff check --fix .)",
+      "Bash(uv run ruff format .)",
+      "Bash(uv run ruff format --check .)",
+      "Bash(uv run mypy *)",
+      "Bash(uv run alembic *)",
+      "Bash(npm ci)",
+      "Bash(npm run check*)",
+      "Bash(npm run test*)",
+      "Bash(npm run build*)",
+      "Bash(npm run e2e*)",
+      "Bash(npx eslint *)",
+      "Bash(npx tsc --noEmit*)",
+      "Bash(npx vitest *)",
+      "Bash(npx playwright test*)",
+      "Bash(docker compose ps*)",
+      "Bash(docker compose logs *)",
+      "Bash(kubectl get pods*)",
+      "Bash(kubectl get deploy*)",
+      "Bash(kubectl get svc*)",
+      "Bash(kubectl get jobs*)",
+      "Bash(kubectl get events*)",
+      "Bash(kubectl get nodes*)",
+      "Bash(kubectl get ingress*)",
+      "Bash(kubectl get configmaps*)",
+      "Bash(kubectl describe pod*)",
+      "Bash(kubectl describe deploy*)",
+      "Bash(kubectl describe svc*)",
+      "Bash(kubectl describe job*)",
+      "Bash(kubectl describe ingress*)",
+      "Bash(kubectl describe node*)",
+      "Bash(kubectl logs *)",
+      "Bash(k3d cluster list*)",
+      "Bash(python3 scripts/check_hygiene.py*)",
+      "Bash(ls *)",
+      "Bash(wc *)",
+      "Bash(git status *)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git branch *)",
+      "Bash(python3 -m unittest discover -s .claude/hooks/tests*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/branch-protection.py\""
+          },
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/env-protection.py\""
+          },
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/secrets-protection.py\""
+          },
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/pr-title.py\""
+          },
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/docs-check.py\""
+          }
+        ]
+      },
+      {
+        "matcher": "Read|Grep|Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/secrets-protection.py\""
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/lint.py\"",
+            "timeout": 90
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/transcript-backup.py\"",
+            "timeout": 60
+          }
+        ]
+      }
+    ],
+    "PostCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/transcript-backup.py\"",
+            "timeout": 60
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/transcript-backup.py\"",
+            "timeout": 60
+          }
+        ]
+      }
+    ]
+  }
+}
