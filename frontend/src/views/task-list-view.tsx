@@ -83,7 +83,7 @@ export function TaskListView(props: TaskListViewProps) {
           <p className="text-caption font-medium tracking-caps text-ink-muted uppercase">
             {longDate(today)}
           </p>
-          <h1 id={headingId} className="font-display text-display font-medium">
+          <h1 id={headingId} className="font-display text-display font-medium text-balance">
             Tasks
           </h1>
           <p role="status" className="min-h-5 text-caption text-ink-muted tabular-nums">

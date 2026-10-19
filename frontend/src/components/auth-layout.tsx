@@ -20,7 +20,7 @@ export function AuthLayout({ title, children, footer }: AuthLayoutProps) {
         <div className="flex flex-col items-center justify-center gap-4 border-3 border-double border-gilt/60 px-6 py-8 text-center @wide:aspect-3/4 @wide:gap-6 @wide:py-16">
           <LedgerTitle size="cover" />
           <span aria-hidden="true" className="h-px w-12 bg-gilt/60" />
-          <p className="text-caption font-medium tracking-caps uppercase">
+          <p className="text-caption font-medium tracking-caps text-balance uppercase">
             A ledger for the things you mean to do
           </p>
         </div>
@@ -28,7 +28,7 @@ export function AuthLayout({ title, children, footer }: AuthLayoutProps) {
           aria-labelledby={headingId}
           className="flex flex-col gap-6 rounded-sheet bg-sheet px-6 py-8 text-ink shadow-sheet @wide:justify-center @wide:px-12 @wide:py-12"
         >
-          <h1 id={headingId} className="font-display text-title font-medium">
+          <h1 id={headingId} className="font-display text-title font-medium text-balance">
             {title}
           </h1>
           {children}

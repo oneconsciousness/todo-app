@@ -156,7 +156,7 @@ function TaskEntry({
 
       {editing ? (
         <form noValidate onSubmit={save} className={`flex flex-col gap-6 ${inset}`}>
-          <h1 id={headingId} className="font-display text-title font-medium">
+          <h1 id={headingId} className="font-display text-title font-medium text-balance">
             Edit task
           </h1>
           {changedElsewhere && (
