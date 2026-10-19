@@ -16,7 +16,7 @@ Each step started from a fresh stack, ramped for 1 minute and held for 2.
 | 800 | 675 | 17.7 ms | 19.4 ms | 16.3 ms | 0% | 0 | 100% | 67% | 18% |
 | 1,000 | 839 | 7.4 ms | 8.4 ms | 14.7 ms | 0% | 0 | 100% | 79% | 25% |
 
-Budgets: under 0.1% failed requests, no 5xx, p95 under 250 ms for reads, 400 ms for writes and 1,500 ms for sign-in, over 99.9% of checks. CPU is from `docker stats` every 20 seconds; 100% is one core, the most a single uvicorn process can use.
+Budgets: under 0.1% failed requests, no 5xx, p95 under 250 ms for reads, 400 ms for writes and 1,500 ms for sign-in, over 99.9% of checks. CPU is the peak of the `docker stats` samples in each folder's `docker-stats.txt`, taken every 20 seconds; 100% is one core, the most a single uvicorn process can use.
 
 ## 200 users, 3-minute hold (`20261019T230058Z-09ae1d8-200/`)
 

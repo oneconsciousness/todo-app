@@ -45,6 +45,7 @@ This repo sits inside a larger workspace whose `.claude/rules/` also load. The g
 - FastAPI answers validation errors with 422 unless the app's handler maps them. Keep the handler; the contract says 400.
 - Set `GIT_SHA` on every compose command that builds or runs, `docker compose run` included. Images are tagged with it and fall back to `local`; a command under another tag makes compose recreate the running stack.
 - `load/run_stepped.py` runs `docker compose down -v` before each step. That deletes the local database and every account in it.
+- The k6 image runs as uid 12345 and writes its summaries to `load/results/` through a bind mount. Docker Desktop on a Mac maps that user to yours; on a Linux host the folder must be writable by uid 12345 first.
 - The browser journeys fail on any `console.error`, uncaught exception or CSP violation in the page, except a 401 from `/api/` (`e2e/browser/fixtures.ts`).
 
 ## Branches and deploy

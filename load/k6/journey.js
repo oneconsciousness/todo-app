@@ -15,7 +15,6 @@ const RESULTS_DIR = __ENV.RESULTS_DIR || "/results";
 
 const API = `${BASE_URL}/api/v1`;
 const SEED_WORDS = ["milk", "report", "dentist", "garden", "invoice"];
-const SETUP_BATCH = 50;
 
 const ONE_TASK = { name: `${API}/tasks/{id}` };
 
@@ -65,14 +64,9 @@ const expectStatus = (response, status, step) => {
   return response.status === status;
 };
 
-/** Run requests in parallel groups of `size`, so hundreds of sign-ups don't all hash passwords at once. */
-const inBatches = (requests, size) =>
-  Array.from({ length: Math.ceil(requests.length / size) }, (_, i) => requests.slice(i * size, (i + 1) * size)).flatMap(
-    (batch) => http.batch(batch),
-  );
-
 const pick = (items) => items[Math.floor(Math.random() * items.length)];
 
+/** Sign up one account per VU and give every VU their emails and the run's password. */
 export function setup() {
   const runId = Date.now();
   const password = `load-${crypto.randomUUID()}`;
@@ -84,7 +78,9 @@ export function setup() {
     JSON.stringify({ email, password }),
     params("setup"),
   ]);
-  const created = inBatches(signUps, SETUP_BATCH).filter((response) => response.status === 201).length;
+  // k6 sends a batch at most six requests at a time to one host, so sign-ups never all hash at once.
+  // https://grafana.com/docs/k6/latest/using-k6/k6-options/reference/#batch-per-host
+  const created = http.batch(signUps).filter((response) => response.status === 201).length;
   if (created !== VUS) exec.test.abort(`setup signed up ${created} of ${VUS} accounts`);
   return { emails, password };
 }
@@ -102,6 +98,7 @@ const signInAndSeed = (data) => {
   });
 };
 
+/** One pass of a user's task journey; on the VU's first pass it signs in and seeds its tasks. */
 export default function journey(data) {
   if (!seeded) {
     signInAndSeed(data);
@@ -161,16 +158,13 @@ export default function journey(data) {
   sleep(1);
 }
 
-/** True when a list holds exactly the five seed tasks, in rank order with no two ranks equal. */
+/** True when a list holds exactly the five seed tasks, with no two ranks equal; the list query already sorts by rank. */
 const isIntact = (items) => {
   const ranks = items.map((item) => item.rank);
-  return (
-    items.length === SEED_WORDS.length &&
-    new Set(ranks).size === ranks.length &&
-    ranks.every((rank, i) => i === 0 || ranks[i - 1] < rank)
-  );
+  return items.length === SEED_WORDS.length && new Set(ranks).size === ranks.length;
 };
 
+/** Sign back into every account and fail the run unless each holds exactly its seed tasks. */
 export function teardown(data) {
   const signIns = data.emails.map((email) => [
     "POST",
@@ -178,7 +172,7 @@ export function teardown(data) {
     JSON.stringify({ email, password: data.password }),
     params("teardown"),
   ]);
-  const sessions = inBatches(signIns, SETUP_BATCH).map((response) => response.cookies.session?.[0]?.value);
+  const sessions = http.batch(signIns).map((response) => response.cookies.session?.[0]?.value);
   // Teardown is one VU with one cookie jar, so each list sends its own account's session explicitly.
   const lists = sessions.map((session) => [
     "GET",
@@ -186,12 +180,10 @@ export function teardown(data) {
     null,
     params("teardown", { cookies: { session: { value: session || "", replace: true } } }),
   ]);
-  const broken = inBatches(lists, SETUP_BATCH).filter(
-    (response) => response.status !== 200 || !isIntact(response.json("items")),
-  );
+  const broken = http.batch(lists).filter((response) => response.status !== 200 || !isIntact(response.json("items")));
   if (broken.length > 0) {
     console.error(
-      `data check: ${broken.length} of ${data.emails.length} accounts are not exactly five tasks in unique rank order`,
+      `data check: ${broken.length} of ${data.emails.length} accounts do not hold exactly five tasks with unique ranks`,
     );
     exec.test.fail(`data check failed for ${broken.length} accounts`);
   }

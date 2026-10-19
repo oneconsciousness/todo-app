@@ -71,7 +71,7 @@ services:
       retries: 3
       start_period: 10s
 
-  # nginx: the SPA and the proxy to the API. The only published port, and only on this Mac.
+  # nginx: the SPA and the proxy to the API. The stack's one published port, bound to the loopback address only.
   web:
     <<: *hardening
     build: ./frontend
