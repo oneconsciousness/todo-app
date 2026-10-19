@@ -3,7 +3,7 @@
 from datetime import date
 from uuid import UUID
 
-from sqlalchemy import insert, select
+from sqlalchemy import ColumnElement, insert, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Task
@@ -30,10 +30,22 @@ async def insert_task(
     return TaskRecord.model_validate((await session.scalars(statement)).one())
 
 
-async def list_tasks(session: AsyncSession, owner_id: UUID) -> list[TaskRecord]:
-    """Return the owner's tasks in rank order."""
-    tasks = await session.scalars(select(Task).where(Task.owner_id == owner_id).order_by(Task.rank))
-    return [TaskRecord.model_validate(task) for task in tasks]
+def search_condition(pattern: str) -> ColumnElement[bool]:
+    """Match tasks whose title or notes contain the search, ignoring case.
+
+    The pattern is a bound parameter with `\\` as its escape character, so its `%` and `_` match literally
+    (https://www.postgresql.org/docs/18/functions-matching.html#FUNCTIONS-LIKE). The trigram index can
+    answer both halves of the OR (https://www.postgresql.org/docs/18/pgtrgm.html#PGTRGM-INDEX).
+    """
+    return or_(Task.title.ilike(pattern, escape="\\"), Task.notes.ilike(pattern, escape="\\"))
+
+
+async def list_tasks(session: AsyncSession, owner_id: UUID, pattern: str | None) -> list[TaskRecord]:
+    """Return the owner's tasks in rank order, only those matching `pattern` when one is given."""
+    statement = select(Task).where(Task.owner_id == owner_id).order_by(Task.rank)
+    if pattern is not None:
+        statement = statement.where(search_condition(pattern))
+    return [TaskRecord.model_validate(task) for task in await session.scalars(statement)]
 
 
 async def get_task(session: AsyncSession, owner_id: UUID, task_id: UUID) -> TaskRecord | None:

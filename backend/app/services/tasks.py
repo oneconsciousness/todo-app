@@ -7,13 +7,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db import tasks as task_rows
 from app.domain.errors import TaskNotFound
 from app.domain.ranks import rank_between
+from app.domain.search import normalize_query, search_pattern
 from app.domain.types import NewTask, TaskRecord
 
 
-async def list_tasks(session: AsyncSession, owner_id: UUID) -> list[TaskRecord]:
-    """Return the owner's tasks in their order."""
+async def list_tasks(session: AsyncSession, owner_id: UUID, q: str | None) -> list[TaskRecord]:
+    """Return the owner's tasks in their order, only those whose title or notes contain `q` when it is not blank."""
+    pattern = search_pattern(term) if (term := normalize_query(q)) else None
     async with session.begin():
-        return await task_rows.list_tasks(session, owner_id)
+        return await task_rows.list_tasks(session, owner_id, pattern)
 
 
 async def get_task(session: AsyncSession, owner_id: UUID, task_id: UUID) -> TaskRecord:

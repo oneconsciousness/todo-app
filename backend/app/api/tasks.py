@@ -1,13 +1,17 @@
 """The signed-in user's tasks."""
 
+from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Response, status
+from fastapi import APIRouter, Query, Response, status
 
 from app.api.deps import CurrentUserDep, SessionDep
 from app.api.schemas import ErrorEnvelope, TaskCreate, TaskList, TaskRead
 from app.domain.types import TaskRecord
 from app.services import tasks as task_service
+
+# No title is longer than 200 characters, and the cap bounds the trigram work a search can cause.
+SearchTerm = Annotated[str | None, Query(max_length=200)]
 
 tasks_router = APIRouter(prefix="/tasks", tags=["tasks"], responses={401: {"model": ErrorEnvelope}})
 
@@ -23,10 +27,10 @@ def read_with_etag(task: TaskRecord, response: Response) -> TaskRead:
     return TaskRead.model_validate(task, from_attributes=True)
 
 
-@tasks_router.get("")
-async def list_tasks(claims: CurrentUserDep, session: SessionDep) -> TaskList:
-    """Return the user's tasks in their order."""
-    tasks = await task_service.list_tasks(session, claims.user_id)
+@tasks_router.get("", responses={400: {"model": ErrorEnvelope}})
+async def list_tasks(claims: CurrentUserDep, session: SessionDep, q: SearchTerm = None) -> TaskList:
+    """Return the user's tasks in their order, or only those whose title or notes contain `q`."""
+    tasks = await task_service.list_tasks(session, claims.user_id, q)
     return TaskList(items=[TaskRead.model_validate(task, from_attributes=True) for task in tasks])
 
 
