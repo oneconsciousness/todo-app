@@ -114,7 +114,10 @@ jobs:
 
   e2e:
     needs: [backend, frontend]
+    # A title edit reruns the workflow for the pr-title check; it changes no code, so the stack is not rebuilt for it.
+    if: github.event.action != 'edited'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       - name: Write the stack's settings from the example, with fresh secrets for this run
