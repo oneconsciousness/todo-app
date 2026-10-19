@@ -6,6 +6,7 @@ Edit the config block; every pattern and message is derived from it.
 Behaviour:
   - `git commit` while on a protected branch                        -> DENY
   - `git push <remote> <protected>` / `git push <ref>:<protected>`  -> DENY
+    (also as `refs/heads/<protected>` and with a leading `+`)
   - `git push --force` to a protected branch                        -> DENY
   - `git push` with no refspec while on a protected branch          -> DENY
   - `git checkout <protected> && git commit ...` in one command     -> DENY
@@ -25,14 +26,15 @@ import subprocess
 import sys
 
 # --- config ---------------------------------------------------------------
-PROTECTED = ("main",)  # branches nobody commits on or pushes to directly
-BASE = "main"  # where feature branches start and where PRs go
+PROTECTED = ("main", r"round/[a-z0-9][a-z0-9.-]*")  # regexes: branches nobody commits on or pushes to directly
+BASE = "round/<n>-<name>"  # where child branches start and where child PRs go; only a round's parent PR targets main
 SECTION_REF = "CONTRIBUTING.md § 8 (the kind-stop protocol)"
 TAG_RE = r"v\d+\.\d+\.\d+"  # release tags are never moved; set to "" to skip the guard
 # --------------------------------------------------------------------------
 
-PROTECTED_ALT = "|".join(re.escape(b) for b in PROTECTED)
-PROTECTED_LIST = ", ".join(f"`{b}`" for b in PROTECTED)
+PROTECTED_ALT = "|".join(f"(?:{b})" for b in PROTECTED)
+PROTECTED_LIST = "`main` and every `round/<n>-<name>` integration branch"
+REF_PREFIX = r"\+?(?:refs/heads/)?"  # a refspec may name the branch fully or force it with "+"
 
 
 def deny(reason: str) -> None:
@@ -98,9 +100,9 @@ def is_force_push(part: str) -> bool:
 
 def push_targets_protected_explicit(part: str) -> bool:
     """True when the push names a protected branch as remote branch or refspec target."""
-    if re.search(rf"\b(?:origin|upstream)\s+(?:{PROTECTED_ALT})(?:\s|$)", part):
+    if re.search(rf"\b(?:origin|upstream)\s+{REF_PREFIX}(?:{PROTECTED_ALT})(?:\s|$)", part):
         return True
-    if re.search(rf":(?:{PROTECTED_ALT})(?:\s|$)", part):
+    if re.search(rf":{REF_PREFIX}(?:{PROTECTED_ALT})(?:\s|$)", part):
         return True
     return False
 
@@ -112,6 +114,11 @@ def push_is_implicit(part: str) -> bool:
     if re.search(r":\S+", part):
         return False
     return True
+
+
+def is_protected(branch: str) -> bool:
+    """True when the branch name matches one of the protected patterns."""
+    return re.fullmatch(PROTECTED_ALT, branch) is not None
 
 
 def is_checkout_protected(part: str) -> bool:
@@ -179,7 +186,7 @@ def main() -> None:
             )
 
     for part in parts:
-        if is_git_commit(part) and branch in PROTECTED:
+        if is_git_commit(part) and is_protected(branch):
             deny(
                 f"Heads up — this would commit directly on `{branch}`. "
                 f"Our flow: branch off `{BASE}`, commit there, open a PR. "
@@ -202,7 +209,7 @@ def main() -> None:
 
         force = is_force_push(part)
         explicit = push_targets_protected_explicit(part)
-        implicit = push_is_implicit(part) and branch in PROTECTED
+        implicit = push_is_implicit(part) and is_protected(branch)
 
         if not (explicit or implicit):
             continue

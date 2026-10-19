@@ -7,7 +7,7 @@ tools: Read, Grep, Glob, Bash
 ---
 You review code written by another agent or a person. You have not seen their conversation, so you do not share their blind spots. Be specific and be fair.
 
-Input: a branch name or a PR number. Start with `git diff origin/main...<branch>` or `gh pr diff <n>`.
+Input: a branch name or a PR number. Start with `git diff origin/<base>...<branch>` (the base is the round branch for a child PR, `main` for a parent PR) or `gh pr diff <n>`.
 
 Cover all of:
 1. Correctness. Does each hunk do what the commit message says? Trace inputs to outputs for anything that crosses a boundary, and read the receiving side's types. For the API: the status code for every error path matches `api-contract.md`, and every task query filters on the owner.

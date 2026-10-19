@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""PreToolUse hook for Bash. Blocks `gh pr create` to the base branch when the branch touched a path in the docs map and carries no docs decision.
+"""PreToolUse hook for Bash. Blocks `gh pr create` to a checked base branch when the branch touched a path in the docs map and carries no docs decision.
 
 A decision is either a change to a Claude artifact on the branch, or a commit whose message carries a `Claude-Docs:` trailer.
-`/claude-docs-check` produces both. PRs to other bases (promotions) are not checked.
+`/claude-docs-check` produces both. The map's `bases` (fnmatch patterns) name the checked bases: `main` and each round's
+integration branch, so child PRs are checked too. PRs to any other base are not checked.
 """
 import fnmatch
 import json
@@ -13,8 +14,8 @@ import subprocess
 import sys
 
 # --- config ---------------------------------------------------------------
-MAP = ".claude/skills/claude-docs-check/map.json"  # carries the base branch and the triggers
-DEFAULT_BASE = "main"  # used only when map.json has no "base"
+MAP = ".claude/skills/claude-docs-check/map.json"  # carries the checked bases and the triggers
+DEFAULT_BASE = "main"  # gh's own default when --base is left out; also the fallback when map.json names no bases
 # --------------------------------------------------------------------------
 
 
@@ -56,10 +57,12 @@ def main() -> None:
         spec = json.load(open(os.path.join(root, MAP)))
     except (OSError, json.JSONDecodeError):
         sys.exit(0)
-    base = base_of(command, spec.get("base", DEFAULT_BASE))
-    if base != spec.get("base", DEFAULT_BASE):
+    base = base_of(command, DEFAULT_BASE)
+    if not any(fnmatch.fnmatchcase(base, pattern) for pattern in spec.get("bases", [DEFAULT_BASE])):
         sys.exit(0)
-    ref = f"origin/{base}" if git(root, "rev-parse", "--verify", "-q", f"origin/{base}").strip() else base
+    ref = next((r for r in (f"origin/{base}", base) if git(root, "rev-parse", "--verify", "-q", r).strip()), None)
+    if ref is None:
+        deny(f"The PR base `{base}` is not known locally, so the docs check cannot see what this branch changed. Run `git fetch --all --prune` and try again.")
     changed = [f for f in git(root, "diff", "--name-only", f"{ref}...HEAD").splitlines() if f]
     if not changed:
         sys.exit(0)

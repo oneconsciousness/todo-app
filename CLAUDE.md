@@ -36,10 +36,10 @@ This repo sits inside a larger workspace whose `.claude/rules/` also load. The g
 - FastAPI answers validation errors with 422 unless the app's handler maps them. Keep the handler; the contract says 400.
 
 ## Branches and deploy
-- Work on a branch off `main`. PR to `main`, squash-merge. Releases are `vX.Y.Z` tags; a tag is never moved.
+- Each round has an integration branch, `round/<n>-<name>`, and one parent PR into `main` that merges only when the round is done and tested. Work on a branch off the round branch and open a child PR into it; the lead reviews every PR. Child PRs are rebase-merged, the parent with a merge commit (`CONTRIBUTING.md` § 1). Releases are `vX.Y.Z` tags; a tag is never moved.
 - CI runs on every PR: hygiene, plus the backend and frontend gates as those apps land.
 - Deploy stages are in `.claude/rules/deployment.md`. The human reviews every deployment artifact before it is applied, and runs anything against AKS.
-- Guards: a hook blocks commits and pushes on `main`, force pushes, `--no-verify` and tag moves. `git push`, `gh pr create`, `kubectl apply`/`delete`, `helm` and `az` always ask. PR titles must be Conventional Commits. A PR also needs a docs decision from `/claude-docs-check`.
+- Guards: a hook blocks commits and pushes on `main` and on round branches, force pushes, `--no-verify` and tag moves. `git push`, `gh pr create`, `kubectl apply`/`delete`, `helm` and `az` always ask. PR titles must be Conventional Commits. A PR also needs a docs decision from `/claude-docs-check`.
 
 ## Scope
 Change only what the task names. Do not fix nearby code or add tests the change does not need. Unrelated problems go in a one-line follow-up note.

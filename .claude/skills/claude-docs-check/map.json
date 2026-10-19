@@ -1,5 +1,5 @@
 {
-  "base": "main",
+  "bases": ["main", "round/*"],
   "artifact_prefixes": [
     ".claude/",
     "CLAUDE.md",

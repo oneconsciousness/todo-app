@@ -4,7 +4,7 @@ description: Check whether the branch's changes need updates to CLAUDE.md, the r
 ---
 # Claude docs check
 
-1. Base branch is `main` unless told otherwise. Changed files: `git diff --name-only origin/main...HEAD`.
+1. The base is the PR's base: the current round branch for a child PR, `main` for a round's parent PR. Changed files: `git diff --name-only origin/<base>...HEAD`.
 2. Match them against `map.json` in this folder. Each entry maps code paths to the instruction files that describe them. No match: say "no docs triggers on this branch" and stop; the PR hook will not block.
 3. On a match, run the `docs-keeper` agent with the base branch, the changed files and the matched entries. It runs on Opus and either edits the mapped files or explains, per artifact, why nothing needs to change.
 4. Read its edits back against the code, not against the commit messages. Fix anything wrong.

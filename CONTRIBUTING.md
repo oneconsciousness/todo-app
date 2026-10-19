@@ -2,24 +2,35 @@
 
 This file is the canonical reference for *how* we work in this repo. The *why* (requirements, architecture, design decisions) lives in `docs/`: start with `docs/kickoff.md`.
 
-> **TL;DR for first-time contributors:** branch off `main`, use Conventional Commits, run the tests before opening a PR, get one reviewer, squash-merge.
+> **TL;DR for first-time contributors:** branch off the current round branch (`round/<n>-<name>`), use Conventional Commits, run the tests before opening a PR into the round branch, get the lead's review. The round reaches `main` in one parent PR once it is done and tested.
 
 ---
 
 ## 1. Branches and merges
 
+Work is organised in rounds (round 1: containers, round 2: local k3d, round 3: AKS). Each round has one integration branch and one parent PR.
+
 ```
-feature/<name>      ←  you work here, branched off main
+feature/<name>              ←  you work here, branched off the round branch
        │
        │  GATE — every suite passes on this branch (§ 5)
        ▼
-       PR  →  main   ←  squash-merged after review
-       │
+  child PR  →  round/<n>-<name>   ←  reviewed by the lead, then rebase-merged
+       │                             (every green, test-first commit is kept)
+       │  GATE — the round is done: exit criteria met, every suite green
        ▼
-   vX.Y.Z tag       ←  a release is a tag on main; a tag is never moved or deleted
+ parent PR  →  main              ←  open (as a draft) for the whole round;
+       │                             merged with a merge commit once tested
+       ▼
+   vX.Y.Z tag                    ←  a release is a tag on main; a tag is never moved or deleted
 ```
 
-**Never push directly to `main`.** Always go through a PR. A wrong tag is fixed by cutting the next version, never by moving the existing one.
+- **The parent PR** is opened as a draft as soon as the round branch has its first merged child, and is titled for the round (`feat(round-1): run the to do app in containers`). It is the round's checklist: each child PR is linked from it. It leaves draft only when the round's exit criteria are met, and it merges only after the lead's final review.
+- **`main` only ever receives finished, tested rounds.** `git log --first-parent main` reads one merge per round; the full history underneath keeps every test-first commit.
+- **Child PRs** target the round branch and are rebase-merged, so the branch stays linear and every commit on it is green. A child that depends on an unmerged child targets that child's branch until it merges, then is retargeted to the round branch.
+- **The round branch is protected like `main`:** no direct commits or pushes, only merged PRs. It is created once from `main` by the human (`git push origin main:refs/heads/round/<n>-<name>`), because the hook refuses that push from an agent.
+
+**Never push directly to `main` or a round branch.** Always go through a PR. A wrong tag is fixed by cutting the next version, never by moving the existing one.
 
 Deployment moves through three stages, each proven before the next starts: containers with `docker compose`, then a local k3d cluster, then AKS through GitHub Actions. `.claude/rules/deployment.md` holds the details. Rollback on Kubernetes is `kubectl rollout undo deployment/<name>`, run by a human (§ 11).
 
@@ -43,6 +54,7 @@ Every PR carries exactly one label, taken from its branch prefix:
 | `perf/` | `performance` |
 | `test/` | `test` |
 | `ci/` | `ci` |
+| `round/` | `round` (the parent PR) |
 
 A prefix that is not in this table is a gap: add a row in the same PR, after asking.
 
@@ -82,9 +94,9 @@ What could break? How to revert?
 Inline if helpful.
 ```
 
-- One reviewer minimum. Two for changes touching production paths.
+- The lead reviews every PR, child and parent alike.
 - CI must be green before merge.
-- **Squash-merge** to `main`. History stays readable; every change has one review record.
+- **Child PRs are rebase-merged** into the round branch, which keeps each green commit and the test-first order visible. **The parent PR is merged into `main` with a merge commit**, so `main` gains one merge per round.
 
 ## 5. Test gates
 
@@ -147,7 +159,7 @@ Any of these in a single session:
 4. Using a personal-name or vague branch name (`<name>-fix`, `claude-update`, `tmp`, `wip`, `update`, `fix`)
 5. Skipping the test gate before opening a PR
 6. Using `--no-verify` to bypass a git hook
-7. Squashing the commits on a PR branch before merge (squash happens *on merge*, not before)
+7. Squashing the commits on a PR branch before merge (the test-first history is evidence; keep it)
 8. Moving, deleting or re-creating a release tag
 9. Editing files in any folder marked "generated" or "source — do not modify"
 10. A commit message that isn't Conventional Commits format
