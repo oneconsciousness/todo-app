@@ -34,6 +34,10 @@ describe("listSummary", () => {
     expect(listSummary(two.slice(0, 1), "milk", false)).toMatch(/^1 match for/);
   });
 
+  it("keeps it short when nothing matches, since the list says the rest", () => {
+    expect(listSummary([], "milk", false)).toBe("No matches.");
+  });
+
   it("says it is searching while results load", () => {
     expect(listSummary(two, "milk", true)).toBe("Searching…");
   });

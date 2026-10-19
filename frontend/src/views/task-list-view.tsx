@@ -1,4 +1,4 @@
-import { type ReactNode, type SubmitEvent, useState } from "react";
+import { type ReactNode, type SubmitEvent, useId, useState } from "react";
 import { Button } from "../components/ui/button.tsx";
 import { EmptyState } from "../components/ui/empty-state.tsx";
 import { Icon } from "../components/ui/icon.tsx";
@@ -7,7 +7,7 @@ import { SearchBox } from "../components/ui/search-box.tsx";
 import { Skeleton } from "../components/ui/skeleton.tsx";
 import { SortableList } from "../components/ui/sortable-list.tsx";
 import { TextField } from "../components/ui/text-field.tsx";
-import { TaskRow, controlCellClass, rowClass, textCellClass } from "../components/ui/task-row.tsx";
+import { LedgerCells, TaskRow, rowClass } from "../components/ui/task-row.tsx";
 import { longDate } from "../lib/due-date.ts";
 import { type Task, titleSchema } from "../lib/schema/task.ts";
 import { isSearching, listSummary } from "../lib/task-list.ts";
@@ -54,6 +54,7 @@ const placeholderWidths = ["w-3/4", "w-1/2", "w-2/3", "w-2/5"] as const;
 /** The task list screen: search, quick add, and the ruled list the user ticks off and reorders. */
 export function TaskListView(props: TaskListViewProps) {
   const { content, today, query, searchPending, pendingCreate, failure } = props;
+  const headingId = useId();
   const [draft, setDraft] = useState("");
   const [draftError, setDraftError] = useState<string | undefined>(undefined);
   const searching = isSearching(query);
@@ -73,7 +74,7 @@ export function TaskListView(props: TaskListViewProps) {
   return (
     <div className="@container">
       <section
-        aria-labelledby="task-list-heading"
+        aria-labelledby={headingId}
         className="mx-auto flex w-full max-w-measure flex-col gap-6 px-4 py-8 @wide:px-6 @wide:py-12"
       >
         <header className="flex flex-col gap-4 @wide:flex-row @wide:items-end @wide:justify-between">
@@ -81,7 +82,7 @@ export function TaskListView(props: TaskListViewProps) {
             <p className="text-caption font-medium tracking-caps text-ink-muted uppercase">
               {longDate(today)}
             </p>
-            <h1 id="task-list-heading" className="font-display text-display font-medium">
+            <h1 id={headingId} className="font-display text-display font-medium">
               Tasks
             </h1>
             <p role="status" className="min-h-5 text-caption text-ink-muted tabular-nums">
@@ -235,16 +236,15 @@ function PendingRow({
 }) {
   return (
     <div aria-busy="true" className={rowClass}>
-      {reorderable && <span className={`${controlCellClass} size-touch`} />}
-      <span className={`${controlCellClass} flex size-touch items-center justify-center`}>
-        <Skeleton className="size-5" />
-      </span>
-      <div className={`${textCellClass} @wide:col-span-2`}>
+      <LedgerCells
+        handle={reorderable && <span className="block size-touch" />}
+        control={<Skeleton className="size-5" />}
+      >
         <span className="leading-(--text-lead--line-height) break-words text-ink-muted">
           {title}
         </span>
         <span className="text-caption text-ink-muted motion-safe:animate-shimmer">Adding…</span>
-      </div>
+      </LedgerCells>
     </div>
   );
 }
@@ -255,12 +255,9 @@ function LoadingRows() {
       <span className="sr-only">Loading your tasks…</span>
       {placeholderWidths.map((width) => (
         <div key={width} aria-hidden="true" className={rowClass}>
-          <span className={`${controlCellClass} flex size-touch items-center justify-center`}>
-            <Skeleton className="size-5" />
-          </span>
-          <div className={`${textCellClass} justify-center @wide:col-span-2`}>
-            <Skeleton className={`h-3 ${width}`} />
-          </div>
+          <LedgerCells handle={null} control={<Skeleton className="size-5" />}>
+            <Skeleton className={`my-2 h-3 ${width}`} />
+          </LedgerCells>
         </div>
       ))}
     </div>

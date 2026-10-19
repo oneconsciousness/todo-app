@@ -1,25 +1,24 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { searchMatches, searchTerm, tasks, today, unmatchedTerm } from "../test/fixtures.ts";
+import {
+  searchMatches,
+  searchTerm,
+  taskListProps,
+  tasks,
+  unmatchedTerm,
+} from "../test/fixtures.ts";
 import { TaskListView, type TaskListViewProps } from "./task-list-view.tsx";
 
 const renderView = (overrides: Partial<TaskListViewProps> = {}) => {
-  const props: TaskListViewProps = {
-    content: { status: "ready", tasks },
-    today,
-    query: "",
-    searchPending: false,
-    pendingCreate: null,
-    failure: null,
+  const props = taskListProps({
     onQueryChange: vi.fn(),
     onCreate: vi.fn(),
     onToggle: vi.fn(),
-    onMove: vi.fn(),
     onRetry: vi.fn(),
     onDismissFailure: vi.fn(),
     ...overrides,
-  };
+  });
   render(<TaskListView {...props} />);
   return props;
 };

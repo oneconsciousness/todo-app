@@ -1,12 +1,13 @@
 import { type Task, taskSchema } from "../lib/schema/task.ts";
+import type { TaskListViewProps } from "../views/task-list-view.tsx";
 
 /** The date every fixture is relative to: Monday 19 October 2026. */
 export const today = "2026-10-19";
 
-/** Build one valid task, parsed through the real schema, with any fields overridden. */
+/** Build one valid task, parsed through the real schema, with any fields overridden; pass an id when several must differ. */
 export const makeTask = (overrides: Partial<Task> = {}): Task =>
   taskSchema.parse({
-    id: crypto.randomUUID(),
+    id: "00000000-0000-4000-8000-000000000000",
     title: "Water the plants",
     notes: "",
     completed: false,
@@ -69,3 +70,22 @@ export const searchMatches: readonly Task[] = tasks.filter((task) =>
 
 /** A search term that matches nothing. */
 export const unmatchedTerm = "plumber";
+
+const ignore = (): void => undefined;
+
+/** `TaskListView` props for the ready list with callbacks that do nothing; callers override what they need. */
+export const taskListProps = (overrides: Partial<TaskListViewProps> = {}): TaskListViewProps => ({
+  content: { status: "ready", tasks },
+  today,
+  query: "",
+  searchPending: false,
+  pendingCreate: null,
+  failure: null,
+  onQueryChange: ignore,
+  onCreate: ignore,
+  onToggle: ignore,
+  onMove: ignore,
+  onRetry: ignore,
+  onDismissFailure: ignore,
+  ...overrides,
+});

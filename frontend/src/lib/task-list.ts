@@ -34,6 +34,7 @@ export const listSummary = (
     const { open, done } = summarize(tasks);
     return `${String(open)} open · ${String(done)} done`;
   }
+  if (tasks.length === 0) return "No matches.";
   const noun = tasks.length === 1 ? "match" : "matches";
   return `${String(tasks.length)} ${noun} for “${query.trim()}”. Reordering is off while you search.`;
 };
