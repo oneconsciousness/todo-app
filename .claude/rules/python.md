@@ -26,5 +26,8 @@ paths:
 - WARNING and ERROR lines say where (`module.function`), why, and what happens next, with ids as key=value. Never log secrets.
 
 ## Async and boot
-- asyncio throughout. Do not block the event loop: no sync database driver, no blocking hashing on the loop.
+- asyncio throughout. Every route is `async def`; a plain `def` route would run on FastAPI's thread pool. Do not block the event loop: no sync database driver, no sync HTTP client, no blocking file I/O on the request path.
+- CPU-heavy work runs through `asyncio.to_thread` behind a semaphore that caps it per process. Password hashing (argon2id, OWASP parameters) is capped at 4 at a time.
+- One `AsyncSession` and one transaction per request, from a dependency; commit on success, roll back on any exception. Never share a session between concurrent coroutines; a `TaskGroup` that touches the database gives each task its own session.
+- Logging goes through a `QueueHandler` so a slow stdout never blocks the loop.
 - Never add a network call at import time; put it in the lifespan. A database the app cannot reach makes `/readyz` fail, not the import.

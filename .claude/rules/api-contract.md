@@ -21,8 +21,12 @@ The REST contract between `backend/` and `frontend/`. Change both sides in the s
 | No token, bad token, expired token, wrong password | 401 |
 | Authenticated but not allowed to do this action | 403 |
 | Resource missing, **or owned by another user** (so ids of other users' tasks are never confirmed) | 404 |
-| Conflict with current state, such as a username already taken | 409 |
+| Conflict with current state, such as an email already registered | 409 |
+| `If-Match` names an old version of the task | 412 |
+| Overloaded (in-flight limit, no free database connection) or database unreachable | 503 |
 
+- JSON field names are camelCase on the wire (`dueDate`, `createdAt`). Pydantic models use `alias_generator=to_camel` with `populate_by_name=True`; Python code keeps snake_case.
+- Tasks carry an integer `version`, returned as the `ETag` header. `PATCH` honours `If-Match` (412 on mismatch) and changes only the fields sent.
 - Every error body has one shape, a typed model: `{"error": {"code": "...", "message": "...", "details": [...]}}`. `code` is a stable machine string the frontend switches on; `message` is safe to show a user.
 - List endpoints return a typed envelope, not a bare array, so paging can be added without breaking clients.
 - The frontend parses every response with a Zod schema that mirrors the backend's Pydantic model. When a model changes, the schema changes in the same PR, and the integration test for that endpoint asserts the new shape.

@@ -75,10 +75,70 @@ Claude Code writes each session as JSONL, one event per line with a timestamp, u
 7. **Gate:** round 2 (k3d) proven and the human satisfied → round 3, AKS through GitHub Actions, if time permits. Every deployment artifact reviewed before it is applied.
 8. README, the transcript export and the human-versus-agent time report.
 
-## 5. Open for the spec phase
+## 5. Spec review, round 1 (verbatim) and what it settled
 
-- Auth: how accounts exist (sign-up screen or seeded users), token format and lifetime, where the frontend keeps the token.
-- Ordering: how positions are stored so a reorder is one cheap, consistent write.
-- Search: server-side or client-side, which fields, and whether it combines with ordering.
-- Task fields beyond title and done state (description, due date, priority).
-- Deployment target details: ingress, the managed Postgres choice for AKS, and how images reach the cluster registry.
+The round 1 spec is `docs/specs/round-1.html`, published as a Claude artifact. The lead's first review:
+
+> 1. Remind me before we submit to make the artifact public and also we'll include in the final report.
+> 2. Well done, on the presentation. It neat and easy to skim and understand.
+> 3. I understand you want to prove memory isn't saved in the backend api and its isolated with the replica. I think, let's save that for round 2.
+> 4. Good on postgresql for storage and all replicas must share one store, true.
+> 5. I want to hear your thoughts on the following topics within the spec itself `Async and concurrency`, `Races and consistency` and Testing and Explainability against those topics too from a FastAPI/Uvicorn pov keeping mind that many users would use the application at the same time. Its important we take this into account during our spec and planning stages itself so the expectation is set straight.
+> 6. For the frontend, I'd like you to create a design artifact first of every screen. I'll review the design tokens before we proceed to build frontend. note this down as the order in the spec. This will be run in parallel while writing the plan. Build the design artifact such that you can directly reuse those components for the actual frontend too. Reduce the redundancy of your work.
+
+> DECISIONS:
+> 1. Agreed. It also allows for the reviewer to script the testing in bulk if required. we should also test this before we submit, i.e., load testing.
+> 2. Agreed. It secure enough for this demo. Note down as something we would implement in the future (i recommend a FUTURE.md doc) that we would use msft or google login or apple login depending on client needs.
+> 3. Agreed! Appreciate the well thought of walkthrough of D6 in spec. helped me understand your thought process!
+> 4. This is well thought off. I like the 250ms touch. its great!
+> 5. I agree. Note down here that. After all functionality is working fine, we may change the create/update new task to essentially an AI operation if time exists. where the user describes in text or voice what they want to create/update and we update. For now, put it in FUTURE.md. We could also have a TASK summary home page driven by AI in the future, potentially using a framework like AGUI.
+> 6. Yeah tbh, that's fine with me! I understand the intent. scratch my guidance in the thoughts/feedback point 3.
+> 7. Agreed.
+
+> Additional notes: agreed on endpoints, check on whether (health vs healthz; what is expected and the best practice).
+
+What it settled:
+
+| Spec id | Locked |
+|---|---|
+| D3 | Open sign-up and sign-in by email and password. Reviewers can script bulk tests against the API (OpenAPI docs at `/api/docs`). A load test runs before submission. |
+| D4 | JWT in an httpOnly `SameSite=Strict` cookie, 8 hours. Sign-in with Microsoft, Google or Apple goes in `FUTURE.md`. |
+| D6 | Fractional ranks; new tasks at the top; reordering off while searching. |
+| D7 | Server-side search over title and notes, trigram index, 250 ms debounce. |
+| D8 | Fields: title, notes, completed, due date. AI task entry (text or voice) and an AI summary home page (possibly AG-UI) go in `FUTURE.md`. |
+| D10 | Two API replicas from round 1, with `X-Served-By`. Feedback point 3 is withdrawn by decision 6. |
+| D12 | Coverage floors: 90% backend, 85% frontend. |
+| Order | The frontend starts with a design artifact of every screen, built from the real components, made while the plan is written; the lead reviews the design tokens before the frontend is built. |
+| Endpoints | Agreed, with the health check naming researched in revision 2 (D19). |
+
+Revision 2 of the spec answers points 5 and 6 and the health check question with D13 to D20, signed off below.
+
+## 5a. Spec review, round 2 (verbatim) and what it settled
+
+> D13 - Understood well and agreed.
+> D14 - Understood well and agreed. It will make a difference on high app load.
+> D15 - Understood well and agreed. It would also be good to showcase realistic numbers in our final report on how many concurrent users we could end up handling at the end of each round.
+> D16 - Understood and agreed. I would like to actively involved when we test this.
+> D17 - Is this specifically to overcome cases where two tabs update the same todo item one after the other and tab 2 doesn't have the tab 1 update loaded? validate my understanding. I also believe, that a good todo app's tab when in focus by the user should refresh and update every time the user comes back to focus on that tab. that way we won't run into edit mismatches.
+> D18 - a load test is an amazing idea. Agreed! Keep me actively in the loop.
+> D19 - agreed.
+> D20 - agreed.
+>
+> 1/ Agreed on endpoints. 2/ Agreed on tables. neat and concise. 3/ Screens. Agreed! 4/ Tests. Agreed! 5/ For the design - tips: stellar look and premium feel + vintage colors + 0 redundancy.
+
+What it settled: D1 to D20 are locked (spec revision 3), and the rules carry them (`api-contract.md`, `testing.md`, `deployment.md`, `python.md`, `database.md`).
+
+| Spec id | Note |
+|---|---|
+| D15 | The final report gives a measured concurrent-user capacity for each round. |
+| D16, D18 | The lead takes part in the race tests and the load tests. |
+| D17 | The lead's understanding is right. Refetch on focus is the first layer, a "Changed elsewhere" notice covers unsaved drafts, and `If-Match`/412 is the guarantee. |
+| Design | A stellar look, a premium feel, vintage colours, zero redundancy. |
+| Wire format | JSON field names are camelCase, so the frontend uses the API's shapes without a mapping layer (agent decision, recorded in `api-contract.md`). |
+
+## 6. Before submission
+
+- [ ] Share the spec artifact, and the design artifact, so the reviewers can open them; put the links in the final report.
+- [ ] Run the load test (D18) with the lead, and quote its results and each round's capacity figure in the README.
+- [ ] Export the session transcripts from `.ai-transcripts/` into `docs/ai-usage/` after a secrets and personal-data scan; write the human-versus-agent time split.
+- [ ] Make the GitHub repository public.

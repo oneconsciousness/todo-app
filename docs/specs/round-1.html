@@ -104,17 +104,17 @@ footer { color: var(--muted); font-size: 0.88rem; border-top: 1px solid var(--li
 
 <main>
   <header>
-    <span class="eyebrow">todo-app · spec · draft for sign-off</span>
+    <span class="eyebrow">todo-app · spec · revision 3 · signed off</span>
     <h1>Round 1: the app, running in containers</h1>
-    <p class="lede">The high-level choices for the To Do app and how the pieces fit, before the detailed coding plan is written. Each choice names what it beat and what it costs. The ones marked <span class="pill pill-call">your call</span> need a yes or a change from you.</p>
-    <div class="meta"><span>2026-10-18</span><span>Lives at <code>docs/specs/round-1.html</code></span><span>Builds on <code>docs/kickoff.md</code></span></div>
+    <p class="lede">The high-level choices for the To Do app and how the pieces fit, before the detailed coding plan is written. Each choice names what it beat and what it costs. Every decision is now <span class="pill pill-locked">locked</span>: revision 1 settled the product choices, and revision 2 added how the API behaves when many people use it at once. Revision 3 records the lead's sign-off and notes.</p>
+    <div class="meta"><span>2026-10-19 · revision 3</span><span>Lives at <code>docs/specs/round-1.html</code></span><span>Builds on <code>docs/kickoff.md</code></span><span>Later ideas: <code>FUTURE.md</code></span></div>
     <div class="rounds" aria-label="The three rounds">
       <div class="now"><span class="eyebrow">Round 1 · this spec</span><b>Containers</b><span><code>docker compose up</code> on a Mac. Every suite green.</span></div>
       <div><span class="eyebrow">Round 2</span><b>Local k3d</b><span>Same images, Kubernetes manifests, three API replicas.</span></div>
       <div><span class="eyebrow">Round 3</span><b>AKS live</b><span>Azure, deployed by GitHub Actions, if time permits.</span></div>
     </div>
     <nav class="toc" aria-label="Sections">
-      <a href="#topology">Topology</a><a href="#decisions">Decisions</a><a href="#ordering">Ordering</a><a href="#backend">Backend shape</a><a href="#api">API</a><a href="#data">Data</a><a href="#screens">Screens</a><a href="#tests">Tests</a><a href="#rounds">Rounds 2 and 3</a><a href="#done">Done means</a><a href="#calls">Your calls</a>
+      <a href="#topology">Topology</a><a href="#decisions">Decisions</a><a href="#ordering">Ordering</a><a href="#backend">Backend shape</a><a href="#concurrency">Concurrency</a><a href="#races">Races</a><a href="#api">API</a><a href="#data">Data</a><a href="#screens">Screens</a><a href="#tests">Tests</a><a href="#order">Order of work</a><a href="#rounds">Rounds 2 and 3</a><a href="#done">Done means</a><a href="#later">Later</a><a href="#calls">Sign-off</a>
     </nav>
   </header>
 
@@ -209,22 +209,24 @@ footer { color: var(--muted); font-size: 0.88rem; border-top: 1px solid var(--li
       </div></div>
 
       <div class="decision"><div class="id">D3</div><div class="body">
-        <div class="title-row"><h3>Accounts: open sign-up and sign-in by email</h3><span class="pill pill-call">your call</span></div>
+        <div class="title-row"><h3>Accounts: open sign-up and sign-in by email</h3><span class="pill pill-locked">locked</span></div>
         <dl>
           <dt>Choice</dt><dd>The landing page is sign-in, with a link to create an account (email and password, 12 to 128 characters). Passwords are hashed with argon2id, off the event loop.</dd>
           <dt>Instead of</dt><dd>Seeded demo users only, or a third-party login.</dd>
           <dt>Why</dt><dd>A reviewer can make two accounts and see that each one only sees its own tasks. Nothing to configure, and no outside service.</dd>
-          <dt>Costs</dt><dd>No email verification or password reset in round 1; both go on the "more time" list.</dd>
+          <dt>Costs</dt><dd>No email verification or password reset in round 1; both are in <code>FUTURE.md</code>.</dd>
+          <dt>Also</dt><dd>Reviewers can script bulk tests against the API: the OpenAPI document and interactive docs are served at <code>/api/docs</code>.</dd>
         </dl>
       </div></div>
 
       <div class="decision"><div class="id">D4</div><div class="body">
-        <div class="title-row"><h3>Session: a signed token in an httpOnly cookie</h3><span class="pill pill-call">your call</span></div>
+        <div class="title-row"><h3>Session: a signed token in an httpOnly cookie</h3><span class="pill pill-locked">locked</span></div>
         <dl>
           <dt>Choice</dt><dd>On sign-in the API sets a JWT (HS256, 8-hour lifetime) as cookie <code>session</code>: <code>HttpOnly</code>, <code>SameSite=Strict</code>, <code>Path=/api</code>, <code>Secure</code> once TLS exists in rounds 2 and 3. Sign-out clears it. Any replica can verify it with the shared secret.</dd>
           <dt>Instead of</dt><dd>A bearer token in <code>localStorage</code>, which any injected script can read. Or a sessions table, which can be revoked but adds a lookup per request.</dd>
           <dt>Why</dt><dd>Stateless across replicas and out of reach of page scripts. CSRF is covered by <code>SameSite=Strict</code>, the single origin, JSON-only request bodies and an <code>Origin</code> check on every write.</dd>
           <dt>Costs</dt><dd>A token can't be revoked before it expires. Refresh-token rotation with a deny list is the round 3 hardening item.</dd>
+          <dt>Later</dt><dd>Sign-in with Microsoft, Google or Apple (OpenID Connect), chosen per client. Recorded in <code>FUTURE.md</code>.</dd>
         </dl>
       </div></div>
 
@@ -238,7 +240,7 @@ footer { color: var(--muted); font-size: 0.88rem; border-top: 1px solid var(--li
       </div></div>
 
       <div class="decision"><div class="id">D6</div><div class="body">
-        <div class="title-row"><h3>Ordering by fractional ranks</h3><span class="pill pill-call">your call</span></div>
+        <div class="title-row"><h3>Ordering by fractional ranks</h3><span class="pill pill-locked">locked</span></div>
         <dl>
           <dt>Choice</dt><dd>Each task has a <code>rank</code> string, and the list is sorted by rank. A move computes a new rank between its new neighbours, so it changes one row. New tasks go to the top. Reordering is turned off while a search is active, because moving within a filtered subset is ambiguous.</dd>
           <dt>Instead of</dt><dd>Integer positions renumbered on every move, or gapped integers with occasional rebalancing.</dd>
@@ -248,7 +250,7 @@ footer { color: var(--muted); font-size: 0.88rem; border-top: 1px solid var(--li
       </div></div>
 
       <div class="decision"><div class="id">D7</div><div class="body">
-        <div class="title-row"><h3>Search runs on the server</h3><span class="pill pill-call">your call</span></div>
+        <div class="title-row"><h3>Search runs on the server</h3><span class="pill pill-locked">locked</span></div>
         <dl>
           <dt>Choice</dt><dd><code>GET /api/v1/tasks?q=</code> matches a case-insensitive substring in title or notes, keeps rank order, and is backed by a trigram index. The search box waits 250 ms after typing stops and keeps showing the previous results while the next ones load.</dd>
           <dt>Instead of</dt><dd>Filtering the loaded list in the browser.</dd>
@@ -257,24 +259,25 @@ footer { color: var(--muted); font-size: 0.88rem; border-top: 1px solid var(--li
       </div></div>
 
       <div class="decision"><div class="id">D8</div><div class="body">
-        <div class="title-row"><h3>Task fields</h3><span class="pill pill-call">your call</span></div>
+        <div class="title-row"><h3>Task fields</h3><span class="pill pill-locked">locked</span></div>
         <dl>
           <dt>Choice</dt><dd>Title (required, 1 to 200 characters), notes (up to 5,000), completed, optional due date, created and updated times.</dd>
           <dt>Instead of</dt><dd>Also priority, tags or subtasks.</dd>
           <dt>Why</dt><dd>That's enough to make the detail screen worth opening, and every field gets tested end to end. More fields would add surface without showing anything new.</dd>
+          <dt>Later</dt><dd>Once everything works: create and update tasks by describing them in text or voice, and an AI-written summary home page, possibly over the AG-UI protocol. Recorded in <code>FUTURE.md</code>.</dd>
         </dl>
       </div></div>
 
       <div class="decision"><div class="id">D9</div><div class="body">
         <div class="title-row"><h3>HTTP contract</h3><span class="pill pill-locked">locked</span></div>
         <dl>
-          <dt>Choice</dt><dd>Resources under <code>/api/v1</code>. Success: 200, 201 with a <code>Location</code> header, 204. Errors: 400 for validation (FastAPI's 422 is remapped), 401 when the session is missing or bad, 403 when a write comes from another origin, 404 for a missing task or one owned by someone else, 409 when an email is already registered. One error body shape: <code>{"error": {"code", "message", "details"}}</code>.</dd>
+          <dt>Choice</dt><dd>Resources under <code>/api/v1</code>. Success: 200, 201 with a <code>Location</code> header, 204. Errors: 400 for validation (FastAPI's 422 is remapped), 401 when the session is missing or bad, 403 when a write comes from another origin, 404 for a missing task or one owned by someone else, 409 when an email is already registered, 412 when an edit is based on an old version (D17), 503 when the API is overloaded or the database is unreachable (D13, D15). One error body shape: <code>{"error": {"code", "message", "details"}}</code>.</dd>
           <dt>Why</dt><dd>Follows the brief's status-code hint. Every code has a reason the frontend can act on. Answering 404 for other users' tasks means the API never confirms that someone else's id exists.</dd>
         </dl>
       </div></div>
 
       <div class="decision"><div class="id">D10</div><div class="body">
-        <div class="title-row"><h3>Two API replicas already in round 1</h3><span class="pill pill-call">your call</span></div>
+        <div class="title-row"><h3>Two API replicas already in round 1</h3><span class="pill pill-locked">locked</span></div>
         <dl>
           <dt>Choice</dt><dd>Compose runs <code>api</code> with two replicas, and nginx round-robins between them. Each response carries an <code>X-Served-By</code> header with the replica's hostname.</dd>
           <dt>Instead of</dt><dd>One replica until round 2.</dd>
@@ -285,13 +288,13 @@ footer { color: var(--muted); font-size: 0.88rem; border-top: 1px solid var(--li
       <div class="decision"><div class="id">D11</div><div class="body">
         <div class="title-row"><h3>Logs for monitoring</h3><span class="pill pill-locked">locked</span></div>
         <dl>
-          <dt>Choice</dt><dd>API logs are JSON lines on stdout. Each request gets one access line (<code>request_id</code>, <code>user_id</code>, method, route, status, <code>duration_ms</code>), plus a startup "ready" line and every caught error with context. <code>X-Request-ID</code> is accepted from the caller or created, and echoed back. <code>/healthz</code> and <code>/readyz</code> are the probes. In the SPA: <code>console.info</code> when it boots, and <code>console.error</code> from the error boundary and the global query error handler.</dd>
+          <dt>Choice</dt><dd>API logs are JSON lines on stdout. Each request gets one access line (<code>request_id</code>, <code>user_id</code>, method, route, status, <code>duration_ms</code>), plus a startup "ready" line and every caught error with context. <code>X-Request-ID</code> is accepted from the caller or created, and echoed back. <code>/livez</code> and <code>/readyz</code> are the probes (D19). In the SPA: <code>console.info</code> when it boots, and <code>console.error</code> from the error boundary and the global query error handler.</dd>
           <dt>Why</dt><dd>Your logging guidance: every line helps someone watching the system, and Kubernetes and Azure pick up stdout as is.</dd>
         </dl>
       </div></div>
 
       <div class="decision"><div class="id">D12</div><div class="body">
-        <div class="title-row"><h3>Coverage floors</h3><span class="pill pill-call">your call</span></div>
+        <div class="title-row"><h3>Coverage floors</h3><span class="pill pill-locked">locked</span></div>
         <dl>
           <dt>Choice</dt><dd>CI fails below 90% line and branch coverage on the backend and 85% on the frontend. These are floors on tests that assert something, not targets to pad.</dd>
           <dt>Why</dt><dd>High enough that a missed branch shows up, low enough that nobody writes a pointless test just to cover glue code.</dd>
@@ -389,6 +392,210 @@ footer { color: var(--muted); font-size: 0.88rem; border-top: 1px solid var(--li
     </figure>
   </section>
 
+  <section id="concurrency">
+    <span class="eyebrow">Many users at once · FastAPI and uvicorn</span>
+    <h2>Async and concurrency</h2>
+    <p class="prose">Each API replica is one uvicorn process running one event loop. The loop can hold thousands of open requests, but only while each of them is waiting on I/O. Anything that keeps the loop busy (a slow hash, a blocking call, a synchronous write) stalls every request on that replica at once. So the design has three jobs: never block the loop, put a limit on every shared resource, and when a limit is reached, make requests queue for a bounded time or get a clear 503 rather than pile up.</p>
+    <figure>
+      <div class="fig-scroll">
+        <svg viewBox="0 0 900 330" role="img" aria-label="Inside one API replica: nginx keeps connections open to one uvicorn event loop, which handles up to 200 requests at once. Database work goes through one AsyncSession per request and a pool of 10 plus 5 connections to Postgres. Password hashing goes through a semaphore of 4 into the thread pool. Log lines go into a queue drained by a listener thread.">
+          <defs>
+            <marker id="arr4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="head"/></marker>
+          </defs>
+          <rect class="zone" x="150" y="16" width="606" height="300" rx="10"/>
+          <text x="166" y="38" class="t-muted t-mono">one API replica · one uvicorn process</text>
+
+          <rect class="box" x="10" y="136" width="110" height="60" rx="8"/>
+          <text x="65" y="161" text-anchor="middle" class="t-strong">nginx</text>
+          <text x="65" y="180" text-anchor="middle" class="t-muted">keep-alive</text>
+          <line class="edge" x1="120" y1="166" x2="168" y2="166" marker-end="url(#arr4)"/>
+          <text x="144" y="156" text-anchor="middle" class="t-mono">HTTP</text>
+
+          <rect class="box-accent" x="170" y="134" width="160" height="64" rx="8"/>
+          <text x="250" y="160" text-anchor="middle" class="t-strong">event loop · uvloop</text>
+          <text x="250" y="180" text-anchor="middle" class="t-muted">≤ 200 requests at once</text>
+          <text x="250" y="222" text-anchor="middle" class="t-accent">over the limit → 503</text>
+
+          <rect class="box" x="384" y="54" width="150" height="58" rx="8"/>
+          <text x="459" y="78" text-anchor="middle" class="t-strong">AsyncSession</text>
+          <text x="459" y="97" text-anchor="middle" class="t-muted">one per request</text>
+          <rect class="box" x="584" y="54" width="156" height="58" rx="8"/>
+          <text x="662" y="78" text-anchor="middle" class="t-strong">connection pool</text>
+          <text x="662" y="97" text-anchor="middle" class="t-muted">10 + 5 · wait ≤ 5 s</text>
+
+          <rect class="box" x="384" y="137" width="150" height="58" rx="8"/>
+          <text x="459" y="161" text-anchor="middle" class="t-strong">Semaphore(4)</text>
+          <text x="459" y="180" text-anchor="middle" class="t-muted">argon2 hashes</text>
+          <rect class="box" x="584" y="137" width="156" height="58" rx="8"/>
+          <text x="662" y="161" text-anchor="middle" class="t-strong">thread pool</text>
+          <text x="662" y="180" text-anchor="middle" class="t-muted">hash runs off the loop</text>
+
+          <rect class="box" x="384" y="220" width="150" height="58" rx="8"/>
+          <text x="459" y="244" text-anchor="middle" class="t-strong">QueueHandler</text>
+          <text x="459" y="263" text-anchor="middle" class="t-muted">never blocks</text>
+          <rect class="box" x="584" y="220" width="156" height="58" rx="8"/>
+          <text x="662" y="244" text-anchor="middle" class="t-strong">listener thread</text>
+          <text x="662" y="263" text-anchor="middle" class="t-muted">JSON lines → stdout</text>
+
+          <rect class="box" x="790" y="54" width="100" height="58" rx="8"/>
+          <text x="840" y="78" text-anchor="middle" class="t-strong">Postgres</text>
+          <text x="840" y="97" text-anchor="middle" class="t-muted">100 conns</text>
+
+          <path class="edge" d="M330 150 L382 92" marker-end="url(#arr4)"/>
+          <text x="318" y="112" class="t-mono">await</text>
+          <line class="edge" x1="330" y1="166" x2="382" y2="166" marker-end="url(#arr4)"/>
+          <text x="356" y="158" text-anchor="middle" class="t-mono">login</text>
+          <path class="edge" d="M330 182 L382 240" marker-end="url(#arr4)"/>
+          <text x="318" y="230" class="t-mono">log</text>
+
+          <line class="edge" x1="534" y1="83" x2="582" y2="83" marker-end="url(#arr4)"/>
+          <text x="558" y="75" text-anchor="middle" class="t-mono">borrow</text>
+          <line class="edge" x1="534" y1="166" x2="582" y2="166" marker-end="url(#arr4)"/>
+          <text x="558" y="158" text-anchor="middle" class="t-mono">to_thread</text>
+          <line class="edge" x1="534" y1="249" x2="582" y2="249" marker-end="url(#arr4)"/>
+          <text x="558" y="241" text-anchor="middle" class="t-mono">enqueue</text>
+          <line class="edge" x1="740" y1="83" x2="788" y2="83" marker-end="url(#arr4)"/>
+          <text x="764" y="75" text-anchor="middle" class="t-mono">asyncpg</text>
+        </svg>
+      </div>
+      <figcaption>Everything the loop hands off has a limit: 200 requests in progress per replica, 15 database connections, 4 hashes at a time. When a limit is reached, requests wait for a bounded time; past that wait the client gets a 503 with the error envelope, never a hung connection.</figcaption>
+    </figure>
+    <div class="decisions">
+
+      <div class="decision"><div class="id">D13</div><div class="body">
+        <div class="title-row"><h3>One uvicorn process per container, every handler async</h3><span class="pill pill-locked">locked</span></div>
+        <dl>
+          <dt>Choice</dt><dd><code>uvicorn[standard]</code> (uvloop, httptools) with one worker per container; more capacity means more replicas. Every route is <code>async def</code> and uses only async libraries. <code>--limit-concurrency 200</code> answers 503 past 200 in-flight requests. <code>--timeout-graceful-shutdown 20</code> lets in-flight requests finish on SIGTERM, then the lifespan closes the pool. Nginx keeps connections to the API open and caps request bodies at 64 KB.</dd>
+          <dt>Instead of</dt><dd>Gunicorn or uvicorn managing several worker processes inside one container. Or plain <code>def</code> handlers, which FastAPI runs on a thread pool capped at 40 threads by default.</dd>
+          <dt>Why</dt><dd>One process per container lets Docker and Kubernetes restart it, count it and scale it, and each pod's memory and CPU stay predictable. Async-only handlers mean the loop is the only scheduler to reason about.</dd>
+        </dl>
+      </div></div>
+
+      <div class="decision"><div class="id">D14</div><div class="body">
+        <div class="title-row"><h3>Password hashing runs off the loop, at most four at a time</h3><span class="pill pill-locked">locked</span></div>
+        <dl>
+          <dt>Choice</dt><dd>argon2id with OWASP's parameters (19 MiB memory, 2 passes, 1 lane), run through <code>asyncio.to_thread</code> behind an <code>asyncio.Semaphore(4)</code> per process. argon2-cffi releases the GIL while it hashes, so the hashes really do run in parallel with the loop.</dd>
+          <dt>Instead of</dt><dd>Hashing on the loop, or without a limit.</dd>
+          <dt>Why</dt><dd>One hash takes tens of milliseconds of CPU. On the loop, every sign-in would freeze that replica for that long. Without a limit, a burst of sign-ins would exhaust memory: the library's default profile uses 64 MiB per hash, so 100 sign-ins at once would need over 6 GB. With the semaphore, extra sign-ins wait their turn instead.</dd>
+        </dl>
+      </div></div>
+
+      <div class="decision"><div class="id">D15</div><div class="body">
+        <div class="title-row"><h3>A connection budget, and timeouts on every wait</h3><span class="pill pill-locked">locked</span></div>
+        <dl>
+          <dt>Choice</dt><dd>Async SQLAlchemy on asyncpg. Each replica has a pool of 10 connections plus 5 overflow, a 5-second wait for a free one, and <code>pool_pre_ping</code>. Postgres runs with <code>statement_timeout</code> 5 s and <code>idle_in_transaction_session_timeout</code> 10 s. Each request gets its own <code>AsyncSession</code> and one transaction, committed on success and rolled back on any exception. Sessions are never shared between concurrent coroutines, because an AsyncSession isn't safe for that.</dd>
+          <dt>Budget</dt><dd>Total connections = replicas × 15, kept under 80% of Postgres's 100. That's 30 in round 1 and 45 in round 2. Round 3 adds autoscaling, so it puts the PgBouncer built into Azure's Postgres in front.</dd>
+          <dt>Why</dt><dd>Requests are short, so 15 connections serve many concurrent users. When load exceeds that, requests wait up to 5 seconds and then get a clear 503, rather than an unbounded queue taking down the database.</dd>
+          <dt>Reported</dt><dd>The final report states, for each round, how many concurrent users the stack served within budget, measured by D18 rather than estimated.</dd>
+        </dl>
+      </div></div>
+
+    </div>
+  </section>
+
+  <section id="races">
+    <span class="eyebrow">Many requests touching the same rows</span>
+    <h2>Races and consistency</h2>
+    <p class="prose">Tasks are private, so two different users never contend for the same row. The races that remain come from one user (two tabs, fast drags, a double-click) and from users signing up with the same email. Every guard lives in Postgres, because a lock inside one Python process means nothing to the other replica.</p>
+    <figure>
+      <div class="fig-scroll">
+        <svg viewBox="0 0 900 400" role="img" aria-label="Two moves for the same user arrive at different replicas. api-1 takes the per-user lock first, reads neighbours a0 and a1, writes X as a0V and commits. api-2 waits for the lock, then reads the new neighbours a0 and a0V and writes Y as a0F. Neither move overwrites the other.">
+          <defs>
+            <marker id="arr5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="head"/></marker>
+            <marker id="arr5a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="head-accent"/></marker>
+          </defs>
+          <rect class="box" x="80" y="16" width="140" height="40" rx="8"/><text x="150" y="41" text-anchor="middle" class="t-strong">api-1 · move X</text>
+          <rect class="box" x="380" y="16" width="140" height="40" rx="8"/><text x="450" y="41" text-anchor="middle" class="t-strong">Postgres</text>
+          <rect class="box" x="680" y="16" width="140" height="40" rx="8"/><text x="750" y="41" text-anchor="middle" class="t-strong">api-2 · move Y</text>
+          <line class="edge-dashed" x1="150" y1="56" x2="150" y2="350"/>
+          <line class="edge-dashed" x1="450" y1="56" x2="450" y2="350"/>
+          <line class="edge-dashed" x1="750" y1="56" x2="750" y2="350"/>
+          <rect class="box-accent" x="445" y="88" width="10" height="124"/>
+          <rect class="box-accent" x="445" y="248" width="10" height="84"/>
+          <rect class="box-accent" x="745" y="128" width="10" height="120"/>
+          <text x="766" y="192" class="t-accent">waits</text>
+
+          <line class="edge" x1="150" y1="90" x2="442" y2="90" marker-end="url(#arr5)"/>
+          <text x="296" y="83" text-anchor="middle">BEGIN · lock(owner) granted</text>
+          <line class="edge" x1="750" y1="130" x2="458" y2="130" marker-end="url(#arr5)"/>
+          <text x="604" y="123" text-anchor="middle">BEGIN · lock(owner)</text>
+          <line class="edge" x1="150" y1="170" x2="442" y2="170" marker-end="url(#arr5)"/>
+          <text x="296" y="163" text-anchor="middle">read neighbours <tspan class="t-mono">a0 | a1</tspan></text>
+          <line class="edge" x1="150" y1="210" x2="442" y2="210" marker-end="url(#arr5)"/>
+          <text x="296" y="203" text-anchor="middle">write X = <tspan class="t-mono">a0V</tspan> · COMMIT</text>
+          <line class="edge-accent" x1="458" y1="250" x2="742" y2="250" marker-end="url(#arr5a)"/>
+          <text x="604" y="243" text-anchor="middle" class="t-accent">lock granted</text>
+          <line class="edge" x1="750" y1="290" x2="458" y2="290" marker-end="url(#arr5)"/>
+          <text x="604" y="283" text-anchor="middle">read neighbours <tspan class="t-mono">a0 | a0V</tspan></text>
+          <line class="edge" x1="750" y1="330" x2="458" y2="330" marker-end="url(#arr5)"/>
+          <text x="604" y="323" text-anchor="middle">write Y = <tspan class="t-mono">a0F</tspan> · COMMIT</text>
+
+          <text x="450" y="382" text-anchor="middle" class="t-strong">Final order: A <tspan class="t-mono">a0</tspan> · Y <tspan class="t-mono">a0F</tspan> · X <tspan class="t-mono">a0V</tspan> · B <tspan class="t-mono">a1</tspan></text>
+        </svg>
+      </div>
+      <figcaption>Both requests ask to place a task right after A. The shaded bars show who holds the per-user lock (<code>pg_advisory_xact_lock</code> on the owner id; it's released at commit). Without it, both would read <code>a0 | a1</code> and both would write <code>a0V</code>. The unique index on <code>(owner_id, rank)</code> would then reject one, and the user would see an error instead of a silent tie. Other users' writes never wait for this lock.</figcaption>
+    </figure>
+    <div class="decisions">
+
+      <div class="decision"><div class="id">D16</div><div class="body">
+        <div class="title-row"><h3>Order changes are serialized per user, in Postgres</h3><span class="pill pill-locked">locked</span></div>
+        <dl>
+          <dt>Choice</dt><dd>Creating a task and moving one each start their transaction with <code>pg_advisory_xact_lock(hashtextextended(owner_id::text, 0))</code>, then read the neighbours, compute the rank and write. A unique index on <code>(owner_id, rank)</code> backs it up. Edits and deletes don't take the lock, since they never change ranks.</dd>
+          <dt>Isolation</dt><dd>Postgres's default, READ COMMITTED, and that's deliberate. Each statement reads a fresh snapshot, so the neighbour read after the lock is granted sees the other move's commit. Under REPEATABLE READ the snapshot would be taken at the lock statement, before that commit, and both moves would compute the same rank.</dd>
+          <dt>Instead of</dt><dd>An <code>asyncio.Lock</code>, which only covers one process. SERIALIZABLE everywhere, which needs retry loops on every write. A version check on the whole list.</dd>
+          <dt>Why</dt><dd>The lock is the narrowest correct one: one user's ordering writes queue for a few milliseconds, and nothing else waits.</dd>
+          <dt>Testing</dt><dd>The race tests run with the lead present. We watch them fail with the lock removed, then pass with it in place, before the backend PR is raised.</dd>
+        </dl>
+      </div></div>
+
+      <div class="decision"><div class="id">D17</div><div class="body">
+        <div class="title-row"><h3>Tabs stay fresh, and edits can't silently overwrite each other</h3><span class="pill pill-locked">locked</span></div>
+        <dl>
+          <dt>The case</dt><dd>Tab 2 loaded a task before tab 1 saved a change to it. Tab 2 then saves its stale copy, and tab 1's change is silently lost.</dd>
+          <dt>Choice</dt><dd>Two layers. First, freshness: whenever a tab regains focus or the network comes back, TanStack Query refetches what's on screen. If the refetch brings a newer version of a task while the user has unsaved edits to it, the detail screen says "Changed elsewhere" straight away and offers to review or reload. Second, the guarantee: each task has an integer <code>version</code>, sent as an <code>ETag</code>. <code>PATCH</code> with <code>If-Match</code> updates only if the version still matches (<code>UPDATE … WHERE id = :id AND owner_id = :me AND version = :v</code>), otherwise it returns 412. The detail screen always sends <code>If-Match</code>. <code>PATCH</code> changes only the fields sent.</dd>
+          <dt>Why both</dt><dd>Refreshing on focus prevents most mismatches but can't catch them all. It mustn't overwrite a half-typed draft, a change from another device can land while this tab keeps focus, and scripted clients have no focus at all. The version check catches everything else in one conditional <code>UPDATE</code>, with no locks.</dd>
+        </dl>
+      </div></div>
+
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Race</th><th>Guard</th><th>Test that proves it</th></tr></thead>
+        <tbody>
+          <tr><td>Two sign-ups with one email</td><td>Unique index on email; the insert's IntegrityError becomes 409. Never check-then-insert.</td><td>Integration: 20 concurrent sign-ups, exactly one 201 and nineteen 409s</td></tr>
+          <tr><td>Moves and creates in one list at once</td><td>Per-user advisory lock, unique <code>(owner_id, rank)</code></td><td>Integration: 50 concurrent moves; afterwards the ranks are unique and the list holds the same tasks. Live: the same through both replicas</td></tr>
+          <tr><td>Two tabs edit one task</td><td>Refetch on focus; "Changed elsewhere" notice; <code>version</code>, <code>If-Match</code>, 412</td><td>Integration: two PATCHes on the same version, one 200 and one 412. Component: a newer version arriving under a draft shows the notice</td></tr>
+          <tr><td>Edit or toggle after delete</td><td>Owner-scoped <code>UPDATE</code> affects 0 rows → 404</td><td>Component: a 404 on a mutation removes the row and says why</td></tr>
+          <tr><td>A late search response overwrites a newer one</td><td>Results cached per search term; superseded requests aborted with <code>AbortSignal</code></td><td>Hook test: MSW delays the response for "ab" past the one for "abc", and "abc" stays on screen</td></tr>
+          <tr><td>A refetch lands on top of an optimistic reorder</td><td><code>cancelQueries</code> before the optimistic write; reorder mutations share one <code>scope</code>, so they run in order</td><td>Component: three quick moves end in the order the user made</td></tr>
+          <tr><td>Something blocks the event loop</td><td>Async-only handlers, hashing off the loop (D13, D14)</td><td>Backend fixture: asyncio debug mode with a 50 ms slow-callback threshold; a test fails if any callback blocks longer</td></tr>
+          <tr><td>Load beyond the limits</td><td>Request, connection and hash limits; 503 with the envelope (D13 to D15)</td><td>Load test (D18): no 5xx at target load, p95 within budget</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="decisions">
+
+      <div class="decision"><div class="id">D18</div><div class="body">
+        <div class="title-row"><h3>A load test before submission</h3><span class="pill pill-locked">locked</span></div>
+        <dl>
+          <dt>Choice</dt><dd>k6, run from its official container as a compose profile (<code>docker compose --profile load run k6</code>), so nothing needs installing. 200 virtual users, each with its own account, ramp up over 1 minute and hold for 3. Each one loops: list, search, create, toggle, move, edit, delete, with 1 second of think time. After the run, a check script confirms every user's list has unique ranks and the expected number of tasks.</dd>
+          <dt>Pass</dt><dd>Under 0.1% failed requests and no 5xx. p95 latency under 250 ms for reads and under 400 ms for writes; under 1.5 s for sign-in, which queues on purpose (D14). Results are saved with the machine's specs and quoted in the README.</dd>
+          <dt>Instead of</dt><dd>Locust, which is Python and fits the backend, but lacks k6's built-in pass/fail thresholds.</dd>
+          <dt>Why</dt><dd>It shows the limits in D13 to D16 working under real concurrency, and gives reviewers a script they can rerun at their own scale.</dd>
+          <dt>Capacity</dt><dd>A second, stepped run raises the number of users until a budget breaks. The last step that passed is the round's capacity figure for the final report (D15). It's repeated in rounds 2 and 3.</dd>
+          <dt>Run with</dt><dd>The lead. Scripts and budgets are reviewed before the first run, and results are walked through together.</dd>
+        </dl>
+      </div></div>
+
+    </div>
+    <h3>How we explain it in the deep-dive</h3>
+    <ul class="plain">
+      <li><b>One request, end to end:</b> every log line carries <code>request_id</code>, <code>user_id</code>, <code>duration_ms</code> and the replica that served it, so a single slow or failed request can be followed across both replicas.</li>
+      <li><b>Each race has a test with the race in its name,</b> from the table above, and each one fails if its guard is removed.</li>
+      <li><b>The load test summary</b> (throughput, p95 per endpoint, error rate, the consistency check) goes in the README next to this section's diagrams.</li>
+    </ul>
+  </section>
+
   <section id="api">
     <span class="eyebrow">Contract</span>
     <h2>Endpoints</h2>
@@ -404,12 +611,24 @@ footer { color: var(--muted); font-size: 0.88rem; border-top: 1px solid var(--li
           <tr><td><code>GET /api/v1/tasks?q=</code></td><td>List own tasks in rank order, optionally searched</td><td class="codes">200</td><td class="codes">400</td></tr>
           <tr><td><code>POST /api/v1/tasks</code></td><td>Create a task at the top</td><td class="codes">201</td><td class="codes">400</td></tr>
           <tr><td><code>GET /api/v1/tasks/{id}</code></td><td>Read one task</td><td class="codes">200</td><td class="codes">404</td></tr>
-          <tr><td><code>PATCH /api/v1/tasks/{id}</code></td><td>Change any of title, notes, completed, due date</td><td class="codes">200</td><td class="codes">400, 404</td></tr>
+          <tr><td><code>PATCH /api/v1/tasks/{id}</code></td><td>Change any of title, notes, completed, due date; honours <code>If-Match</code></td><td class="codes">200</td><td class="codes">400, 404, 412</td></tr>
           <tr><td><code>PUT /api/v1/tasks/{id}/position</code></td><td>Move after another task, or to the top</td><td class="codes">200</td><td class="codes">400, 404</td></tr>
           <tr><td><code>DELETE /api/v1/tasks/{id}</code></td><td>Delete a task</td><td class="codes">204</td><td class="codes">404</td></tr>
-          <tr><td><code>GET /healthz</code> · <code>/readyz</code></td><td>Liveness; readiness (database reachable)</td><td class="codes">200</td><td class="codes">503</td></tr>
+          <tr><td><code>GET /api/docs</code> · <code>/api/openapi.json</code></td><td>Interactive API docs and the OpenAPI document, for scripting</td><td class="codes">200</td><td class="codes">none</td></tr>
+          <tr><td><code>GET /livez</code></td><td>Liveness: the process is up and its loop answers. Checks no dependencies.</td><td class="codes">200</td><td class="codes">none</td></tr>
+          <tr><td><code>GET /readyz</code></td><td>Readiness: <code>SELECT 1</code> within 1 s, and not shutting down</td><td class="codes">200</td><td class="codes">503</td></tr>
         </tbody>
       </table>
+    </div>
+    <div class="decisions">
+      <div class="decision"><div class="id">D19</div><div class="body">
+        <div class="title-row"><h3>Health checks: <code>/livez</code> and <code>/readyz</code></h3><span class="pill pill-locked">locked</span></div>
+        <dl>
+          <dt>Choice</dt><dd>Two probes at the API root, outside <code>/api/v1</code>. Nginx doesn't route them, so only Docker and Kubernetes reach them. Liveness checks nothing but the process. Readiness checks the database and starts failing as soon as shutdown begins.</dd>
+          <dt>Instead of</dt><dd><code>/health</code>, or a single <code>/healthz</code>.</dd>
+          <dt>Why</dt><dd>No standard path exists: the IETF's health-check format never went past a draft. The trailing <code>z</code> is Google's convention for keeping probe paths clear of app routes. Kubernetes deprecated <code>/healthz</code> for its own API server in v1.16 in favour of separate <code>/livez</code> and <code>/readyz</code>, and we follow that split. Keeping them separate matters: if liveness checked the database, a short database outage would make Kubernetes restart every API pod at once, turning a blip into an outage. Readiness only takes a pod out of rotation.</dd>
+        </dl>
+      </div></div>
     </div>
     <p class="prose">List responses are wrapped as <code>{"items": [...]}</code>, so a paging cursor can be added later without breaking the client. An <code>after_id</code> that doesn't exist and one that belongs to someone else get the same 400, so the response doesn't reveal which it was.</p>
   </section>
@@ -422,7 +641,7 @@ footer { color: var(--muted); font-size: 0.88rem; border-top: 1px solid var(--li
         <thead><tr><th>Table</th><th>Columns</th><th>Constraints and indexes</th></tr></thead>
         <tbody>
           <tr><td><code>users</code></td><td><code>id</code> uuid · <code>email</code> citext · <code>password_hash</code> text · <code>created_at</code> timestamptz</td><td>Primary key on id; email unique, compared case-insensitively</td></tr>
-          <tr><td><code>tasks</code></td><td><code>id</code> uuid · <code>owner_id</code> uuid · <code>title</code> varchar(200) · <code>notes</code> text · <code>completed</code> bool · <code>due_date</code> date null · <code>rank</code> text collate "C" · <code>created_at</code>, <code>updated_at</code> timestamptz</td><td><code>owner_id</code> references users, delete cascades; index <code>(owner_id, rank)</code>; trigram GIN index on title and notes; check on title and notes length</td></tr>
+          <tr><td><code>tasks</code></td><td><code>id</code> uuid · <code>owner_id</code> uuid · <code>title</code> varchar(200) · <code>notes</code> text · <code>completed</code> bool · <code>due_date</code> date null · <code>rank</code> text collate "C" · <code>version</code> integer · <code>created_at</code>, <code>updated_at</code> timestamptz</td><td><code>owner_id</code> references users, delete cascades; unique index <code>(owner_id, rank)</code>; trigram GIN index on title and notes; checks on title and notes length</td></tr>
         </tbody>
       </table>
     </div>
@@ -438,7 +657,7 @@ footer { color: var(--muted); font-size: 0.88rem; border-top: 1px solid var(--li
           <tr><td><code>/sign-in</code></td><td>Landing: sign in</td><td>Link to sign-up. After sign-in, goes back to the page that asked for it.</td></tr>
           <tr><td><code>/sign-up</code></td><td>Create account</td><td>Errors shown next to each field, checked by the same Zod schema the API layer uses.</td></tr>
           <tr><td><code>/tasks</code></td><td>Task list</td><td>Search box, quick add at the top, a checkbox on each row, drag by mouse, touch or keyboard. Empty, loading and error states.</td></tr>
-          <tr><td><code>/tasks/:id</code></td><td>Task detail</td><td>View and edit every field, save, and delete with a confirm step built into the page.</td></tr>
+          <tr><td><code>/tasks/:id</code></td><td>Task detail</td><td>View and edit every field, save, and delete with a confirm step built into the page. Shows "Changed elsewhere" when a newer version arrives under unsaved edits.</td></tr>
           <tr><td><code>*</code></td><td>Not found</td><td>Also shown for a task id that isn't yours.</td></tr>
         </tbody>
       </table>
@@ -459,13 +678,40 @@ footer { color: var(--muted); font-size: 0.88rem; border-top: 1px solid var(--li
         <thead><tr><th>Layer</th><th>Tool</th><th>Owns</th><th>Runs against</th></tr></thead>
         <tbody>
           <tr><td>Backend unit</td><td>pytest, Hypothesis</td><td>Rank maths (property-based), search pattern escaping, patch application, token and password helpers</td><td>Nothing; pure functions</td></tr>
-          <tr><td>Backend integration</td><td>pytest, httpx ASGI transport</td><td>Every endpoint's success and error codes, response shapes, ownership, persistence, the 422-to-400 mapping</td><td>A real Postgres (the compose <code>db</code>; a service container in CI)</td></tr>
+          <tr><td>Backend integration</td><td>pytest, httpx ASGI transport, <code>asyncio.TaskGroup</code></td><td>Every endpoint's success and error codes, response shapes, ownership, persistence, the 422-to-400 mapping, the concurrent races above, and that Postgres sorts ranks the same way Python does</td><td>A real Postgres (the compose <code>db</code>; a service container in CI)</td></tr>
           <tr><td>Frontend unit and component</td><td>Vitest (Jest's API), React Testing Library, MSW</td><td>Helpers, hooks, and each screen's states, optimistic rollback, field errors</td><td>jsdom, with <code>fetch</code> mocked at the boundary</td></tr>
           <tr><td>Live API</td><td>pytest, httpx</td><td>Migrations ran, the proxy and cookie path work, a session from one replica works on the other, deep links serve the SPA, security headers are set</td><td>The compose stack on :8080</td></tr>
           <tr><td>Browser end to end</td><td>Playwright</td><td>Four journeys: sign up and sign in; create, edit, complete; reorder and search; delete and sign out. Plus one at phone size</td><td>The compose stack on :8080</td></tr>
+          <tr><td>Load</td><td>k6 (container)</td><td>Throughput, latency and error budgets with 200 concurrent users, and data consistency afterwards (D18)</td><td>The compose stack on :8080, before submission</td></tr>
         </tbody>
       </table>
     </div>
+  </section>
+
+  <section id="order">
+    <span class="eyebrow">Sequence</span>
+    <h2>Order of work: design before frontend code</h2>
+    <ol class="calls">
+      <li><b>You sign off this spec.</b></li>
+      <li><b>In parallel:</b> the detailed coding plan (<code>docs/plans/round-1.md</code>), and a design artifact showing the tokens and every screen in every state.</li>
+      <li><b>Gate:</b> you review the design tokens and the screens. Changes go into the tokens and components, and the artifact is republished.</li>
+      <li><b>Gate:</b> the walkthrough of the coding instructions, with code, comment-style and type-checking samples.</li>
+      <li><b>PRs, each reviewed by you after the card:</b> skeleton, spec and plan, backend API, frontend (connecting the reviewed screens to real data), then containers with the live, browser and load tests.</li>
+      <li><b>Gate:</b> round 1 is done (below), then round 2.</li>
+    </ol>
+    <div class="decisions">
+      <div class="decision"><div class="id">D20</div><div class="body">
+        <div class="title-row"><h3>The design artifact is built from the real components</h3><span class="pill pill-locked">locked</span></div>
+        <dl>
+          <dt>Choice</dt><dd>Tokens go in <code>frontend/src/styles/tokens.css</code> as Tailwind 4 <code>@theme</code> variables (colour, type, spacing, radius, motion, light and dark). Building blocks go in <code>frontend/src/components/ui/</code>. Each screen is a view that takes its data and callbacks as props and does no fetching. A second Vite entry, <code>frontend/design/</code>, renders the token sheet and every view in every state with sample data, at phone and desktop widths. It is built into one self-contained HTML file and published as the artifact. Later, the frontend PR wraps each view in a small container that connects it to TanStack Query.</dd>
+          <dt>Instead of</dt><dd>Drawing the screens in a separate design tool or artifact type, then building them again in React.</dd>
+          <dt>Why</dt><dd>Nothing is built twice: what you approve is the code that ships. Splitting views from containers also keeps the views pure functions of their props, which makes them easy to test and easy to explain.</dd>
+          <dt>Direction</dt><dd>From the lead: a stellar look, a premium feel, vintage colours, zero redundancy.</dd>
+          <dt>Flag</dt><dd>This puts the first frontend code before the instructions walkthrough. To keep that safe, it follows the coding standards from the first line, the views hold no data logic the walkthrough could change, component tests come in the same commits, and it stays on <code>feature/web-design-system</code>. Its PR waits until the walkthrough is done.</dd>
+        </dl>
+      </div></div>
+    </div>
+    <p class="prose">Waits outside our control: about 2 minutes of CI per push, plus your review of each PR and of the design.</p>
   </section>
 
   <section id="rounds">
@@ -504,28 +750,37 @@ footer { color: var(--muted); font-size: 0.88rem; border-top: 1px solid var(--li
         <h3>It's proven</h3>
         <ul class="plain">
           <li>All five test layers are green and above the coverage floors; you've reviewed the code.</li>
+          <li>The load test passes its budgets, every user's data checks out afterwards, and the round's capacity figure is recorded.</li>
           <li>CI runs hygiene, backend, frontend and end-to-end jobs once the GitHub remote exists.</li>
           <li>The README covers running round 1 on a Mac.</li>
         </ul>
       </div>
     </div>
-    <p class="prose"><b>Delivery:</b> after the plan and the instructions walkthrough, round 1 is four PRs, each reviewed by you: the coding plan, the backend API, the frontend, then containers with the live and browser tests. Waits outside our control: about 2 minutes of CI per push, plus your review of each PR.</p>
+  </section>
+
+  <section id="later">
+    <span class="eyebrow">Not in round 1</span>
+    <h2>Later, in <code>FUTURE.md</code></h2>
+    <ul class="plain">
+      <li><b>Sign-in with Microsoft, Google or Apple</b> (OpenID Connect), chosen per client. Refresh-token rotation and revocation.</li>
+      <li><b>AI task entry:</b> describe a new task or a change in text or voice, and the app makes it. Only once everything else works.</li>
+      <li><b>AI summary home page</b> for the user's tasks, possibly built on the AG-UI protocol.</li>
+      <li><b>Account care:</b> email verification and password reset. <b>Data care:</b> a rank rebalancing job, and paging for long lists.</li>
+    </ul>
   </section>
 
   <section id="calls">
-    <span class="eyebrow">For sign-off</span>
-    <h2>Your calls</h2>
-    <p class="prose">Reply with the numbers you accept and any changes. Each one is written into <code>docs/kickoff.md</code> before the plan is written.</p>
-    <ol class="calls">
-      <li><b>D3 Accounts.</b> Open sign-up and sign-in by email and password, no seeded users.</li>
-      <li><b>D4 Session.</b> JWT in an httpOnly <code>SameSite=Strict</code> cookie, 8 hours, no refresh token until round 3.</li>
-      <li><b>D6 Ordering.</b> Fractional ranks; new tasks at the top; reordering off while searching.</li>
-      <li><b>D7 Search.</b> On the server, over title and notes, with a trigram index.</li>
-      <li><b>D8 Fields.</b> Title, notes, completed, due date. No priority or tags.</li>
-      <li><b>D10 Replicas.</b> Two API replicas from round 1, with an <code>X-Served-By</code> header.</li>
-      <li><b>D12 Coverage.</b> 90% backend, 85% frontend, line and branch.</li>
-    </ol>
+    <span class="eyebrow">Sign-off record</span>
+    <h2>Signed off</h2>
+    <p class="prose">D1 to D20 are locked. Revision 1 settled D3, D4, D6, D7, D8, D10 and D12. Revision 2's D13 to D20 were signed off on 2026-10-19, with these notes from the lead:</p>
+    <ul class="plain">
+      <li><b>D15:</b> report realistic concurrent-user numbers at the end of each round, measured by the stepped load test.</li>
+      <li><b>D16 and D18:</b> the lead takes part in the race tests and the load tests.</li>
+      <li><b>D17:</b> a tab refreshes when the user comes back to it. Kept as the first layer, with the version check as the guarantee.</li>
+      <li><b>Design:</b> a stellar look, a premium feel, vintage colours and zero redundancy.</li>
+    </ul>
+    <p class="prose">The detailed coding plan (<code>docs/plans/round-1.md</code>) and the design artifact are now being written in parallel.</p>
   </section>
 
-  <footer>Drafted by Claude (agent) for review by the project lead. Decisions marked locked come from <code>docs/kickoff.md</code>.</footer>
+  <footer>Drafted by Claude (agent) for review by the project lead. Revision 1 reviewed and answered by the lead; revision 2 added D13 to D20; revision 3 records their sign-off. Decisions marked locked are recorded in <code>docs/kickoff.md</code>.</footer>
 </main>
