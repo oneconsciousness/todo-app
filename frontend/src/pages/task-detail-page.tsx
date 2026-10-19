@@ -1,15 +1,14 @@
-import { useParams } from "react-router";
+import { useNavigate, useParams } from "react-router";
 import { type ApiError, ApiErrorCode } from "../lib/api/client.ts";
 import { localIsoDate } from "../lib/due-date.ts";
-import { useTask, useToggleTask, useUpdateTask } from "../lib/query/tasks.ts";
+import { useDeleteTask, useTask, useToggleTask, useUpdateTask } from "../lib/query/tasks.ts";
+import { routes } from "../lib/routes.ts";
 import { serverFieldErrors } from "../lib/schema/field-errors.ts";
 import { taskIdParamSchema } from "../lib/schema/route.ts";
 import type { Task } from "../lib/schema/task.ts";
 import { type TaskDetailContent, TaskDetailView } from "../views/task-detail-view.tsx";
 
 const draftFields = ["title", "notes", "dueDate"] as const;
-
-const ignore = (): void => undefined;
 
 const detailContent = (
   taskId: string | null,
@@ -40,13 +39,15 @@ export function TaskDetailPage() {
   const task = useTask(taskId);
   const update = useUpdateTask();
   const toggle = useToggleTask();
+  const remove = useDeleteTask();
+  const navigate = useNavigate();
 
   return (
     <TaskDetailView
       content={detailContent(taskId, task.data, task.error)}
       today={localIsoDate(new Date())}
       saving={update.isPending}
-      deleting={false}
+      deleting={remove.isPending}
       failure={saveFailure(update.error) ?? toggleFailure(toggle.error)}
       fieldErrors={
         update.error?.code === ApiErrorCode.ValidationFailed
@@ -59,7 +60,10 @@ export function TaskDetailPage() {
       onToggle={(id, completed) => {
         toggle.mutate({ taskId: id, completed });
       }}
-      onDelete={ignore}
+      onDelete={(id) => {
+        remove.mutate(id);
+        void navigate(routes.tasks);
+      }}
     />
   );
 }

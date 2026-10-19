@@ -1,10 +1,10 @@
 import { focusManager } from "@tanstack/react-query";
 import { act, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { HttpResponse, http } from "msw";
+import { HttpResponse, delay, http } from "msw";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { routes } from "../lib/routes.ts";
-import { detailTask } from "../test/fixtures.ts";
+import { detailTask, tasks } from "../test/fixtures.ts";
 import { errorReply } from "../test/handlers.ts";
 import { renderApp } from "../test/render-app.tsx";
 import { server } from "../test/server.ts";
@@ -23,6 +23,11 @@ const openAndEdit = async (title: string) => {
 };
 
 const save = () => userEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+const confirmDelete = async () => {
+  await userEvent.click(await screen.findByRole("button", { name: "Delete" }));
+  await userEvent.click(screen.getByRole("button", { name: "Delete task" }));
+};
 
 // After a refused save, the next read of the task returns the version someone else saved.
 const refusedAs = (reply: () => Response) => {
@@ -108,5 +113,45 @@ describe("TaskDetailPage", () => {
 
     expect(await screen.findByText("That title is already in use.")).toBeVisible();
     expect(titleField()).toHaveAccessibleDescription("That title is already in use.");
+  });
+
+  it("deletes optimistically and returns to the list", async () => {
+    const state = { deleted: false };
+    server.use(
+      http.delete(taskUrl, async () => {
+        await delay(300);
+        state.deleted = true;
+        return new HttpResponse(null, { status: 204 });
+      }),
+      http.get("/api/v1/tasks", () =>
+        HttpResponse.json({
+          items: state.deleted ? tasks.filter((task) => task.id !== detailTask.id) : tasks,
+        }),
+      ),
+    );
+    const { router } = renderApp(routes.task(detailTask.id));
+
+    await confirmDelete();
+
+    expect(await screen.findByRole("list", { name: "Tasks" })).toBeVisible();
+    expect(router.state.location.pathname).toBe(routes.tasks);
+    expect(state.deleted).toBe(false);
+    expect(screen.queryByRole("link", { name: detailTask.title })).not.toBeInTheDocument();
+  });
+
+  it("restores the task when delete fails", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    server.use(
+      http.delete(taskUrl, async () => {
+        await delay(50);
+        return errorReply(500, "internal_error");
+      }),
+    );
+    renderApp(routes.task(detailTask.id));
+
+    await confirmDelete();
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Couldn't delete the task");
+    expect(screen.getByRole("link", { name: detailTask.title })).toBeVisible();
   });
 });

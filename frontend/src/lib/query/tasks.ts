@@ -11,7 +11,7 @@ import {
 } from "@tanstack/react-query";
 import { useState } from "react";
 import { type ApiError, ApiErrorCode } from "../api/client.ts";
-import { createTask, getTask, listTasks, moveTask, updateTask } from "../api/tasks.ts";
+import { createTask, deleteTask, getTask, listTasks, moveTask, updateTask } from "../api/tasks.ts";
 import type { Task } from "../schema/task.ts";
 import type { TaskChanges } from "../task-draft.ts";
 import { moveAfter } from "../tasks/order.ts";
@@ -201,19 +201,64 @@ export const useCreateTask = () => {
   });
 };
 
-type NoticeKind = "toggle" | "move" | "create";
+const removeFrom = (items: readonly Task[], taskId: string) =>
+  items.filter((task) => task.id !== taskId);
+
+/**
+ * Delete a task at once: it leaves every cached list and its detail entry before the server answers, and comes back
+ * if the delete fails. A 404 leaves it gone, since it is gone either way.
+ */
+export const useDeleteTask = () => {
+  const client = useQueryClient();
+  const updateLists = optimisticListUpdate(client, removeFrom);
+  return useMutation({
+    mutationKey: taskKeys.mutations.remove,
+    mutationFn: deleteTask,
+    onMutate: async (taskId: string) => {
+      const lists = await updateLists(taskId);
+      client.removeQueries({ queryKey: taskKeys.detail(taskId) });
+      return lists;
+    },
+    onError: (error, _taskId, snapshot) => {
+      if (!isNotFound(error) && snapshot) restoreLists(client, snapshot);
+    },
+    onSettled: () => {
+      void client.invalidateQueries({ queryKey: taskKeys.lists() });
+    },
+  });
+};
+
+/**
+ * The ids of tasks whose delete the server has not answered yet. A list that loads or refetches meanwhile still holds
+ * them, so the screen leaves them out until the delete settles.
+ */
+export const usePendingDeletes = (): ReadonlySet<string> =>
+  new Set(
+    useMutationState({
+      filters: { mutationKey: taskKeys.mutations.remove, status: "pending" },
+      select: (mutation) => mutation.state.variables,
+    }).filter((taskId): taskId is string => typeof taskId === "string"),
+  );
+
+type NoticeKind = "toggle" | "move" | "remove" | "create";
 
 const noticeKinds: Readonly<Record<string, NoticeKind>> = {
   [taskKeys.mutations.toggle[1]]: "toggle",
   [taskKeys.mutations.move[1]]: "move",
+  [taskKeys.mutations.remove[1]]: "remove",
   [taskKeys.mutations.create[1]]: "create",
 };
 
 const failedTo: Readonly<Record<NoticeKind, string>> = {
   toggle: "Couldn't update the task, so it's back as it was.",
   move: "Couldn't move the task, so it's back where it was.",
+  remove: "Couldn't delete the task, so it's back in the list.",
   create: "Couldn't add the task.",
 };
+
+// A delete that finds the task already gone did what the user asked, so there is nothing to tell.
+const isWorthTelling = (kind: NoticeKind, error: ApiError): boolean =>
+  !(kind === "remove" && isNotFound(error));
 
 // A 404 means someone deleted the task elsewhere; anything else says what was undone and why.
 const noticeFor = (kind: NoticeKind, error: ApiError): string =>
@@ -250,7 +295,10 @@ export const useTaskNotices = (): {
   const newest = failures
     .filter(
       (failure): failure is FailedChange =>
-        failure.kind !== undefined && failure.error !== null && !dismissed.has(failure.submittedAt),
+        failure.kind !== undefined &&
+        failure.error !== null &&
+        isWorthTelling(failure.kind, failure.error) &&
+        !dismissed.has(failure.submittedAt),
     )
     .reduce<FailedChange | null>(
       (latest, failure) => (latest && latest.submittedAt >= failure.submittedAt ? latest : failure),

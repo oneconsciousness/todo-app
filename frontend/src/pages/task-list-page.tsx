@@ -5,6 +5,7 @@ import type { ApiError } from "../lib/api/client.ts";
 import {
   useCreateTask,
   useMoveTask,
+  usePendingDeletes,
   useTaskNotices,
   useTasks,
   useToggleTask,
@@ -29,6 +30,7 @@ export function TaskListPage() {
   const [query, setQuery] = useState("");
   const term = useDebouncedValue(query.trim(), searchDelayMs);
   const list = useTasks(term);
+  const deleting = usePendingDeletes();
   const create = useCreateTask();
   const toggle = useToggleTask();
   const move = useMoveTask();
@@ -36,7 +38,10 @@ export function TaskListPage() {
 
   return (
     <TaskListView
-      content={listContent(list.data, list.error)}
+      content={listContent(
+        list.data?.filter((task) => !deleting.has(task.id)),
+        list.error,
+      )}
       today={localIsoDate(new Date())}
       query={query}
       searchPending={query.trim() !== term || list.isPlaceholderData}
