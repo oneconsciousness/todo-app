@@ -1055,8 +1055,8 @@ This follows `CONTRIBUTING.md` § 1 and `git-and-prs.md`. The lead reviews every
 | | |
 |---|---|
 | **Round branch** | `round/1-containers`. The human creates it once from `main` (`git push origin main:refs/heads/round/1-containers`); the hook refuses that push from an agent. It is protected like `main`: no direct commits or pushes, only merged PRs. |
-| **Parent PR** | `round/1-containers` → `main`, titled `feat(round-1): run the to do app in containers`, label `round`. It is opened as a draft once S1 has merged into the round branch. It links every child PR and serves as the round's checklist. It stays a draft until G5. After the lead's final review it merges with a **merge commit**, so `git log --first-parent main` shows one merge per round. |
-| **Child PRs** | Each targets `round/1-containers`, or, while stacked, the branch of the unmerged child it builds on. Each is **rebase-merged**, so every green, test-first commit lands on the round branch in order. Nothing is squashed. |
+| **Parent PR** | `round/1-containers` → `main`, titled `feat(round-1): run the to do app in containers`, label `round`. It is opened as a draft once S1 has merged into the round branch. It links every child PR and serves as the round's checklist. It stays a draft until G5. After the human lead's final review it is **rebase-merged**, which lays the round's child commits onto `main` in order: `main` stays linear, one commit per child PR. |
+| **Child PRs** | Each targets `round/1-containers`, or, while stacked, the branch of the unmerged child it builds on. Each is **squash-merged**: one commit on the round branch, its subject the PR title (Conventional, checked by the hook and CI). The PR keeps the green, test-first commits for review. |
 
 | Order | PR | Branch | Contents | Base when raised → once its parent child merges | Label | Gate before merge | Size (bounded work) |
 |---|---|---|---|---|---|---|---|
@@ -1072,7 +1072,7 @@ This follows `CONTRIBUTING.md` § 1 and `git-and-prs.md`. The lead reviews every
 
 B and Cf touch disjoint folders, so either can be reviewed first once A has merged.
 
-**Retargeting a stacked child.** GitHub's rebase-merge replays a child's commits onto the round branch with new SHAs. The branch stacked on it still carries the old ones. Once the parent child merges, the stacked branch is moved onto the round branch:
+**Retargeting a stacked child.** GitHub's squash-merge puts one new commit on the round branch. The branch stacked on it still carries the old ones. Once the parent child merges, the stacked branch is moved onto the round branch:
 
 ```bash
 git fetch origin
@@ -1097,7 +1097,7 @@ gh pr edit <n> --base round/1-containers
 | **CP2** | PR E, commit E7, before any load run | **Lead present** | Review `journey.js`, the thresholds and the stepped plan |
 | **CP3** | PR E, after E7 | **Lead present** | Run the 200-user test, then the stepped run, and walk through the results together |
 | G4 | Every PR, child and parent | Reviewer agent, then the lead | Reviewer agent, `/verify`, `/claude-docs-check`, the PR card, then the lead's line-by-line review and green CI |
-| G5 | After PR F merges into the round branch | Lead | Round 1 exit criteria (spec, "Round 1 is done when"), checked on `round/1-containers`. The parent PR then leaves draft, gets the lead's final review and merges into `main` with a merge commit. |
+| G5 | After PR F merges into the round branch | Lead | Round 1 exit criteria (spec, "Round 1 is done when"), checked on `round/1-containers`. The parent PR then leaves draft, gets the human lead's final review and is rebase-merged into `main`. |
 
 ### 8.3 Commit sequences (test first; every commit green)
 
@@ -1245,7 +1245,7 @@ The lead locked all eighteen on 2026-10-19 as recommended. Q-1 to Q-13 keep the 
 
 **Found in this pass and fixed in the plan:**
 
-8. **Merge flow.** The plan raised every PR against `main` and squash-merged it. `CONTRIBUTING.md` § 1 and `git-and-prs.md` now use one parent PR per round with rebase-merged children, so §§ 8.1 and 8.2 are rewritten.
+8. **Merge flow.** The plan raised every PR against `main` and squash-merged it. `CONTRIBUTING.md` § 1 and `git-and-prs.md` now use one parent PR per round with rebase-merged children, so §§ 8.1 and 8.2 are rewritten. The lead then chose squash for child PRs and rebase for the parent (kickoff § 5d), applied here.
 9. **`.env.example` ownership.** The plan said only the human writes it. Since `f27e35a` and `CONTRIBUTING.md` § 12.2, agents create and edit it by that exact name, so commit C6 creates it (§ 3.1).
 10. **Gate state.** G0 and G2 have passed, so § 8.2 records them and names G1 as next.
 
