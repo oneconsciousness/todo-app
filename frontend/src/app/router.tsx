@@ -52,8 +52,12 @@ export const appRoutes: RouteObject[] = [
 /** The router the browser runs, with history in the address bar. */
 export const createAppRouter = (): DataRouter => createBrowserRouter(appRoutes);
 
-/** Send the user to sign-in from wherever they are, keeping that place to come back to; for an ended session. */
+/**
+ * Send the user to sign-in from wherever they are, keeping that place to come back to; for an ended session. A late
+ * 401 that arrives once they are already there leaves the way back as it is.
+ */
 export const goToSignIn = (router: DataRouter) => (): void => {
   const { pathname, search } = router.state.location;
+  if (pathname === routes.signIn) return;
   void router.navigate(signInPath(pathname + search), { replace: true });
 };

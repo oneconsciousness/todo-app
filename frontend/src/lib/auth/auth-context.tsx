@@ -8,14 +8,17 @@ export type Session =
   | { readonly status: "signed-out"; readonly user: null }
   | { readonly status: "signed-in"; readonly user: User };
 
-/** The session, and the actions that change it. */
-export type Auth = Session & {
+/** The actions that change the session. */
+interface AuthActions {
   readonly signIn: ReturnType<typeof useSignIn>;
   readonly signUp: ReturnType<typeof useSignUp>;
   readonly signOut: ReturnType<typeof useSignOut>;
-};
+}
 
-const AuthContext = createContext<Auth | null>(null);
+/** The session, and the actions that change it. */
+export type Auth = Session & AuthActions;
+
+const AuthContext = createContext<AuthActions | null>(null);
 
 /** Read the session from the cached `me` answer: undefined while checking, null for a visitor. */
 export const sessionFrom = (me: User | null | undefined): Session => {
@@ -24,22 +27,21 @@ export const sessionFrom = (me: User | null | undefined): Session => {
   return { status: "signed-in", user: me };
 };
 
-/** Gives every page below it the session, worked out from the server's answer on each render rather than copied. */
+/** Gives every page below it one sign-in, sign-up and sign-out, so their progress and errors are shared. */
 export function AuthProvider({ children }: { readonly children: ReactNode }) {
-  const me = useMe();
   const signIn = useSignIn();
   const signUp = useSignUp();
   const signOut = useSignOut();
-  return (
-    <AuthContext value={{ ...sessionFrom(me.data), signIn, signUp, signOut }}>
-      {children}
-    </AuthContext>
-  );
+  return <AuthContext value={{ signIn, signUp, signOut }}>{children}</AuthContext>;
 }
 
-/** The session and its actions; only valid below `AuthProvider`. */
+/**
+ * The session and its actions; only valid below `AuthProvider`. The session is read from the `me` query in the
+ * component that asks, while it renders, so a page never acts on a session that has already ended.
+ */
 export const useAuth = (): Auth => {
-  const auth = use(AuthContext);
-  if (!auth) throw new Error("useAuth is used outside AuthProvider");
-  return auth;
+  const actions = use(AuthContext);
+  const me = useMe();
+  if (!actions) throw new Error("useAuth is used outside AuthProvider");
+  return { ...sessionFrom(me.data), ...actions };
 };
