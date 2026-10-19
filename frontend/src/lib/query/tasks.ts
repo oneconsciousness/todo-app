@@ -114,6 +114,16 @@ const forgetTask = (client: QueryClient, taskId: string): void => {
 const isNotFound = (error: ApiError): boolean => error.code === ApiErrorCode.NotFound;
 
 /**
+ * Wrap an optimistic change's error handler so it does nothing once the session has ended. The query client has
+ * already emptied the cache for whoever signs in next by then, and a rollback would put this user's tasks back.
+ */
+const unlessSessionEnded =
+  <V, S>(handle: (error: ApiError, vars: V, snapshot: S | undefined) => void) =>
+  (error: ApiError, vars: V, snapshot: S | undefined): void => {
+    if (error.code !== ApiErrorCode.NotAuthenticated) handle(error, vars, snapshot);
+  };
+
+/**
  * Tick a task off, or reopen it, at once: every cached list and the detail show the change before the server answers.
  * A failure puts them back; a 404 means the task was deleted elsewhere, so it leaves the screen instead. No `If-Match`
  * is sent, because a tick sets an absolute value and the latest one should win.
@@ -138,7 +148,7 @@ export const useToggleTask = () => {
     onSuccess: (task) => {
       client.setQueryData(taskKeys.detail(task.id), task);
     },
-    onError: (error, { taskId }, snapshot) => {
+    onError: unlessSessionEnded((error, { taskId }: ToggleVariables, snapshot) => {
       if (isNotFound(error)) {
         forgetTask(client, taskId);
         return;
@@ -146,7 +156,7 @@ export const useToggleTask = () => {
       if (!snapshot) return;
       restoreLists(client, snapshot.lists);
       client.setQueryData(taskKeys.detail(taskId), snapshot.detail);
-    },
+    }),
     // Not awaited: the user hears about a failure as soon as it happens, not after the lists have reloaded.
     onSettled: () => {
       void client.invalidateQueries({ queryKey: taskKeys.lists() });
@@ -177,10 +187,12 @@ export const useMoveTask = () => {
     scope: { id: "task-order" },
     mutationFn: ({ taskId, afterId }: MoveVariables) => moveTask(taskId, afterId),
     onMutate: (vars: MoveVariables) => updateLists(vars),
-    onError: (error, { taskId }, snapshot) => {
-      if (isNotFound(error)) forgetTask(client, taskId);
-      else if (snapshot) restoreLists(client, snapshot);
-    },
+    onError: unlessSessionEnded(
+      (error, { taskId }: MoveVariables, snapshot: ListSnapshot | undefined) => {
+        if (isNotFound(error)) forgetTask(client, taskId);
+        else if (snapshot) restoreLists(client, snapshot);
+      },
+    ),
     onSettled: () => {
       if (client.isMutating({ mutationKey: taskKeys.mutations.move }) === 1)
         void client.invalidateQueries({ queryKey: taskKeys.lists() });
@@ -219,9 +231,9 @@ export const useDeleteTask = () => {
       client.removeQueries({ queryKey: taskKeys.detail(taskId) });
       return lists;
     },
-    onError: (error, _taskId, snapshot) => {
+    onError: unlessSessionEnded((error, _taskId: string, snapshot: ListSnapshot | undefined) => {
       if (!isNotFound(error) && snapshot) restoreLists(client, snapshot);
-    },
+    }),
     onSettled: () => {
       void client.invalidateQueries({ queryKey: taskKeys.lists() });
     },
