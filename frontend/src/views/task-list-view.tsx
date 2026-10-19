@@ -11,8 +11,8 @@ import {
   LedgerCells,
   LedgerHead,
   TaskRow,
-  ledgerColumns,
-  ledgerRuleClass,
+  ledgerLineClass,
+  taskLineClass,
 } from "../components/ui/task-row.tsx";
 import { TextField } from "../components/ui/text-field.tsx";
 import { longDate } from "../lib/due-date.ts";
@@ -204,7 +204,7 @@ function ListBody({
           itemLabel={(task) => task.title}
           disabled={!reorderable}
           onMove={onMove}
-          itemClassName={`grid items-start transition-colors hover:bg-rule/25 has-focus-visible:bg-rule/25 ${ledgerColumns(reorderable)} ${ledgerRuleClass}`}
+          itemClassName={taskLineClass(reorderable)}
         >
           {(task, handle) => (
             <TaskRow task={task} today={today} handle={handle} onToggle={onToggle} />
@@ -226,10 +226,7 @@ function PendingRow({
   readonly reorderable: boolean;
 }) {
   return (
-    <div
-      aria-busy="true"
-      className={`grid items-start ${ledgerColumns(reorderable)} ${ledgerRuleClass}`}
-    >
+    <div aria-busy="true" className={ledgerLineClass(reorderable)}>
       <LedgerCells
         handle={reorderable && <span className="block size-touch" />}
         control={<Skeleton className="size-5" />}
@@ -248,11 +245,7 @@ function LoadingRows() {
     <div role="status">
       <span className="sr-only">Loading your tasks…</span>
       {placeholderWidths.map((width) => (
-        <div
-          key={width}
-          aria-hidden="true"
-          className={`grid items-start ${ledgerColumns(false)} ${ledgerRuleClass}`}
-        >
+        <div key={width} aria-hidden="true" className={ledgerLineClass(false)}>
           <LedgerCells handle={null} control={<Skeleton className="size-5" />}>
             <Skeleton className={`my-2 h-3 ${width}`} />
           </LedgerCells>

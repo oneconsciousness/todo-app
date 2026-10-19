@@ -50,6 +50,15 @@ export const dropSlotClass =
 const handleClass =
   "flex size-touch shrink-0 cursor-grab touch-none items-center justify-center text-ink-muted transition-colors hover:text-ink active:cursor-grabbing";
 
+/** The look of a drag handle without its behaviour, for the lifted copy of a row. */
+export function DragHandleMark() {
+  return (
+    <span aria-hidden="true" className={handleClass}>
+      <Icon name="grip" />
+    </span>
+  );
+}
+
 const verticalOnly: Modifier = ({ transform }) => ({ ...transform, x: 0 });
 
 const instructions = {
@@ -142,12 +151,7 @@ export function SortableList<T extends Sortable>({
       <DragOverlay dropAnimation={null}>
         {carried && (
           <div aria-hidden="true" inert className={`${itemClassName} ${liftedClass}`}>
-            {children(
-              carried,
-              <span className={handleClass}>
-                <Icon name="grip" />
-              </span>,
-            )}
+            {children(carried, <DragHandleMark />)}
           </div>
         )}
       </DragOverlay>

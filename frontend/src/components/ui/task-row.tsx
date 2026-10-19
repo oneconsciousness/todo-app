@@ -13,14 +13,15 @@ const columns = {
 } as const;
 
 /**
- * The column template of a ledger line. Narrow: tick box, text, then the handle at the right edge.
- * Wide: handle, tick box, text, then the due column. Without a handle the handle column is dropped.
+ * One ruled ledger line. Narrow: tick box, text, then the handle at the right edge. Wide: handle, tick box, text,
+ * then the due column. Without a handle the handle column is dropped.
  */
-export const ledgerColumns = (reorderable: boolean): string =>
-  reorderable ? columns.reorderable : columns.fixed;
+export const ledgerLineClass = (reorderable: boolean): string =>
+  `grid items-start border-b border-rule last:border-b-0 ${reorderable ? columns.reorderable : columns.fixed}`;
 
-/** The ruling between ledger lines. */
-export const ledgerRuleClass = "border-b border-rule last:border-b-0";
+/** A ledger line the user works with: it shades on hover and while something in it has keyboard focus. */
+export const taskLineClass = (reorderable: boolean): string =>
+  `${ledgerLineClass(reorderable)} transition-colors hover:bg-rule/25 has-focus-visible:bg-rule/25`;
 
 /** The colour and weight of a due date in each tone, shared by the list and the detail screen. */
 export const dueToneClass: Readonly<Record<DueTone, string>> = {
@@ -72,7 +73,7 @@ export function LedgerHead({ reorderable }: LedgerHeadProps) {
   return (
     <div
       aria-hidden="true"
-      className={`hidden border-b border-rule-strong text-caption font-medium tracking-caps text-ink-muted uppercase @wide:grid ${ledgerColumns(reorderable)}`}
+      className={`hidden border-b border-rule-strong text-caption font-medium tracking-caps text-ink-muted uppercase @wide:grid ${reorderable ? columns.reorderable : columns.fixed}`}
     >
       <span className={reorderable ? "col-span-2" : undefined} />
       <span className="border-l-3 border-double border-margin px-4 pt-3 pb-2">Task</span>
