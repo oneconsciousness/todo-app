@@ -56,6 +56,7 @@
   --container-measure: 50rem;
   --container-wide: 36rem;
   --container-due: 10rem;
+  --container-book: 60rem;
 
   /* Shape and depth, by role. */
   --radius-control: 0.125rem;

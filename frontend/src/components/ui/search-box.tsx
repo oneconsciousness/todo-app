@@ -1,6 +1,6 @@
 import { useId, useRef } from "react";
 import { Icon } from "./icon.tsx";
-import { fieldClass } from "./text-field.tsx";
+import { fieldClass } from "./field.tsx";
 
 /** Props for `SearchBox`. */
 export interface SearchBoxProps {

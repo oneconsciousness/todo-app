@@ -19,6 +19,10 @@ export function NavigationProvider({ navigate, children }: NavigationProviderPro
 export const isPlainClick = (event: MouseEvent): boolean =>
   event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
 
+/** The look of a link inside running text. */
+export const textLinkClass =
+  "font-medium text-ink underline decoration-rule-strong underline-offset-4 transition-colors hover:decoration-ink";
+
 /** Props for `Link`: a native anchor that always has an `href`. */
 export interface LinkProps extends ComponentProps<"a"> {
   readonly href: string;
