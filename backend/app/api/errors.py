@@ -52,8 +52,9 @@ HTTP_EXCEPTION_ERRORS: Final[Mapping[int, HttpError]] = MappingProxyType(
     }
 )
 
-# A pool wait that ran out, a statement timeout, or a database that cannot be reached.
-DATABASE_ERRORS: Final = (PoolTimeoutError, OperationalError, InterfaceError, ConnectionError)
+# A pool wait that ran out, a statement timeout, or a database that cannot be reached. OSError covers
+# a refused or timed-out connection and a host name that does not resolve (socket.gaierror).
+DATABASE_ERRORS: Final = (PoolTimeoutError, OperationalError, InterfaceError, OSError)
 
 VALIDATION_FAILED: Final = HttpError(400, "validation_failed", "Some fields are not valid.")
 SERVICE_UNAVAILABLE: Final = HttpError(503, "service_unavailable", "The service is busy. Try again in a moment.")

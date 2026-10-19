@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 from fastapi import FastAPI, Request
 from httpx import AsyncClient
@@ -8,15 +10,28 @@ from app.config import Settings
 from app.db.engine import create_engine
 from app.main import create_app
 from tests.support.app import serving
+from tests.support.factories import PASSWORD
 
 # Nothing listens on port 1, so every connection attempt is refused at once.
 UNREACHABLE_DATABASE_URL = "postgresql+asyncpg://todo_test:todo_test@127.0.0.1:1/todo_test"
+
+
+# The .invalid top-level domain is reserved and never resolves (RFC 2606).
+UNRESOLVABLE_DATABASE_URL = "postgresql+asyncpg://todo_test:todo_test@database.invalid:5432/todo_test"
+# asyncpg's own connect timeout is 60 s; the app's answer must come long before that.
+PROMPT_ANSWER_SECONDS = 10
 
 
 @pytest.fixture
 def unreachable_settings(test_settings: Settings) -> Settings:
     """The test settings, pointed at a database that refuses connections."""
     return Settings(database_url=UNREACHABLE_DATABASE_URL, jwt_secret=test_settings.jwt_secret.get_secret_value())
+
+
+@pytest.fixture
+def unresolvable_settings(test_settings: Settings) -> Settings:
+    """The test settings, pointed at a database host name that does not resolve."""
+    return Settings(database_url=UNRESOLVABLE_DATABASE_URL, jwt_secret=test_settings.jwt_secret.get_secret_value())
 
 
 def add_database_ping_route(app: FastAPI) -> None:
@@ -46,6 +61,25 @@ async def test_readyz_is_503_when_the_database_is_unreachable(unreachable_settin
         response = await client.get("/readyz")
     assert response.status_code == 503
     assert response.json()["error"]["code"] == "not_ready"
+
+
+async def test_readyz_is_503_promptly_when_the_database_host_does_not_resolve(
+    unresolvable_settings: Settings,
+) -> None:
+    async with asyncio.timeout(PROMPT_ANSWER_SECONDS), serving(create_app(unresolvable_settings)) as client:
+        response = await client.get("/readyz")
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "not_ready"
+
+
+async def test_sign_in_is_503_promptly_when_the_database_host_does_not_resolve(
+    unresolvable_settings: Settings,
+) -> None:
+    credentials = {"email": "ada@example.com", "password": PASSWORD}
+    async with asyncio.timeout(PROMPT_ANSWER_SECONDS), serving(create_app(unresolvable_settings)) as client:
+        response = await client.post("/api/v1/auth/login", json=credentials)
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "service_unavailable"
 
 
 async def test_request_is_503_when_no_connection_frees_up_in_time(test_settings: Settings) -> None:

@@ -9,6 +9,8 @@ from app.config import Settings
 # Applied by asyncpg to every new connection, so they hold on any Postgres without server flags
 # (https://magicstack.github.io/asyncpg/current/api/index.html#connection).
 SERVER_SETTINGS: Final = {"statement_timeout": "5000", "idle_in_transaction_session_timeout": "10000"}
+# Seconds to open a connection; asyncpg's default of 60 would hold a request for a minute.
+CONNECT_TIMEOUT_SECONDS: Final = 5
 
 
 def create_engine(settings: Settings) -> AsyncEngine:
@@ -19,7 +21,7 @@ def create_engine(settings: Settings) -> AsyncEngine:
         max_overflow=settings.db_max_overflow,
         pool_timeout=settings.db_pool_timeout_seconds,
         pool_pre_ping=True,
-        connect_args={"server_settings": SERVER_SETTINGS},
+        connect_args={"server_settings": SERVER_SETTINGS, "timeout": CONNECT_TIMEOUT_SECONDS},
     )
 
 
