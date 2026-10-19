@@ -10,7 +10,7 @@ import {
 } from "@tanstack/react-query";
 import { useState } from "react";
 import { type ApiError, ApiErrorCode } from "../api/client.ts";
-import { listTasks, moveTask, updateTask } from "../api/tasks.ts";
+import { createTask, listTasks, moveTask, updateTask } from "../api/tasks.ts";
 import type { Task } from "../schema/task.ts";
 import { moveAfter } from "../tasks/order.ts";
 import { taskKeys } from "./keys.ts";
@@ -147,16 +147,31 @@ export const useMoveTask = () => {
   });
 };
 
-type NoticeKind = "toggle" | "move";
+/**
+ * Add a task. It is not optimistic: the server picks its place at the top, so the list shows it once the server has
+ * it, and the mutation stays pending until the lists have reloaded with it in.
+ */
+export const useCreateTask = () => {
+  const client = useQueryClient();
+  return useMutation({
+    mutationKey: taskKeys.mutations.create,
+    mutationFn: createTask,
+    onSuccess: () => client.invalidateQueries({ queryKey: taskKeys.lists() }),
+  });
+};
+
+type NoticeKind = "toggle" | "move" | "create";
 
 const noticeKinds: Readonly<Record<string, NoticeKind>> = {
   [taskKeys.mutations.toggle[1]]: "toggle",
   [taskKeys.mutations.move[1]]: "move",
+  [taskKeys.mutations.create[1]]: "create",
 };
 
 const failedTo: Readonly<Record<NoticeKind, string>> = {
   toggle: "Couldn't update the task, so it's back as it was.",
   move: "Couldn't move the task, so it's back where it was.",
+  create: "Couldn't add the task.",
 };
 
 // A 404 means someone deleted the task elsewhere; anything else says what was undone and why.

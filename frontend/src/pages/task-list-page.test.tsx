@@ -6,7 +6,7 @@ import { z } from "zod";
 import { taskKeys } from "../lib/query/keys.ts";
 import { routes } from "../lib/routes.ts";
 import { moveOnePlace, stackRows } from "../test/drag.ts";
-import { detailTask, tasks } from "../test/fixtures.ts";
+import { detailTask, makeTask, tasks } from "../test/fixtures.ts";
 import { errorReply } from "../test/handlers.ts";
 import { renderApp } from "../test/render-app.tsx";
 import { server } from "../test/server.ts";
@@ -139,5 +139,39 @@ describe("TaskListPage", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("That task was deleted elsewhere.");
     expect(screen.queryByRole("link", { name: detailTask.title })).not.toBeInTheDocument();
+  });
+
+  it("keeps quick add saving until the server answers", async () => {
+    const created = makeTask({ id: "00000000-0000-4000-8000-0000000000c1", title: "Buy stamps" });
+    const state = { saved: false };
+    await renderList();
+    server.use(
+      http.post("/api/v1/tasks", async () => {
+        await delay(100);
+        state.saved = true;
+        return HttpResponse.json(created, { status: 201 });
+      }),
+      http.get("/api/v1/tasks", () =>
+        HttpResponse.json({ items: state.saved ? [created, ...tasks] : tasks }),
+      ),
+    );
+
+    await userEvent.type(screen.getByRole("textbox", { name: "New task" }), "Buy stamps{Enter}");
+
+    expect(screen.getByText("Adding…")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Add task" })).toBeDisabled();
+    expect(await screen.findByRole("link", { name: "Buy stamps" })).toBeVisible();
+    expect(screen.queryByText("Adding…")).not.toBeInTheDocument();
+  });
+
+  it("says why quick add failed", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    await renderList();
+    server.use(http.post("/api/v1/tasks", () => errorReply(500, "internal_error")));
+
+    await userEvent.type(screen.getByRole("textbox", { name: "New task" }), "Buy stamps{Enter}");
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Couldn't add the task.");
+    expect(screen.getByRole("button", { name: "Add task" })).toBeEnabled();
   });
 });

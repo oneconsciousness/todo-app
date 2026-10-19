@@ -2,13 +2,17 @@ import { useState } from "react";
 import { useDebouncedValue } from "../hooks/use-debounced-value.ts";
 import { localIsoDate } from "../lib/due-date.ts";
 import type { ApiError } from "../lib/api/client.ts";
-import { useMoveTask, useTaskNotices, useTasks, useToggleTask } from "../lib/query/tasks.ts";
+import {
+  useCreateTask,
+  useMoveTask,
+  useTaskNotices,
+  useTasks,
+  useToggleTask,
+} from "../lib/query/tasks.ts";
 import type { Task } from "../lib/schema/task.ts";
 import { type TaskListContent, TaskListView } from "../views/task-list-view.tsx";
 
 const searchDelayMs = 250;
-
-const ignore = (): void => undefined;
 
 // Tasks already on screen stay there through a failed refetch; the error screen is only for a first load that failed.
 const listContent = (
@@ -20,11 +24,12 @@ const listContent = (
   return { status: "loading" };
 };
 
-/** The task list route: the user's tasks, searched on the server as they type. */
+/** The task list route: the user's tasks, searched on the server as they type, ticked off, reordered and added to. */
 export function TaskListPage() {
   const [query, setQuery] = useState("");
   const term = useDebouncedValue(query.trim(), searchDelayMs);
   const list = useTasks(term);
+  const create = useCreateTask();
   const toggle = useToggleTask();
   const move = useMoveTask();
   const { notice, dismiss } = useTaskNotices();
@@ -35,10 +40,12 @@ export function TaskListPage() {
       today={localIsoDate(new Date())}
       query={query}
       searchPending={query.trim() !== term || list.isPlaceholderData}
-      pendingCreate={null}
+      pendingCreate={create.isPending ? create.variables.title : null}
       failure={notice === null ? null : { message: notice }}
       onQueryChange={setQuery}
-      onCreate={ignore}
+      onCreate={(title) => {
+        create.mutate({ title });
+      }}
       onToggle={(taskId, completed) => {
         toggle.mutate({ taskId, completed });
       }}
