@@ -97,6 +97,13 @@ async def test_login_sets_the_session_cookie(app: FastAPI) -> None:
     assert me.json()["email"] == "ada@example.com"
 
 
+async def test_login_matches_the_email_in_any_letter_case(client: AsyncClient) -> None:
+    await register(client, email="ada@example.com")
+    response = await client.post(LOGIN, json={"email": "ADA@EXAMPLE.COM", "password": PASSWORD})
+    assert response.status_code == 200
+    assert response.json()["email"] == "ada@example.com"
+
+
 async def test_login_rejects_a_wrong_password_with_401(client: AsyncClient) -> None:
     await register(client)
     response = await client.post(LOGIN, json={"email": "ada@example.com", "password": "wrong horse battery"})
