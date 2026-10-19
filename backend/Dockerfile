@@ -16,10 +16,11 @@ RUN --mount=type=cache,target=/root/.cache/uv uv sync --locked --no-dev --no-edi
 FROM python:3.14.8-slim-trixie
 RUN groupadd --system --gid 10001 app && useradd --system --uid 10001 --gid app --no-create-home app
 WORKDIR /app
-COPY --from=build --chown=app:app /app/.venv /app/.venv
-COPY --chown=app:app app ./app
-COPY --chown=app:app alembic ./alembic
-COPY --chown=app:app alembic.ini ./
+# Root owns the code and its dependencies; the app user can read them but never change them, read-only filesystem or not.
+COPY --from=build /app/.venv /app/.venv
+COPY app ./app
+COPY alembic ./alembic
+COPY alembic.ini ./
 # The root filesystem is read-only at run time, so Python must not try to write .pyc files.
 ENV PATH="/app/.venv/bin:$PATH" PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 USER 10001
