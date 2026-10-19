@@ -122,8 +122,7 @@ export function TaskListView(props: TaskListViewProps) {
       {failure && (
         <div className={inset}>
           <Notice
-            tone="alert"
-            action={failure.onRetry && { label: "Try again", onAction: failure.onRetry }}
+            actions={failure.onRetry && [{ label: "Try again", onAction: failure.onRetry }]}
             onDismiss={props.onDismissFailure}
           >
             {failure.message}
@@ -165,7 +164,7 @@ function ListBody({
         <EmptyState
           tone="alert"
           title="Couldn't load your tasks"
-          action={
+          actions={
             <Button variant="primary" onClick={onRetry}>
               Try again
             </Button>
@@ -179,7 +178,7 @@ function ListBody({
         return (
           <EmptyState
             title={`No tasks match “${query.trim()}”`}
-            action={
+            actions={
               <Button
                 onClick={() => {
                   onQueryChange("");

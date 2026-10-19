@@ -27,6 +27,19 @@
   --color-focus: var(--color-gilt);
 }
 
+/* Ledger ruling under running text, one feint line per line of type, scrolling with the text. */
+@utility ruled {
+  line-height: var(--text-lead--line-height);
+  padding-block: var(--spacing-2);
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0 calc(var(--text-lead--line-height) - 1px),
+    var(--color-rule) calc(var(--text-lead--line-height) - 1px) var(--text-lead--line-height)
+  );
+  background-position: 0 var(--spacing-2);
+  background-attachment: local;
+}
+
 @layer base {
   body {
     background-color: var(--color-canvas);

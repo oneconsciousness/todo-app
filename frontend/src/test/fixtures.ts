@@ -1,4 +1,5 @@
 import { type Task, taskSchema } from "../lib/schema/task.ts";
+import type { TaskDetailViewProps } from "../views/task-detail-view.tsx";
 import type { TaskListViewProps } from "../views/task-list-view.tsx";
 
 /** The date every fixture is relative to: Monday 19 October 2026. */
@@ -60,6 +61,18 @@ export const tasks: readonly Task[] = listed([
   { title: "Pick up the dry cleaning", completed: true },
 ]);
 
+/** One task opened on its detail screen: several lines of notes, a due date, and edits behind it. */
+export const detailTask: Task = makeTask({
+  id: "00000000-0000-4000-8000-000000000003",
+  title: "Renew passport before the Lisbon trip",
+  notes:
+    "Photos are in the desk drawer. Check the fee first.\nThe form wants the old passport number, so dig that out too.\nPost office on Elm Street is open until 5:30.",
+  dueDate: "2026-10-24",
+  version: 3,
+  createdAt: "2026-10-12T08:30:00Z",
+  updatedAt: "2026-10-18T17:05:00Z",
+});
+
 /** A search term that matches two tasks, and those matches in rank order. */
 export const searchTerm = "budget";
 
@@ -87,5 +100,20 @@ export const taskListProps = (overrides: Partial<TaskListViewProps> = {}): TaskL
   onMove: ignore,
   onRetry: ignore,
   onDismissFailure: ignore,
+  ...overrides,
+});
+
+/** `TaskDetailView` props for `detailTask` at rest, with callbacks that do nothing. */
+export const taskDetailProps = (
+  overrides: Partial<TaskDetailViewProps> = {},
+): TaskDetailViewProps => ({
+  content: { status: "ready", task: detailTask },
+  today,
+  saving: false,
+  deleting: false,
+  failure: null,
+  onSave: ignore,
+  onToggle: ignore,
+  onDelete: ignore,
   ...overrides,
 });

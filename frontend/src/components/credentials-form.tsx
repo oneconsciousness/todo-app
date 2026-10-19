@@ -49,7 +49,7 @@ export function CredentialsForm({
 
   return (
     <form noValidate onSubmit={handleSubmit} className="flex flex-col gap-6">
-      {failure && <Notice tone="alert">{failure}</Notice>}
+      {failure && <Notice>{failure}</Notice>}
       <fieldset disabled={submitting} className="flex min-w-0 flex-col gap-4">
         <TextField
           label="Email"

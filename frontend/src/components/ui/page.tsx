@@ -2,8 +2,8 @@ import type { ReactNode } from "react";
 
 /** Props for `Page`. */
 export interface PageProps {
-  /** The id of the heading that names the page. */
-  readonly labelledBy: string;
+  /** The id of the heading that names the page; a placeholder page has none yet. */
+  readonly labelledBy?: string | undefined;
   readonly children: ReactNode;
 }
 

@@ -17,6 +17,7 @@ const glyphs = {
   check: <path d="m5.5 12.5 4.25 4.25L18.5 7.5" strokeWidth="2.25" />,
   plus: <path d="M12 5.5v13M5.5 12h13" />,
   close: <path d="m7 7 10 10M17 7 7 17" />,
+  back: <path d="M19 12H5m6-6-6 6 6 6" />,
   alert: (
     <>
       <circle cx="12" cy="12" r="8.25" />

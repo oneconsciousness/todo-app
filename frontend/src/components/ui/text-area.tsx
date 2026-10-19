@@ -13,7 +13,7 @@ export interface TextAreaProps extends Omit<ComponentProps<"textarea">, "id" | "
 export function TextArea({ label, hint, error, className, ...props }: TextAreaProps) {
   return (
     <Field label={label} hint={hint} error={error} className={className}>
-      {(control) => <textarea {...control} className={`${fieldClass} ruled resize-y`} {...props} />}
+      {(control) => <textarea {...control} className={`${fieldClass} resize-y ruled`} {...props} />}
     </Field>
   );
 }

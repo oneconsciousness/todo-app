@@ -42,6 +42,10 @@ export const longDate = (isoDate: string): string => long.format(toUtc(isoDate))
 const formatDate = (dueDate: string, today: string): string =>
   (dueDate.slice(0, 4) === today.slice(0, 4) ? sameYear : otherYear).format(toUtc(dueDate));
 
+/** The weekday and date of an ISO timestamp, such as when a task was entered or last changed. */
+export const formatDay = (isoDateTime: string, today: string): string =>
+  formatDate(isoDateTime.slice(0, 10), today);
+
 /** Describe a `YYYY-MM-DD` due date relative to today; a completed task is never overdue. */
 export const dueLabel = (dueDate: string, today: string, completed: boolean): DueLabel => {
   const days = daysBetween(today, dueDate);

@@ -1,11 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { dueLabel, longDate } from "./due-date.ts";
+import { dueLabel, formatDay, longDate } from "./due-date.ts";
 
 const today = "2026-10-19";
 
 describe("longDate", () => {
   it("spells out the weekday and date, the way a ledger page is headed", () => {
     expect(longDate(today)).toBe("Monday, October 19");
+  });
+});
+
+describe("formatDay", () => {
+  it("gives the weekday and date of a timestamp, as a ledger dates an entry", () => {
+    expect(formatDay("2026-10-12T08:30:00Z", today)).toBe("Mon, Oct 12");
   });
 });
 

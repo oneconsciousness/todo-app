@@ -26,5 +26,20 @@ export const taskSchema = z.object({
 /** One task, typed from its schema. */
 export type Task = z.infer<typeof taskSchema>;
 
+/** The task edit form: title, notes, and a due date field that is empty when there is none. */
+export const taskDraftSchema = z.object({
+  title: titleSchema,
+  notes: notesSchema,
+  dueDate: z
+    .union([z.literal(""), z.iso.date("Pick a date from the calendar.")])
+    .transform((date) => (date === "" ? null : date)),
+});
+
+/** The edit form's values as the fields hold them. */
+export type TaskDraft = z.input<typeof taskDraftSchema>;
+
+/** The edit form's values once validated, ready to compare with the task. */
+export type TaskEdit = z.output<typeof taskDraftSchema>;
+
 /** The list envelope `{"items": [...]}` that `GET /api/v1/tasks` returns. */
 export const taskListSchema = z.object({ items: z.array(taskSchema) });

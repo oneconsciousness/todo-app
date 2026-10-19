@@ -5,28 +5,32 @@ import { Notice } from "./notice.tsx";
 
 describe("Notice", () => {
   it("announces an alert with its message", () => {
-    render(<Notice tone="alert">Couldn't move the task.</Notice>);
+    render(<Notice>Couldn't move the task.</Notice>);
     expect(screen.getByRole("alert")).toHaveTextContent("Couldn't move the task.");
   });
 
-  it("runs its action", async () => {
-    const onAction = vi.fn();
+  it("runs each of its actions", async () => {
+    const useLatest = vi.fn();
+    const keepEdits = vi.fn();
     render(
-      <Notice tone="alert" action={{ label: "Try again", onAction }}>
-        Couldn't add the task.
+      <Notice
+        actions={[
+          { label: "Use the latest", onAction: useLatest },
+          { label: "Keep my edits", onAction: keepEdits },
+        ]}
+      >
+        Changed elsewhere.
       </Notice>,
     );
-    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
-    expect(onAction).toHaveBeenCalledOnce();
+    await userEvent.click(screen.getByRole("button", { name: "Use the latest" }));
+    await userEvent.click(screen.getByRole("button", { name: "Keep my edits" }));
+    expect(useLatest).toHaveBeenCalledOnce();
+    expect(keepEdits).toHaveBeenCalledOnce();
   });
 
   it("can be dismissed", async () => {
     const onDismiss = vi.fn();
-    render(
-      <Notice tone="alert" onDismiss={onDismiss}>
-        Couldn't add the task.
-      </Notice>,
-    );
+    render(<Notice onDismiss={onDismiss}>Couldn't add the task.</Notice>);
     await userEvent.click(screen.getByRole("button", { name: "Dismiss" }));
     expect(onDismiss).toHaveBeenCalledOnce();
   });

@@ -22,7 +22,8 @@ export const ledgerColumns = (reorderable: boolean): string =>
 /** The ruling between ledger lines. */
 export const ledgerRuleClass = "border-b border-rule last:border-b-0";
 
-const dueTones: Readonly<Record<DueTone, string>> = {
+/** The colour and weight of a due date in each tone, shared by the list and the detail screen. */
+export const dueToneClass: Readonly<Record<DueTone, string>> = {
   alert: "font-medium text-alert",
   emphasis: "font-medium text-ink",
   quiet: "text-ink-muted",
@@ -105,7 +106,7 @@ export function TaskRow({ task, today, handle, onToggle }: TaskRowProps) {
       }
       due={
         due && (
-          <time dateTime={task.dueDate ?? undefined} className={dueTones[due.tone]}>
+          <time dateTime={task.dueDate ?? undefined} className={dueToneClass[due.tone]}>
             {due.text}
           </time>
         )
