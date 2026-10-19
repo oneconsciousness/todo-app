@@ -8,7 +8,7 @@ import pytest
 from argon2 import PasswordHasher
 from fastapi import FastAPI
 from httpx import AsyncClient, Response
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.config import Settings
@@ -164,6 +164,15 @@ async def test_me_returns_the_signed_in_user(client: AsyncClient) -> None:
 
 
 async def test_me_without_a_session_returns_401(client: AsyncClient) -> None:
+    response = await client.get(ME)
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == "not_authenticated"
+
+
+async def test_me_for_a_deleted_account_returns_401(client: AsyncClient, database_engine: AsyncEngine) -> None:
+    user_id = UUID((await register(client)).json()["id"])
+    async with database_engine.begin() as connection:
+        await connection.execute(delete(User).where(User.id == user_id))
     response = await client.get(ME)
     assert response.status_code == 401
     assert response.json()["error"]["code"] == "not_authenticated"
