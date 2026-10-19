@@ -46,6 +46,22 @@ describe("apiRequest", () => {
     });
   });
 
+  it("keeps the code and message of the API's fallback for other HTTP errors", async () => {
+    server.use(
+      http.get("/api/v1/tasks", () =>
+        HttpResponse.json(
+          { error: { code: "http_error", message: "Request header too large.", details: [] } },
+          { status: 431 },
+        ),
+      ),
+    );
+    await expect(apiRequest("/tasks", { schema: taskListSchema })).rejects.toMatchObject({
+      status: 431,
+      code: ApiErrorCode.HttpError,
+      message: "Request header too large.",
+    });
+  });
+
   it("turns a plain-text 503 into service_unavailable", async () => {
     server.use(
       http.get("/api/v1/tasks", () => new HttpResponse("Service Unavailable", { status: 503 })),

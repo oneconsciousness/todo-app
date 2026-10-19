@@ -14,6 +14,8 @@ export const ServerErrorCode = {
   VersionMismatch: "version_mismatch",
   ServiceUnavailable: "service_unavailable",
   InternalError: "internal_error",
+  /** Any other HTTP error the API's router raises, with the status it raised. */
+  HttpError: "http_error",
 } as const;
 
 /** One problem with one field of a request; `field` is null when the problem is with the request as a whole. */
