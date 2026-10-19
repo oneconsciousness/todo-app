@@ -17,6 +17,8 @@ const API = `${BASE_URL}/api/v1`;
 const SEED_WORDS = ["milk", "report", "dentist", "garden", "invoice"];
 const SETUP_BATCH = 50;
 
+const ONE_TASK = { name: `${API}/tasks/{id}` };
+
 const serverErrors = new Counter("server_errors");
 
 export const options = {
@@ -50,7 +52,9 @@ export const options = {
 /** Request params: the app's origin (the API refuses writes from any other), JSON, and the request's kind for the budgets. */
 const params = (kind, extra = {}) => ({
   headers: { Origin: APP_ORIGIN, "Content-Type": "application/json", ...(extra.headers || {}) },
-  tags: { kind },
+  // One name for every task's URL, or each task id becomes its own metric series:
+  // https://grafana.com/docs/k6/latest/using-k6/tags-and-groups/#url-grouping
+  tags: { kind, ...(extra.name ? { name: extra.name } : {}) },
   ...(extra.cookies ? { cookies: extra.cookies } : {}),
 });
 
@@ -125,23 +129,35 @@ export default function journey(data) {
   const task = `${API}/tasks/${taskId}`;
   sleep(1);
 
-  const toggle = http.patch(task, JSON.stringify({ completed: true }), params("write"));
+  const toggle = http.patch(task, JSON.stringify({ completed: true }), params("write", ONE_TASK));
   expectStatus(toggle, 200, "toggle");
   sleep(1);
 
   const others = list.status === 200 ? list.json("items").filter((item) => item.id !== taskId) : [];
   if (others.length > 0) {
     const after = pick(others).id;
-    expectStatus(http.put(`${task}/position`, JSON.stringify({ afterId: after }), params("write")), 200, "move");
+    expectStatus(
+      http.put(
+        `${task}/position`,
+        JSON.stringify({ afterId: after }),
+        params("write", { name: `${API}/tasks/{id}/position` }),
+      ),
+      200,
+      "move",
+    );
     sleep(1);
   }
 
   // The toggle's ETag still names the current version: a move leaves the version alone.
   const ifMatch = { headers: { "If-Match": toggle.headers.Etag } };
-  expectStatus(http.patch(task, JSON.stringify({ notes: "edited under load" }), params("write", ifMatch)), 200, "edit");
+  expectStatus(
+    http.patch(task, JSON.stringify({ notes: "edited under load" }), params("write", { ...ONE_TASK, ...ifMatch })),
+    200,
+    "edit",
+  );
   sleep(1);
 
-  expectStatus(http.del(task, null, params("write")), 204, "delete");
+  expectStatus(http.del(task, null, params("write", ONE_TASK)), 204, "delete");
   sleep(1);
 }
 
