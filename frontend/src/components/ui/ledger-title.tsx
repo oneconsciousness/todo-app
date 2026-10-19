@@ -1,6 +1,6 @@
 const sizes = {
   band: "border-y-3 py-1 text-lead",
-  cover: "border-y-4 py-3 text-display",
+  cover: "border-y-4 py-3 text-display @wide:text-cover",
 } as const;
 
 /** Props for `LedgerTitle`. */

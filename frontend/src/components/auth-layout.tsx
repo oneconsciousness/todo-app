@@ -15,9 +15,9 @@ export interface AuthLayoutProps {
 export function AuthLayout({ title, children, footer }: AuthLayoutProps) {
   const headingId = useId();
   return (
-    <div className="@container min-h-dvh bg-binding text-on-binding">
-      <div className="mx-auto grid max-w-book gap-6 px-4 py-8 @wide:grid-cols-2 @wide:items-stretch @wide:gap-12 @wide:px-8 @wide:py-16">
-        <div className="flex flex-col items-center justify-center gap-6 border-3 border-double border-gilt/60 px-6 py-12 text-center @wide:py-16">
+    <div className="@container flex min-h-dvh items-center bg-binding text-on-binding">
+      <div className="mx-auto grid w-full max-w-book gap-6 px-4 py-6 @wide:grid-cols-2 @wide:gap-12 @wide:px-8 @wide:py-16">
+        <div className="flex flex-col items-center justify-center gap-4 border-3 border-double border-gilt/60 px-6 py-8 text-center @wide:aspect-3/4 @wide:gap-6 @wide:py-16">
           <LedgerTitle size="cover" />
           <span aria-hidden="true" className="h-px w-12 bg-gilt/60" />
           <p className="text-caption font-medium tracking-caps uppercase">

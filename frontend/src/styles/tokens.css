@@ -38,6 +38,8 @@
   --text-title--line-height: 1.875rem;
   --text-display: 2.0625rem;
   --text-display--line-height: 2.5rem;
+  --text-cover: 3rem;
+  --text-cover--line-height: 3.5rem;
 
   /* Space: a 4px grid. Steps off this list do not exist as utilities. */
   --spacing-0: 0;
