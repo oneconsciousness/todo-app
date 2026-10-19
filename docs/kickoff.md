@@ -209,6 +209,18 @@ What it settled: CP1 passed with the lead present (2026-10-19). The five race te
 
 What it settled: G3 is passed for PR E's deployment files (2026-10-19). (1) The API image pins plain `uvicorn` with `uvloop` and `httptools`, not `uvicorn[standard]`. (2) Both build contexts exclude env files. (3) nginx declares the security headers once with `add_header_inherit merge` instead of repeating them per location; the docs page's CSP is picked by path, since merge would otherwise send two CSPs. (4) nginx sets `worker_rlimit_nofile 8192`. (5) No CPU or memory limits in round 1; the machine's spec is recorded with the capacity figure, and limits arrive with k3d. (6) `/api/docs` keeps Swagger UI from jsDelivr for local round 1; self-hosting or disabling it is in `FUTURE.md`. (7) uvicorn's access logger is kept out of the JSON log, so each request writes one access line and healthchecks write none.
 
+## 5h. Browser journeys, CI and load (CP2, CP3, verbatim)
+
+> G3 approved for e2e job, go with CP2
+>
+> CP2 approved, go with the smoke run
+>
+> good to go with CP3!
+>
+> this is good enough for now. we're not here to test my mac's limits for this app tbh. let's move on. good work so far!
+
+What it settled: the CI `e2e` job passed G3, and CP2 approved the k6 journey, budgets and stepped plan (2026-10-19). CP3 ran with the lead present: the 200-user run and every step to 1,000 users met all budgets with no failed request. The round-1 capacity figure is **at least 1,000 concurrent users**, the highest step tested, on the machine recorded in `load/results/`; the lead chose not to push past it to find the ceiling. Results and their reading are in `load/results/round-1.md`.
+
 ## 6. Before submission
 
 - [ ] Share the spec artifact, and the design artifact, so the reviewers can open them; put the links in the final report.
