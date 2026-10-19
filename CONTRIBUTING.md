@@ -394,6 +394,8 @@ Use the § 8.2 shape with the rule reference `CONTRIBUTING.md § 12 (Secrets dis
 
 **What makes a leak cheap if one happens:** in round 1, `.env` holds only local development values (the same kind `.env.example` documents). Real secrets for rounds 2 and 3 live in Kubernetes Secrets and Azure Key Vault, never in a file in the repo.
 
+**The allow list is the real boundary.** A command on the `allow` list in `.claude/settings.json` runs with no prompt, so a gap there is a gap with nobody watching. Every allow rule is written for the narrowest form that everyday work needs (`uv run ruff check .`, not `uv run ruff *`; `kubectl get pods*`, not `kubectl get *`), and the hooks refuse the flags that widen an allowed command's reach: `git diff --no-index`, `git diff`/`log`/`show --output`, `ruff --no-respect-gitignore` or a `--config` that changes what it includes, and `kubectl get secret`. When a rule is added to the allow list, check each of its flags for one that reads more files, writes a file, or prints a Secret, and add a deny test for it.
+
 The hook tests (`.claude/hooks/tests/`) pin every bypass a review has found, as a deny case, and every false positive, as an allow case. A new bypass becomes a new test first.
 
 ---
