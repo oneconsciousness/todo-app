@@ -191,6 +191,9 @@ const moveIn = (items: readonly Task[], { taskId, afterId }: MoveVariables) =>
  * made them: they share one mutation scope ([mutation scopes](https://tanstack.com/query/v5/docs/framework/react/guides/mutations#mutation-scopes)).
  * The lists reload only after the last queued move, so a refetch never lands between two of them
  * ([concurrent optimistic updates](https://tkdodo.eu/blog/concurrent-optimistic-updates-in-react-query)).
+ *
+ * A failed move puts the lists back as they were just before it, which also takes moves queued after it off the
+ * screen for a moment; the reload after the last move then shows the order the server ended with.
  */
 export const useMoveTask = () => {
   const client = useQueryClient();
