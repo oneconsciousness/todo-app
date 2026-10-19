@@ -1,0 +1,95 @@
+/* Design tokens, drawn from a bookkeeper's ledger: the open page in light, the cloth binding in dark. */
+@theme static {
+  --*: initial;
+
+  /* Colour: each token holds its light and dark value; the root's color-scheme picks one. */
+  --color-canvas: light-dark(#e3e9d8, #0e1c16);
+  --color-sheet: light-dark(#f3f6ec, #152820);
+  --color-ink: light-dark(#1b2333, #e4ead9);
+  --color-ink-muted: light-dark(#4a5467, #a2b2a3);
+  --color-rule: light-dark(#b7c6d0, #2b4337);
+  --color-rule-strong: light-dark(#71889a, #62806f);
+  --color-margin: light-dark(#c8464a, #c4554f);
+  --color-alert: light-dark(#a8322d, #ee8b80);
+  --color-primary: light-dark(#1e4d3b, #d4b263);
+  --color-primary-strong: light-dark(#163a2c, #e5c87f);
+  --color-on-primary: light-dark(#f3f6ec, #13231b);
+  --color-focus: light-dark(#86651b, #edd08a);
+  --color-shade: light-dark(#1b233324, #00000080);
+
+  /* Type: Besley for display, Libre Franklin for everything read at length. */
+  --font-display: "Besley Variable", Georgia, "Times New Roman", serif;
+  --font-body: "Libre Franklin Variable", "Helvetica Neue", Arial, sans-serif;
+  --default-font-family: var(--font-body);
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --tracking-caps: 0.08em;
+  --text-caption: 0.8125rem;
+  --text-caption--line-height: 1.25rem;
+  --text-body: 1rem;
+  --text-body--line-height: 1.5rem;
+  --text-lead: 1.1875rem;
+  --text-lead--line-height: 1.75rem;
+  --text-title: 1.4375rem;
+  --text-title--line-height: 1.875rem;
+  --text-display: 2.0625rem;
+  --text-display--line-height: 2.5rem;
+
+  /* Space: a 4px grid. Steps off this list do not exist as utilities. */
+  --spacing-0: 0;
+  --spacing-1: 0.25rem;
+  --spacing-2: 0.5rem;
+  --spacing-3: 0.75rem;
+  --spacing-4: 1rem;
+  --spacing-6: 1.5rem;
+  --spacing-8: 2rem;
+  --spacing-12: 3rem;
+  --spacing-16: 4rem;
+  --spacing-touch: 2.75rem;
+
+  /* Layout widths: the reading column, and the width at which a row splits into ledger columns. */
+  --container-measure: 46rem;
+  --container-wide: 36rem;
+
+  /* Shape and depth, by role. */
+  --radius-control: 0.125rem;
+  --radius-sheet: 0.25rem;
+  --shadow-sheet: 0 1px 1px var(--color-shade), 0 8px 24px -12px var(--color-shade);
+  --shadow-lifted: 0 2px 4px var(--color-shade), 0 18px 36px -12px var(--color-shade);
+
+  /* Motion: short and calm; reduced motion sets both durations to zero. */
+  --duration-quick: 120ms;
+  --duration-base: 220ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --default-transition-duration: var(--duration-quick);
+  --default-transition-timing-function: var(--ease-standard);
+  --animate-shimmer: shimmer 1.4s var(--ease-standard) infinite;
+
+  @keyframes shimmer {
+    50% {
+      opacity: 0.45;
+    }
+  }
+}
+
+:root {
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-quick: 0ms;
+    --duration-base: 0ms;
+  }
+}

@@ -8,6 +8,7 @@ export default mergeConfig(
     test: {
       environment: "jsdom",
       setupFiles: ["src/test/setup.ts"],
+      css: { include: [/tokens\.css/] },
       include: ["src/**/*.test.{ts,tsx}", "design/**/*.test.{ts,tsx}"],
       coverage: {
         provider: "v8",
