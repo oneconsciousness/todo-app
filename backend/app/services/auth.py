@@ -5,16 +5,15 @@ from uuid import UUID, uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.schemas import Credentials
 from app.db.users import find_user_by_email, get_user, insert_user
 from app.domain.errors import InvalidCredentials, NotAuthenticated
-from app.domain.types import UserRecord
+from app.domain.types import AccountCredentials, UserRecord
 from app.security.passwords import Hasher
 
 log = logging.getLogger(__name__)
 
 
-async def register(session: AsyncSession, hasher: Hasher, credentials: Credentials) -> UserRecord:
+async def register(session: AsyncSession, hasher: Hasher, credentials: AccountCredentials) -> UserRecord:
     """Create an account.
 
     The password is hashed before the transaction opens, so no pooled connection waits on a hash.
@@ -27,7 +26,7 @@ async def register(session: AsyncSession, hasher: Hasher, credentials: Credentia
         return await insert_user(session, uuid4(), credentials.email, password_hash)
 
 
-async def authenticate(session: AsyncSession, hasher: Hasher, credentials: Credentials) -> UserRecord:
+async def authenticate(session: AsyncSession, hasher: Hasher, credentials: AccountCredentials) -> UserRecord:
     """Return the user whose email and password match.
 
     The lookup's transaction ends before the hash check, so the connection is back in the pool

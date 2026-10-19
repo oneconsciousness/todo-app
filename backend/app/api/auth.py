@@ -40,7 +40,7 @@ async def register(
     credentials: Credentials, response: Response, session: SessionDep, hasher: HasherDep, settings: SettingsDep
 ) -> UserRead:
     """Create an account and sign it in."""
-    user = await auth_service.register(session, hasher, credentials)
+    user = await auth_service.register(session, hasher, credentials.to_domain())
     set_session_cookie(response, user.id, settings)
     response.headers["Location"] = "/api/v1/auth/me"
     return UserRead.model_validate(user, from_attributes=True)
@@ -51,7 +51,7 @@ async def login(
     credentials: Credentials, response: Response, session: SessionDep, hasher: HasherDep, settings: SettingsDep
 ) -> UserRead:
     """Sign in with email and password."""
-    user = await auth_service.authenticate(session, hasher, credentials)
+    user = await auth_service.authenticate(session, hasher, credentials.to_domain())
     set_session_cookie(response, user.id, settings)
     return UserRead.model_validate(user, from_attributes=True)
 

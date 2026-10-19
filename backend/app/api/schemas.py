@@ -6,6 +6,8 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, EmailStr, StringConstraints
 from pydantic.alias_generators import to_camel
 
+from app.domain.types import AccountCredentials
+
 
 class WireModel(BaseModel):
     """Base for every body: camelCase names on the wire, snake_case in Python, immutable once built."""
@@ -33,6 +35,10 @@ class Credentials(RequestModel):
 
     email: EmailStr
     password: Password
+
+    def to_domain(self) -> AccountCredentials:
+        """Return the validated values as the auth service takes them."""
+        return AccountCredentials(email=self.email, password=self.password)
 
 
 class UserRead(WireModel):

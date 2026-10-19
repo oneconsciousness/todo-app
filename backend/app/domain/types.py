@@ -1,6 +1,6 @@
 """Values that flow through the domain core."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime
 from enum import Enum, auto
 from typing import TypedDict
@@ -32,6 +32,14 @@ class TaskChanges(TypedDict, total=False):
     notes: str
     completed: bool
     due_date: date | None
+
+
+@dataclass(frozen=True)
+class AccountCredentials:
+    """An already validated email and password, as the auth service takes them; the password stays out of repr."""
+
+    email: str
+    password: str = field(repr=False)
 
 
 class UserRecord(BaseModel):
