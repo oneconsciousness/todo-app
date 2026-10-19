@@ -4,7 +4,16 @@ from datetime import date, datetime
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, EmailStr, StrictBool, StringConstraints, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    EmailStr,
+    StrictBool,
+    StringConstraints,
+    TypeAdapter,
+    WithJsonSchema,
+    field_validator,
+)
 from pydantic.alias_generators import to_camel
 
 from app.domain.types import AccountCredentials, NewTask, TaskPatch
@@ -66,6 +75,11 @@ class TaskCreate(RequestModel):
         return NewTask(title=self.title, notes=self.notes, due_date=self.due_date)
 
 
+def published_as(kind: object) -> WithJsonSchema:
+    """Publish a field with `kind`'s own JSON schema, leaving how it validates unchanged."""
+    return WithJsonSchema(TypeAdapter(kind).json_schema())
+
+
 class TaskUpdate(RequestModel):
     """The fields to change on a task; any left out stay as they are.
 
@@ -73,9 +87,10 @@ class TaskUpdate(RequestModel):
     such as "true" is a client bug, so it fails validation instead of being coerced.
     """
 
-    title: Title | None = None
-    notes: Notes | None = None
-    completed: StrictBool | None = None
+    # None only marks a field as left out; a sent null is refused, so the published schema leaves null out.
+    title: Annotated[Title | None, published_as(Title)] = None
+    notes: Annotated[Notes | None, published_as(Notes)] = None
+    completed: Annotated[StrictBool | None, published_as(StrictBool)] = None
     due_date: date | None = None
 
     @field_validator("title", "notes", "completed", mode="before")
