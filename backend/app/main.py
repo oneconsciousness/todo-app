@@ -22,7 +22,7 @@ log = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Create the pool, the session factory and the hasher on start-up; close the pool and flush the logs on shutdown.
+    """Create the pool, the session factory and the hasher on start-up; close the pool and flush logs on shutdown.
 
     The engine opens no connection here, so a database that is down fails `/readyz`, not start-up.
     """
@@ -31,7 +31,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     engine = create_engine(settings)
     app.state.engine = engine
     app.state.sessionmaker = create_sessionmaker(engine)
-    app.state.hasher = Hasher.owasp(concurrency=HASH_CONCURRENCY)
+    app.state.hasher = await Hasher.owasp(concurrency=HASH_CONCURRENCY)
     log.info("api ready", extra={"served_by": socket.gethostname()})
     try:
         yield

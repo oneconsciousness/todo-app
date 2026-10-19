@@ -42,30 +42,31 @@ class BlockingHasher(PasswordHasher):
 
 
 async def test_hash_verifies_the_same_password() -> None:
-    hasher = Hasher.owasp(concurrency=4)
+    hasher = await Hasher.owasp(concurrency=4)
     assert await hasher.verify(await hasher.hash(PASSWORD), PASSWORD)
 
 
 async def test_hash_rejects_another_password() -> None:
-    hasher = Hasher.owasp(concurrency=4)
+    hasher = await Hasher.owasp(concurrency=4)
     assert not await hasher.verify(await hasher.hash(PASSWORD), "wrong horse battery")
 
 
 async def test_hasher_uses_owasp_parameters() -> None:
-    password_hash = await Hasher.owasp(concurrency=4).hash(PASSWORD)
+    hasher = await Hasher.owasp(concurrency=4)
+    password_hash = await hasher.hash(PASSWORD)
     assert password_hash.startswith("$argon2id$v=19$m=19456,t=2,p=1$")
 
 
 async def test_hashing_runs_off_the_event_loop_thread() -> None:
     recorder = ThreadRecordingHasher()
-    await dataclasses.replace(Hasher.owasp(concurrency=4), hasher=recorder).hash(PASSWORD)
+    await dataclasses.replace(await Hasher.owasp(concurrency=4), hasher=recorder).hash(PASSWORD)
     assert recorder.threads
     assert threading.get_ident() not in recorder.threads
 
 
 async def test_hashing_never_runs_more_than_four_at_once() -> None:
     blocking = BlockingHasher()
-    hasher = dataclasses.replace(Hasher.owasp(concurrency=4), hasher=blocking)
+    hasher = dataclasses.replace(await Hasher.owasp(concurrency=4), hasher=blocking)
     async with asyncio.timeout(5), asyncio.TaskGroup() as group:
         for _ in range(10):
             group.create_task(hasher.hash(PASSWORD))

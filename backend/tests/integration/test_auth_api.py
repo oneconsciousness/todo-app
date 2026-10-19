@@ -1,8 +1,11 @@
+import dataclasses
 from datetime import UTC, datetime, timedelta
 from http.cookies import SimpleCookie
+from typing import Literal
 from uuid import UUID
 
 import pytest
+from argon2 import PasswordHasher
 from fastapi import FastAPI
 from httpx import AsyncClient, Response
 from sqlalchemy import select
@@ -106,6 +109,30 @@ async def test_login_gives_unknown_email_the_same_401_as_a_wrong_password(client
     wrong_password = await client.post(LOGIN, json={"email": "ada@example.com", "password": "wrong horse battery"})
     unknown_email = await client.post(LOGIN, json={"email": "nobody@example.com", "password": PASSWORD})
     assert (unknown_email.status_code, unknown_email.json()) == (wrong_password.status_code, wrong_password.json())
+
+
+class CountingPasswordHasher(PasswordHasher):
+    """argon2 at the library boundary, counting how many hashes it checks."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.verifications = 0
+
+    def verify(self, hash: str | bytes, password: str | bytes) -> Literal[True]:
+        self.verifications += 1
+        return super().verify(hash, password)
+
+
+async def test_login_checks_one_hash_whether_the_email_is_unknown_or_the_password_wrong(
+    app: FastAPI, client: AsyncClient
+) -> None:
+    await register(client)
+    counting = CountingPasswordHasher()
+    app.state.hasher = dataclasses.replace(app.state.hasher, hasher=counting)
+    await client.post(LOGIN, json={"email": "nobody@example.com", "password": PASSWORD})
+    after_unknown_email = counting.verifications
+    await client.post(LOGIN, json={"email": "ada@example.com", "password": "wrong horse battery"})
+    assert (after_unknown_email, counting.verifications) == (1, 2)
 
 
 async def test_login_rejects_a_malformed_body_with_400(client: AsyncClient) -> None:

@@ -1,7 +1,6 @@
 """Sign-up, sign-in and the current user. Each use case opens its one transaction itself."""
 
 import logging
-from typing import Final
 from uuid import UUID, uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,10 +12,6 @@ from app.domain.types import UserRecord
 from app.security.passwords import Hasher
 
 log = logging.getLogger(__name__)
-
-# The hash of a random value nobody knows. Checking a password against it for an unknown email
-# costs the same as a real check, so response time does not reveal which emails have accounts.
-DUMMY_HASH: Final = "$argon2id$v=19$m=19456,t=2,p=1$COS/m1E55HOrmFZrv2XgLA$DLIezVqc3Aa8H/vWqPfm8NRDDhwrcNfJQ0+hLyYKG7I"
 
 
 async def register(session: AsyncSession, hasher: Hasher, credentials: Credentials) -> UserRecord:
@@ -44,7 +39,7 @@ async def authenticate(session: AsyncSession, hasher: Hasher, credentials: Crede
     async with session.begin():
         user = await find_user_by_email(session, credentials.email)
     if user is None:
-        await hasher.verify(DUMMY_HASH, credentials.password)
+        await hasher.verify_without_an_account(credentials.password)
         log.warning("sign-in refused", extra={"where": "app.services.auth.authenticate", "reason": "unknown_email"})
         raise InvalidCredentials
     if not await hasher.verify(user.password_hash, credentials.password):
