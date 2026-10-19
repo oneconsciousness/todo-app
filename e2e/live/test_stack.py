@@ -42,3 +42,13 @@ def test_api_docs_are_served_through_the_proxy(client: httpx.Client) -> None:
 
     assert (page.status_code, page.headers["content-type"].split(";")[0]) == (200, "text/html")
     assert (document.status_code, document.json()["info"]["title"]) == (200, "todo-app API")
+
+
+def test_session_from_one_replica_is_accepted_by_the_other(client: httpx.Client) -> None:
+    client.post("/api/v1/auth/register", json={"email": unique_email(), "password": PASSWORD})
+
+    # nginx spreads requests over the replicas, so a few dozen calls reach both.
+    answers = [client.get("/api/v1/auth/me") for _ in range(40)]
+
+    assert {answer.status_code for answer in answers} == {200}
+    assert len({answer.headers["x-served-by"] for answer in answers}) == 2
