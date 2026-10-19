@@ -107,7 +107,7 @@ footer { color: var(--muted); font-size: 0.88rem; border-top: 1px solid var(--li
     <span class="eyebrow">todo-app · spec · revision 3 · signed off</span>
     <h1>Round 1: the app, running in containers</h1>
     <p class="lede">The high-level choices for the To Do app and how the pieces fit, before the detailed coding plan is written. Each choice names what it beat and what it costs. Every decision is now <span class="pill pill-locked">locked</span>: revision 1 settled the product choices, and revision 2 added how the API behaves when many people use it at once. Revision 3 records the lead's sign-off and notes.</p>
-    <div class="meta"><span>2026-10-19 · revision 3.1</span><span>Lives at <code>docs/specs/round-1.html</code></span><span>Builds on <code>docs/kickoff.md</code></span><span>Later ideas: <code>FUTURE.md</code></span></div>
+    <div class="meta"><span>2026-10-19 · revision 3.2</span><span>Lives at <code>docs/specs/round-1.html</code></span><span>Builds on <code>docs/kickoff.md</code></span><span>Later ideas: <code>FUTURE.md</code></span></div>
     <div class="rounds" aria-label="The three rounds">
       <div class="now"><span class="eyebrow">Round 1 · this spec</span><b>Containers</b><span><code>docker compose up</code> on a Mac. Every suite green.</span></div>
       <div><span class="eyebrow">Round 2</span><b>Local k3d</b><span>Same images, Kubernetes manifests, three API replicas.</span></div>
@@ -148,7 +148,7 @@ footer { color: var(--muted); font-size: 0.88rem; border-top: 1px solid var(--li
           <text x="553" y="216" text-anchor="middle" class="t-muted">FastAPI · uvicorn</text>
 
           <rect class="box" x="714" y="120" width="150" height="70" rx="8"/>
-          <text x="789" y="150" text-anchor="middle" class="t-strong">db · Postgres 17</text>
+          <text x="789" y="150" text-anchor="middle" class="t-strong">db · Postgres 18</text>
           <text x="789" y="170" text-anchor="middle" class="t-muted">volume: pgdata</text>
 
           <rect class="box-dashed" x="472" y="282" width="162" height="58" rx="8"/>
@@ -193,7 +193,7 @@ footer { color: var(--muted); font-size: 0.88rem; border-top: 1px solid var(--li
       <div class="decision"><div class="id">D1</div><div class="body">
         <div class="title-row"><h3>Stack</h3><span class="pill pill-locked">locked</span></div>
         <dl>
-          <dt>Choice</dt><dd>Backend: Python 3.13, FastAPI, Pydantic v2, SQLAlchemy 2 async with asyncpg, alembic, uv, ruff, mypy strict. Frontend: React 19, Vite, TypeScript strict, React Router, TanStack Query 5, Zod, Tailwind 4, dnd-kit, ESLint and Prettier, npm.</dd>
+          <dt>Choice</dt><dd>Backend: Python 3.14, FastAPI, Pydantic v2, SQLAlchemy 2 async with asyncpg, alembic, uv, ruff, mypy strict. Frontend: React 19, Vite, TypeScript strict, React Router, TanStack Query 5, Zod, Tailwind 4, dnd-kit, ESLint and Prettier, npm.</dd>
           <dt>Instead of</dt><dd>Node and Express, which the brief gives as an example.</dd>
           <dt>Why</dt><dd>Typed models at every boundary on both sides, native async, and an OpenAPI document for free. TanStack Query is the high-level async layer the brief asks for on the frontend.</dd>
         </dl>
@@ -202,7 +202,7 @@ footer { color: var(--muted); font-size: 0.88rem; border-top: 1px solid var(--li
       <div class="decision"><div class="id">D2</div><div class="body">
         <div class="title-row"><h3>Storage is PostgreSQL from day one</h3><span class="pill pill-locked">locked</span></div>
         <dl>
-          <dt>Choice</dt><dd>Postgres 17 in a container with a named volume. The same engine runs as a StatefulSet in round 2 and as Azure Database for PostgreSQL in round 3.</dd>
+          <dt>Choice</dt><dd>Postgres 18 in a container with a named volume. The same engine runs as a StatefulSet in round 2 and as Azure Database for PostgreSQL in round 3.</dd>
           <dt>Instead of</dt><dd>In-memory or file storage, or SQLite.</dd>
           <dt>Why</dt><dd>Several replicas must share one store, and transactions plus constraints keep reorder and ownership correct. Integration tests run on the same engine as production, so they test what ships.</dd>
         </dl>
@@ -696,7 +696,7 @@ footer { color: var(--muted); font-size: 0.88rem; border-top: 1px solid var(--li
       <li><b>In parallel:</b> the detailed coding plan (<code>docs/plans/round-1.md</code>), and a design artifact showing the tokens and every screen in every state.</li>
       <li><b>Gate:</b> you review the design tokens and the screens. Changes go into the tokens and components, and the artifact is republished.</li>
       <li><b>Gate:</b> the walkthrough of the coding instructions, with code, comment-style and type-checking samples.</li>
-      <li><b>PRs, each reviewed by you after the card:</b> skeleton, spec and plan, backend API, frontend (connecting the reviewed screens to real data), then containers with the live, browser and load tests.</li>
+      <li><b>PRs, each reviewed by you:</b> one draft parent PR for the round (<code>round/1-containers</code> → <code>main</code>), and child PRs into the round branch: skeleton, spec, plan, design system, backend foundation, backend tasks, frontend data layer, then containers with the live, browser and load tests. The parent merges only when the round is done and tested.</li>
       <li><b>Gate:</b> round 1 is done (below), then round 2.</li>
     </ol>
     <div class="decisions">
@@ -779,6 +779,7 @@ footer { color: var(--muted); font-size: 0.88rem; border-top: 1px solid var(--li
       <li><b>D17:</b> a tab refreshes when the user comes back to it. Kept as the first layer, with the version check as the guarantee.</li>
       <li><b>Design:</b> a stellar look, a premium feel, vintage colours and zero redundancy.</li>
     </ul>
+    <p class="prose"><b>Revision 3.2</b> (the plan's version research, locked by the lead): Python 3.14 replaces 3.13 in D1, since 3.13 is now security-only and every compiled dependency ships 3.14 builds; Postgres 18 replaces 17 in D2, for its longer support window and Azure availability with both extensions we use. The work is delivered as one parent PR per round with child PRs into the round branch.</p>
     <p class="prose"><b>Errata, revision 3.1</b> (from the coding plan's open questions, locked by the lead): the move body is <code>afterId</code>, camelCase like every other field (Q-1); and a 503 carries the error envelope only when the API sends it, since uvicorn's own overload reply is plain text (Q-2).</p>
     <p class="prose">The detailed coding plan is at <code>docs/plans/round-1.md</code>.</p>
   </section>

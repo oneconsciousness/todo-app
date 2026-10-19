@@ -161,9 +161,31 @@ What it settled:
 
 Signed off 2026-10-19 10:52 EDT, on the design artifact built from `feature/web-design-system` (the bookkeeper's ledger direction). One polish fix (a balanced cover subtitle) follows before its PR.
 
+## 5d. Version decisions, PR model and the go (verbatim)
+
+> Q-14: Agreed, anyways, our final deployment is going to be containerized, so it doesn't worry me given that you've already proven that all dependency ships for this version.
+> Q-15: Agreed.
+> Q-16: Agreed. Solid reasoning!
+> Q-17: Agreed.
+> Q-18: Ok
+>
+> On the todo list and plan, one thought on the PR structuring, I would open one main PR for the entire effort and then have multiple sub-PRs for all the child tasks to be completed. If done this way, we can land a clean tree to main branch once the work is done and tested. Parent PR doesn't merge until the round is done and tested thoroughly. So one parent PR per round (titled appropriately).
+>
+> Additionally, each PR (irrespective of level), I review. Plan is approved! It's GO TIME!
+
+What it settled:
+
+| Item | Outcome |
+|---|---|
+| Q-14, Q-15 | Python 3.14 and Postgres 18 replace 3.13 and 17 (spec revision 3.2, D1 and D2). |
+| Q-16 | SQLAlchemy 2.0.55, asyncpg 0.32.0 and nginx 1.30.6 are pinned although under two weeks old, for the fixes they carry. |
+| Q-17, Q-18 | The design branch steps its young pins back and `userSchema.email` accepts any string, before its PR. |
+| PR model | One draft parent PR per round (`round/<n>-<name>` → `main`), merged only when the round is done and tested; child PRs into the round branch; the lead reviews every PR (`CONTRIBUTING.md` § 1). |
+| Plan | Approved (gate G0). Build starts after the instructions walkthrough (G1). |
+
 ## 6. Before submission
 
 - [ ] Share the spec artifact, and the design artifact, so the reviewers can open them; put the links in the final report.
 - [ ] Run the load test (D18) with the lead, and quote its results and each round's capacity figure in the README.
 - [ ] Export the session transcripts from `.ai-transcripts/` into `docs/ai-usage/` after a secrets and personal-data scan; write the human-versus-agent time split.
-- [ ] Make the GitHub repository public.
+- [x] The GitHub repository is public (created public on 2026-10-18, at the lead's request).
