@@ -24,11 +24,13 @@ async def signed_in_client(app: FastAPI, email: str | None = None) -> AsyncItera
         yield client
 
 
+async def create_task(client: AsyncClient, title: str) -> TaskRead:
+    """Create one task through the API; it lands at the top of the list."""
+    response = await client.post("/api/v1/tasks", json={"title": title})
+    response.raise_for_status()
+    return TaskRead.model_validate(response.json())
+
+
 async def create_tasks(client: AsyncClient, titles: Sequence[str]) -> list[TaskRead]:
-    """Create one task per title, in order, through the API; each new task lands at the top of the list."""
-    created = []
-    for title in titles:
-        response = await client.post("/api/v1/tasks", json={"title": title})
-        response.raise_for_status()
-        created.append(TaskRead.model_validate(response.json()))
-    return created
+    """Create one task per title, one after another, so the last title ends up at the top."""
+    return [await create_task(client, title) for title in titles]

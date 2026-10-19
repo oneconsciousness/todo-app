@@ -15,6 +15,7 @@ from httpx import AsyncClient, Response
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
+from app.api.schemas import TaskList, TaskRead
 from app.db import tasks as task_rows
 from app.db.models import User
 from tests.support.app import client_for
@@ -32,15 +33,14 @@ async def all_at_once(requests: Sequence[Coroutine[Any, Any, Response]]) -> list
     return [task.result() for task in running]
 
 
-async def listed(client: AsyncClient) -> list[dict[str, Any]]:
+async def listed(client: AsyncClient) -> list[TaskRead]:
     """Return the signed-in user's tasks as listed."""
-    items: list[dict[str, Any]] = (await client.get(TASKS)).json()["items"]
-    return items
+    return TaskList.model_validate((await client.get(TASKS)).json()).items
 
 
-def assert_ranks_unique_and_in_order(items: Sequence[dict[str, Any]]) -> None:
+def assert_ranks_unique_and_in_order(items: Sequence[TaskRead]) -> None:
     """Check no two tasks share a rank and the list comes back in rank order."""
-    ranks = [item["rank"] for item in items]
+    ranks = [item.rank for item in items]
     assert len(set(ranks)) == len(ranks)
     assert ranks == sorted(ranks)
 
@@ -80,7 +80,7 @@ async def test_race_fifty_concurrent_moves_keep_ranks_unique(app: FastAPI) -> No
         responses = await all_at_once([move(client, task, after) for task, after in random_moves(task_ids, 50, seed=1)])
         items = await listed(client)
     assert [response.status_code for response in responses] == [200] * 50
-    assert {item["id"] for item in items} == {str(task_id) for task_id in task_ids}
+    assert {item.id for item in items} == set(task_ids)
     assert_ranks_unique_and_in_order(items)
 
 
