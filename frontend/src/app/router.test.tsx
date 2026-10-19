@@ -1,14 +1,37 @@
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, delay, http } from "msw";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { routes, signInPath } from "../lib/routes.ts";
 import { user } from "../test/fixtures.ts";
 import { errorReply } from "../test/handlers.ts";
 import { renderApp } from "../test/render-app.tsx";
 import { server } from "../test/server.ts";
 
+const notFoundHeading = { name: "This task isn't in your ledger" };
+
 describe("app router", () => {
+  it("shows not found for another user's task id", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    renderApp(routes.task("7b0c1e5a-0000-4000-8000-00000000ffff"));
+
+    expect(await screen.findByRole("heading", notFoundHeading)).toBeVisible();
+  });
+
+  it("shows not found for a task id that is not a UUID, without asking the server", async () => {
+    const taskRequests = vi.fn<() => void>();
+    server.use(
+      http.get("/api/v1/tasks/:taskId", () => {
+        taskRequests();
+        return errorReply(404, "not_found");
+      }),
+    );
+    renderApp(routes.task("not-a-task"));
+
+    expect(await screen.findByRole("heading", notFoundHeading)).toBeVisible();
+    expect(taskRequests).not.toHaveBeenCalled();
+  });
+
   it("sends a signed-out visitor to sign-in with a return path", async () => {
     server.use(http.get("/api/v1/auth/me", () => errorReply(401, "not_authenticated")));
     const { router } = renderApp("/tasks?q=boiler");

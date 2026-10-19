@@ -3,6 +3,7 @@ import {
   type QueryClient,
   type QueryKey,
   keepPreviousData,
+  skipToken,
   useMutation,
   useMutationState,
   useQuery,
@@ -10,8 +11,9 @@ import {
 } from "@tanstack/react-query";
 import { useState } from "react";
 import { type ApiError, ApiErrorCode } from "../api/client.ts";
-import { createTask, listTasks, moveTask, updateTask } from "../api/tasks.ts";
+import { createTask, getTask, listTasks, moveTask, updateTask } from "../api/tasks.ts";
 import type { Task } from "../schema/task.ts";
+import type { TaskChanges } from "../task-draft.ts";
 import { moveAfter } from "../tasks/order.ts";
 import { taskKeys } from "./keys.ts";
 
@@ -26,6 +28,45 @@ export const useTasks = (q: string) =>
     queryFn: ({ signal }) => listTasks(q, signal),
     placeholderData: keepPreviousData,
   });
+
+/**
+ * One task, or nothing to fetch when `taskId` is null. A 404 (missing, or someone else's) is an answer the page shows;
+ * any other failure goes to the route error boundary.
+ */
+export const useTask = (taskId: string | null) =>
+  useQuery({
+    queryKey: taskKeys.detail(taskId ?? ""),
+    queryFn: taskId === null ? skipToken : ({ signal }) => getTask(taskId, signal),
+    throwOnError: (error) => !isNotFound(error),
+  });
+
+/** A save from the detail screen: the changed fields, and the version the edit started from. */
+export interface UpdateVariables {
+  readonly taskId: string;
+  readonly changes: TaskChanges;
+  readonly version: number;
+}
+
+/**
+ * Save a task's edited fields with `If-Match`, so a save made against an older version is refused (412) rather than
+ * overwriting someone else's change. A 412 reloads the task, so the screen can show what changed.
+ */
+export const useUpdateTask = () => {
+  const client = useQueryClient();
+  return useMutation({
+    mutationKey: taskKeys.mutations.update,
+    mutationFn: ({ taskId, changes, version }: UpdateVariables) =>
+      updateTask(taskId, changes, version),
+    onSuccess: (task) => {
+      client.setQueryData(taskKeys.detail(task.id), task);
+      void client.invalidateQueries({ queryKey: taskKeys.lists() });
+    },
+    onError: (error, { taskId }) => {
+      if (error.code === ApiErrorCode.VersionMismatch)
+        void client.invalidateQueries({ queryKey: taskKeys.detail(taskId) });
+    },
+  });
+};
 
 /** Every cached task list as it was before an optimistic change, to put back if the change fails. */
 export type ListSnapshot = readonly (readonly [QueryKey, readonly Task[] | undefined])[];

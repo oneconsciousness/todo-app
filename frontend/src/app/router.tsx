@@ -11,6 +11,7 @@ import { AuthProvider } from "../lib/auth/auth-context.tsx";
 import { routes, signInPath } from "../lib/routes.ts";
 import { SignInPage } from "../pages/sign-in-page.tsx";
 import { SignUpPage } from "../pages/sign-up-page.tsx";
+import { TaskDetailPage } from "../pages/task-detail-page.tsx";
 import { TaskListPage } from "../pages/task-list-page.tsx";
 import { RequireAuth } from "./require-auth.tsx";
 
@@ -42,7 +43,7 @@ export const appRoutes: RouteObject[] = [
         element: <RequireAuth />,
         children: [
           { path: routes.tasks, element: <TaskListPage /> },
-          { path: routes.task(":taskId") },
+          { path: routes.task(":taskId"), element: <TaskDetailPage /> },
         ],
       },
     ],

@@ -32,6 +32,8 @@ export interface TaskDetailViewProps {
   readonly deleting: boolean;
   /** What the last save or delete failed with, in words for the user; null when nothing failed. */
   readonly failure: string | null;
+  /** The server's problems with the fields of the last save, shown next to each field until the user edits it. */
+  readonly fieldErrors?: FieldErrors<TaskDraft> | undefined;
   /** Save the changed fields. `version` is the one the edit started from; the API rejects the save if the task has changed since. */
   readonly onSave: (taskId: string, changes: TaskChanges, version: number) => void;
   readonly onToggle: (taskId: string, completed: boolean) => void;
@@ -65,11 +67,15 @@ interface Editing {
   readonly errors: FieldErrors<TaskDraft>;
   /** The edit sent with the last save, so the view can recognise its own save when it comes back. */
   readonly submitted: TaskEdit | null;
+  /** The fields the server's errors still apply to: every field once saved, less each one edited since. */
+  readonly serverErrorsApply: ReadonlySet<keyof TaskDraft>;
 }
 
 interface TaskEntryProps extends Omit<TaskDetailViewProps, "content"> {
   readonly task: Task;
 }
+
+const draftFields = ["title", "notes", "dueDate"] as const satisfies readonly (keyof TaskDraft)[];
 
 const isEmpty = (changes: TaskChanges): boolean => Object.keys(changes).length === 0;
 
@@ -79,6 +85,7 @@ function TaskEntry({
   saving,
   deleting,
   failure,
+  fieldErrors: serverErrors,
   onSave,
   onToggle,
   onDelete,
@@ -98,7 +105,13 @@ function TaskEntry({
   }
 
   const startFrom = (latest: Task) => {
-    setEditing({ base: latest, draft: draftFrom(latest), errors: {}, submitted: null });
+    setEditing({
+      base: latest,
+      draft: draftFrom(latest),
+      errors: {},
+      submitted: null,
+      serverErrorsApply: new Set(),
+    });
   };
 
   const edit =
@@ -111,9 +124,17 @@ function TaskEntry({
             draft: { ...current.draft, [field]: value },
             errors: { ...current.errors, [field]: undefined },
             submitted: null,
+            serverErrorsApply: new Set(
+              [...current.serverErrorsApply].filter((name) => name !== field),
+            ),
           },
       );
     };
+
+  // The form's own check wins; the server's message stays until the field is edited after the save.
+  const errorFor = (current: Editing, field: keyof TaskDraft): string | undefined =>
+    current.errors[field] ??
+    (current.serverErrorsApply.has(field) ? serverErrors?.[field] : undefined);
 
   const save = (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -129,7 +150,7 @@ function TaskEntry({
       return;
     }
     onSave(task.id, changes, editing.base.version);
-    setEditing({ ...editing, submitted: result.data });
+    setEditing({ ...editing, submitted: result.data, serverErrorsApply: new Set(draftFields) });
   };
 
   const changedElsewhere =
@@ -185,14 +206,14 @@ function TaskEntry({
             <TextField
               label="Title"
               value={editing.draft.title}
-              error={editing.errors.title}
+              error={errorFor(editing, "title")}
               onChange={edit("title")}
             />
             <TextField
               label="Due date"
               type="date"
               value={editing.draft.dueDate}
-              error={editing.errors.dueDate}
+              error={errorFor(editing, "dueDate")}
               onChange={edit("dueDate")}
               className="@wide:w-1/2"
             />
@@ -200,7 +221,7 @@ function TaskEntry({
               label="Notes"
               rows={6}
               value={editing.draft.notes}
-              error={editing.errors.notes}
+              error={errorFor(editing, "notes")}
               onChange={edit("notes")}
             />
           </fieldset>

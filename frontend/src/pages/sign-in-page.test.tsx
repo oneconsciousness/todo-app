@@ -1,18 +1,16 @@
 import { screen, waitFor } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
-import { beforeEach, describe, expect, it } from "vitest";
-import { routes } from "../lib/routes.ts";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { routes, signInPath } from "../lib/routes.ts";
 import { submitCredentials } from "../test/credentials.ts";
 import { detailTask, user } from "../test/fixtures.ts";
 import { errorReply } from "../test/handlers.ts";
 import { renderApp } from "../test/render-app.tsx";
 import { server } from "../test/server.ts";
 
-const signInFrom = (returnTo: string): string =>
-  `${routes.signIn}?${new URLSearchParams({ returnTo }).toString()}`;
-
 describe("SignInPage", () => {
   beforeEach(() => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
     server.use(
       http.get("/api/v1/auth/me", () => errorReply(401, "not_authenticated")),
       http.post("/api/v1/auth/login", () => HttpResponse.json(user)),
@@ -20,7 +18,7 @@ describe("SignInPage", () => {
   });
 
   it("returns to the page that asked after sign-in", async () => {
-    const { router } = renderApp(signInFrom(routes.task(detailTask.id)));
+    const { router } = renderApp(signInPath(routes.task(detailTask.id)));
 
     await submitCredentials("Sign in");
 
@@ -30,7 +28,7 @@ describe("SignInPage", () => {
   });
 
   it("ignores an external returnTo", async () => {
-    const { router } = renderApp(signInFrom("//evil.example/steal"));
+    const { router } = renderApp(signInPath("//evil.example/steal"));
 
     await submitCredentials("Sign in");
 

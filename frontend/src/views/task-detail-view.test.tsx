@@ -85,6 +85,17 @@ describe("TaskDetailView", () => {
     expect(titleField()).toHaveAccessibleDescription("Add a title.");
   });
 
+  it("shows the server's problem with a saved field next to it until the user edits that field", async () => {
+    const { rerender } = renderView();
+    await startEditing();
+    await retitle("Renew both passports");
+    await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    rerender({ fieldErrors: { title: "That title is already in use." } });
+    expect(titleField()).toHaveAccessibleDescription("That title is already in use.");
+    await userEvent.type(titleField(), "!");
+    expect(titleField()).toHaveAccessibleDescription("");
+  });
+
   it("holds the form while saving, then reads the saved task", async () => {
     const { rerender } = renderView();
     await startEditing();
