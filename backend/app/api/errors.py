@@ -3,7 +3,7 @@
 import logging
 from collections.abc import Callable, Coroutine, Mapping, Sequence
 from types import MappingProxyType
-from typing import Any, Final, NamedTuple
+from typing import Final, NamedTuple, Never
 
 from fastapi import Request
 from fastapi.exceptions import RequestValidationError
@@ -108,7 +108,9 @@ async def handle_database_error(request: Request, error: Exception) -> JSONRespo
     return error_response(SERVICE_UNAVAILABLE)
 
 
-type ExceptionHandler = Callable[[Request, Any], Coroutine[Any, Any, Response]]
+# A handler for one kind of error. Callables are contravariant in their arguments, so a handler
+# that takes, say, DomainError fits a parameter typed Never, the type no value has.
+type ExceptionHandler = Callable[[Request, Never], Coroutine[None, None, Response]]
 
 
 def exception_handlers() -> dict[int | type[Exception], ExceptionHandler]:
