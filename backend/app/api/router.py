@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends
 from app.api.auth import auth_router
 from app.api.deps import require_trusted_origin
 from app.api.schemas import ErrorEnvelope
+from app.api.tasks import tasks_router
 
 api_router = APIRouter(
     prefix="/api/v1",
@@ -12,3 +13,4 @@ api_router = APIRouter(
     responses={403: {"model": ErrorEnvelope}},
 )
 api_router.include_router(auth_router)
+api_router.include_router(tasks_router)

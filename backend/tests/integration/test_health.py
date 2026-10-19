@@ -1,4 +1,6 @@
 import asyncio
+from datetime import UTC, datetime
+from uuid import uuid4
 
 import pytest
 from fastapi import FastAPI, Request
@@ -8,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from app.config import Settings
 from app.db.engine import create_engine
+from app.domain.tokens import encode_session
 from app.main import create_app
 from tests.support.app import serving
 from tests.support.factories import PASSWORD
@@ -61,6 +64,16 @@ async def test_readyz_is_503_when_the_database_is_unreachable(unreachable_settin
         response = await client.get("/readyz")
     assert response.status_code == 503
     assert response.json()["error"]["code"] == "not_ready"
+
+
+async def test_task_request_is_503_envelope_when_the_database_is_unreachable(unreachable_settings: Settings) -> None:
+    # Sessions need no database, so a valid token reaches the task query even with the database down.
+    secret = unreachable_settings.jwt_secret.get_secret_value()
+    token = encode_session(uuid4(), now=datetime.now(UTC), secret=secret)
+    async with serving(create_app(unreachable_settings)) as client:
+        response = await client.get("/api/v1/tasks", headers={"Cookie": f"session={token}"})
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "service_unavailable"
 
 
 async def test_readyz_is_503_promptly_when_the_database_host_does_not_resolve(

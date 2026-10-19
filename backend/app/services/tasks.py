@@ -1,0 +1,38 @@
+"""Task use cases. Each opens its one transaction itself."""
+
+from uuid import UUID, uuid4
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.db import tasks as task_rows
+from app.domain.errors import TaskNotFound
+from app.domain.ranks import rank_between
+from app.domain.types import NewTask, TaskRecord
+
+
+async def list_tasks(session: AsyncSession, owner_id: UUID) -> list[TaskRecord]:
+    """Return the owner's tasks in their order."""
+    async with session.begin():
+        return await task_rows.list_tasks(session, owner_id)
+
+
+async def get_task(session: AsyncSession, owner_id: UUID, task_id: UUID) -> TaskRecord:
+    """Return one of the owner's tasks.
+
+    Raises:
+        TaskNotFound: when it is missing or belongs to someone else.
+    """
+    async with session.begin():
+        task = await task_rows.get_task(session, owner_id, task_id)
+    if task is None:
+        raise TaskNotFound
+    return task
+
+
+async def create_task(session: AsyncSession, owner_id: UUID, new_task: NewTask) -> TaskRecord:
+    """Create a task at the top of the owner's list."""
+    async with session.begin():
+        top = await task_rows.first_rank(session, owner_id)
+        return await task_rows.insert_task(
+            session, owner_id, uuid4(), new_task.title, new_task.notes, new_task.due_date, rank_between(None, top)
+        )

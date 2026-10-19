@@ -1,12 +1,13 @@
 """Request and response bodies, camelCase on the wire."""
 
+from datetime import date, datetime
 from typing import Annotated, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, StringConstraints
 from pydantic.alias_generators import to_camel
 
-from app.domain.types import AccountCredentials
+from app.domain.types import AccountCredentials, NewTask
 
 
 class WireModel(BaseModel):
@@ -46,6 +47,43 @@ class UserRead(WireModel):
 
     id: UUID
     email: str
+
+
+# Surrounding spaces are dropped, so a title of only spaces is empty and refused.
+Title = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+Notes = Annotated[str, StringConstraints(max_length=5000)]
+
+
+class TaskCreate(RequestModel):
+    """A new task: a title, with optional notes and due date."""
+
+    title: Title
+    notes: Notes = ""
+    due_date: date | None = None
+
+    def to_domain(self) -> NewTask:
+        """Return the validated values as the tasks service takes them."""
+        return NewTask(title=self.title, notes=self.notes, due_date=self.due_date)
+
+
+class TaskRead(WireModel):
+    """One task as the client sees it."""
+
+    id: UUID
+    title: str
+    notes: str
+    completed: bool
+    due_date: date | None
+    rank: str
+    version: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class TaskList(WireModel):
+    """The user's tasks in rank order, in an envelope so paging can be added later."""
+
+    items: list[TaskRead]
 
 
 class ErrorDetail(WireModel):

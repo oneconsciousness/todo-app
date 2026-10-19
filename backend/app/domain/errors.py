@@ -23,3 +23,7 @@ class ForbiddenOrigin(DomainError):
 
 class EmailTaken(DomainError):
     """An account already uses this email, in any letter case."""
+
+
+class TaskNotFound(DomainError):
+    """No task with this id belongs to the signed-in user; another user's task counts as missing."""
