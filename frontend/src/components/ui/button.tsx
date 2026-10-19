@@ -4,6 +4,7 @@ const variants = {
   primary: "bg-primary text-on-primary hover:bg-primary-strong",
   secondary: "border border-rule-strong bg-sheet text-ink hover:border-ink",
   ghost: "text-ink-muted hover:bg-rule/40 hover:text-ink",
+  binding: "border border-gilt/60 text-on-binding hover:border-gilt hover:text-gilt",
 } as const;
 
 /** The visual weight of a button. */
