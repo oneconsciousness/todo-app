@@ -144,6 +144,8 @@ Files this plan adds. The design branch owns everything marked *(design)*.
 | `DB_MAX_OVERFLOW` | `int` | `5` | no | D15 |
 | `DB_POOL_TIMEOUT_SECONDS` | `float` | `5.0` | no | D15 |
 
+**The example secret never ships with secure cookies.** `Settings` has a `model_validator(mode="after")`: when `jwt_secret` equals `EXAMPLE_JWT_SECRET` (the example file's value, kept as a constant in `config.py`; the two change together) and `cookie_secure` is true, it raises. `Settings()` runs inside `create_app`, so the process refuses to start. Plain HTTP on a laptop (`COOKIE_SECURE=false`) still starts with the example value. Tests: `test_settings_refuse_the_example_jwt_secret_with_secure_cookies` and `test_settings_allow_the_example_jwt_secret_over_local_http` (§ 6.2).
+
 Constants that are not settings, because the spec fixes them and nothing varies them per environment: JWT lifetime 8 h, cookie name `session`, hash concurrency 4, `statement_timeout` 5 s, `idle_in_transaction_session_timeout` 10 s, readiness timeout 1 s.
 
 Compose also reads `POSTGRES_USER`, `POSTGRES_PASSWORD` and `POSTGRES_DB` for the `db` service. Missing required values fail fast through `${VAR:?message}` in `docker-compose.yml`.
@@ -295,17 +297,24 @@ CREATE INDEX ix_tasks_search_trgm ON tasks USING gin (title gin_trgm_ops, notes 
 class WireModel(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, frozen=True)
 class RequestModel(WireModel):
-    model_config = ConfigDict(extra="forbid", strict=True)  # unknown keys and type coercion → 400
+    model_config = ConfigDict(extra="forbid")  # unknown keys → 400
 ```
 
-`strict=True` stops `"yes"` or `1` from passing as a boolean. JSON strings still parse into `date` and `UUID` in strict mode.
+**No model-wide `strict=True`.** FastAPI decodes the JSON body first, then validates the Python object with `TypeAdapter.validate_python` (`ModelField.validate` in [`fastapi/_compat/v2.py`](https://github.com/fastapi/fastapi/blob/master/fastapi/_compat/v2.py)). In strict *Python* mode, `date` accepts only `date` instances and `UUID` only `UUID` instances ([Pydantic conversion table](https://pydantic.dev/docs/validation/latest/concepts/conversion_table/)). So `"dueDate": "2026-10-20"` and `"afterId": "<uuid>"` would both get 400. Strictness goes on the field where lax coercion is the real risk:
+
+| Field type | Lax mode accepts | Decision |
+|---|---|---|
+| `bool` (`completed`) | `"true"`, `"yes"`, `"on"`, `"1"`, `1`, … | **`StrictBool`**: a string or number boolean is a client bug → 400 |
+| `str` (`title`, `notes`, `email`, `password`, `q`) | `str` only (numbers only with `coerce_numbers_to_str`, which stays off) | Lax is already strict enough |
+| `date` (`dueDate`) | `"YYYY-MM-DD"`, a datetime string with a zero time, a unix timestamp | Lax, because strict Python mode would reject the ISO string. The extra forms still produce the correct date. |
+| `UUID` (`afterId`, path ids) | a UUID string | Lax, for the same reason |
 
 | Model | Fields (wire name: type) | Rules |
 |---|---|---|
 | `Credentials` | `email: EmailStr`, `password: str` | email ≤ 254 characters; password 12 to 128, not stripped. Used by register **and** login. |
 | `UserRead` | `id: UUID`, `email: str`, `createdAt: datetime` | No `password_hash`, ever |
 | `TaskCreate` | `title: Title`, `notes: Notes = ""`, `dueDate: date \| None = None` | `Title = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]`, `Notes = Annotated[str, StringConstraints(max_length=5000)]` |
-| `TaskUpdate` | `title: Title`, `notes: Notes`, `completed: bool`, `dueDate: date \| None`, every one optional | Explicit `null` is allowed only for `dueDate` (it clears it). Null on the others → 400. Absent fields stay as they are. `to_patch() -> TaskPatch` builds the domain value from `model_fields_set`. |
+| `TaskUpdate` | `title: Title`, `notes: Notes`, `completed: StrictBool`, `dueDate: date \| None`, every one optional | Explicit `null` is allowed only for `dueDate` (it clears it). Null on the others → 400. Absent fields stay as they are. `to_patch() -> TaskPatch` builds the domain value from `model_fields_set`. |
 | `TaskMove` | `afterId: UUID \| None` | Required key; `null` means the top **(Q-1)** |
 | `TaskRead` | `id`, `title`, `notes`, `completed`, `dueDate`, `rank`, `version`, `createdAt`, `updatedAt` | Matches the design branch's `taskSchema` |
 | `TaskList` | `items: list[TaskRead]` | The envelope leaves room for a cursor |
@@ -496,7 +505,7 @@ uvicorn app.main:create_app --factory --host 0.0.0.0 --port 8000
   --no-access-log --no-server-header
 ```
 
-- `--limit-concurrency` counts open **connections** as well as tasks ([uvicorn settings](https://www.uvicorn.org/settings/)). So nginx's idle keep-alive connections count toward the 200, and the nginx keep-alive pool stays small (§ 5.3).
+- `--limit-concurrency` counts open **connections** as well as tasks ([uvicorn settings](https://www.uvicorn.org/settings/)). So nginx's idle keep-alive connections count toward the 200. nginx pins `worker_processes 2` with `keepalive 16`, so at most 32 idle connections exist, and at least 168 slots stay free on each replica (§ 5.3).
 - `--timeout-keep-alive 75` is longer than nginx's upstream `keepalive_timeout` of 60 s. Otherwise uvicorn could close a connection just as nginx reuses it, and the user would get a 502.
 - `--no-access-log`, because `RequestContextMiddleware` writes the access line.
 - Compose gives the container `stop_grace_period: 25s`, longer than the 20 s drain.
@@ -700,7 +709,7 @@ COPY . .
 RUN npm run build
 
 FROM nginxinc/nginx-unprivileged:<1.28.x>-alpine     # listens on 8080, runs as uid 101
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY nginx.conf /etc/nginx/nginx.conf                 # replaces the main config, so worker_processes is ours
 COPY --from=build /app/dist /usr/share/nginx/html
 EXPOSE 8080
 ```
@@ -709,7 +718,19 @@ nginx 1.28 is needed for `server … resolve` in open-source nginx (available si
 
 ### 5.3 `frontend/nginx.conf`
 
+The file replaces the image's main `/etc/nginx/nginx.conf`, because `worker_processes` is only valid in the main context, not in a `conf.d/` include.
+
 ```nginx
+worker_processes 2;                                    # pinned: the image's "auto" means one per CPU
+pid /tmp/nginx.pid;                                    # the unprivileged image writes only to /tmp
+events { worker_connections 4096; }                    # each proxied request holds 2 connections
+
+http {
+include mime.types;
+access_log /dev/stdout; error_log /dev/stderr warn;
+client_body_temp_path /tmp/client_temp; proxy_temp_path /tmp/proxy_temp;
+fastcgi_temp_path /tmp/fastcgi_temp; uwsgi_temp_path /tmp/uwsgi_temp; scgi_temp_path /tmp/scgi_temp;
+
 resolver 127.0.0.11 valid=10s ipv6=off;               # Docker's DNS; replicas can change IPs
 map $http_x_request_id $req_id { default $http_x_request_id; "" $request_id; }
 
@@ -751,7 +772,10 @@ server {
   location /assets/ { add_header Cache-Control "public, max-age=31536000, immutable"; … }
   location / { try_files $uri /index.html; add_header Cache-Control "no-cache"; … }   # SPA fallback
 }
+}
 ```
+
+**Keep-alive arithmetic.** `keepalive 16` caps the *idle* upstream connections each worker caches, shared across every server in the group ([nginx upstream](https://nginx.org/en/docs/http/ngx_http_upstream_module.html#keepalive)). With 2 workers, at most 2 × 16 = **32 idle connections** exist in total. That is about 16 per replica when spread evenly, and 32 in the worst case where one replica holds them all. Against uvicorn's `--limit-concurrency 200`, at least 168 slots stay free for requests in flight on each replica. With the image's default `auto` on a 10-core Mac it would have been 10 × 16 = 160 idle connections, leaving as few as 40. `worker_connections 4096` gives 8,192 connections in total, about 4,000 proxied requests at once, so nginx is not the bottleneck in the stepped run's 1,000-user step.
 
 - `resolve` with a shared `zone` re-resolves `api` as replicas come and go ([nginx upstream](https://nginx.org/en/docs/http/ngx_http_upstream_module.html)).
 - `proxy_next_upstream` keeps its default. nginx does not retry non-idempotent requests on another replica.
@@ -800,6 +824,7 @@ Each layer owns failures the others cannot see (`testing.md`). Names say the beh
 | `test_patch.py` | `test_apply_patch_keeps_only_sent_fields`, `test_apply_patch_keeps_a_null_due_date_to_clear_it`, `test_apply_patch_rejects_an_empty_patch` |
 | `test_tokens.py` | `test_session_token_round_trips_the_user_id`, `test_expired_token_is_rejected`, `test_token_signed_with_another_secret_is_rejected`, `test_unsigned_alg_none_token_is_rejected`, `test_token_without_sub_is_rejected` |
 | `test_passwords.py` | `test_hash_verifies_the_same_password`, `test_hash_rejects_another_password`, `test_hasher_uses_owasp_parameters` (`m=19456,t=2,p=1` in the hash string), `test_hashing_runs_off_the_event_loop_thread`, `test_hashing_never_runs_more_than_four_at_once` (a fake argon2 hasher at the library boundary blocks on a `threading.Event` and records peak concurrency while 10 hashes are requested) |
+| `test_config.py` | `test_settings_refuse_the_example_jwt_secret_with_secure_cookies`, `test_settings_allow_the_example_jwt_secret_over_local_http` |
 | `test_log.py` | `test_json_line_carries_request_and_user_ids`, `test_exception_and_traceback_stay_in_one_json_line` |
 | `test_errors_map.py` | `test_every_domain_error_has_a_status_and_code` |
 | `test_loop_guard.py` | `test_loop_guard_flags_a_callback_that_blocks_for_100_ms`, `test_loop_guard_passes_code_that_awaits` |
@@ -812,7 +837,7 @@ Every endpoint has a test for its success code and each error code it can return
 |---|---|
 | `test_auth_api.py` | `test_register_creates_account_and_signs_in` (201, `Location`, cookie attributes, no hash in the body), `test_register_rejects_a_short_password_with_400_envelope` (also pins the 422 → 400 mapping and `details[0].field == "password"`), `test_register_rejects_an_email_taken_in_another_case_with_409`, `test_login_sets_the_session_cookie`, `test_login_rejects_a_wrong_password_with_401`, `test_login_gives_unknown_email_the_same_401_as_a_wrong_password`, `test_login_rejects_a_malformed_body_with_400`, `test_logout_clears_the_session_cookie`, `test_me_returns_the_signed_in_user`, `test_me_without_a_session_returns_401`, `test_me_with_an_expired_token_returns_401`, `test_me_with_a_tampered_token_returns_401` |
 | `test_origin_guard.py` | `test_write_from_another_origin_is_forbidden`, `test_write_with_null_origin_is_forbidden`, `test_write_without_origin_is_allowed` **(Q-3)**, `test_read_from_another_origin_is_allowed`, `test_text_plain_body_is_rejected_with_400` |
-| `test_tasks_api.py` | `test_list_returns_only_own_tasks_in_rank_order`, `test_list_without_a_session_returns_401`, `test_create_puts_the_task_at_the_top_with_location_and_etag`, `test_create_rejects_a_blank_title_with_400`, `test_create_rejects_an_unknown_field_with_400`, `test_get_returns_the_task_with_its_etag`, `test_get_another_users_task_returns_404`, `test_get_an_unknown_task_returns_404`, `test_get_with_a_malformed_id_returns_400`, `test_patch_changes_only_sent_fields_and_bumps_version`, `test_patch_with_null_due_date_clears_it`, `test_patch_with_the_current_if_match_succeeds`, `test_patch_with_a_stale_if_match_returns_412`, `test_patch_with_a_malformed_if_match_returns_400`, `test_patch_rejects_a_null_title_with_400`, `test_patch_rejects_an_empty_body_with_400`, `test_patch_another_users_task_returns_404`, `test_patch_after_delete_returns_404`, `test_delete_returns_204_and_the_task_is_gone`, `test_delete_another_users_task_returns_404` |
+| `test_tasks_api.py` | `test_list_returns_only_own_tasks_in_rank_order`, `test_list_without_a_session_returns_401`, `test_create_puts_the_task_at_the_top_with_location_and_etag`, `test_create_rejects_a_blank_title_with_400`, `test_create_rejects_an_unknown_field_with_400`, `test_get_returns_the_task_with_its_etag`, `test_get_another_users_task_returns_404`, `test_get_an_unknown_task_returns_404`, `test_get_with_a_malformed_id_returns_400`, `test_patch_changes_only_sent_fields_and_bumps_version`, `test_patch_with_null_due_date_clears_it`, `test_patch_accepts_an_iso_due_date`, `test_patch_rejects_a_string_boolean_with_400`, `test_patch_with_the_current_if_match_succeeds`, `test_patch_with_a_stale_if_match_returns_412`, `test_patch_with_a_malformed_if_match_returns_400`, `test_patch_rejects_a_null_title_with_400`, `test_patch_rejects_an_empty_body_with_400`, `test_patch_another_users_task_returns_404`, `test_patch_after_delete_returns_404`, `test_delete_returns_204_and_the_task_is_gone`, `test_delete_another_users_task_returns_404` |
 | `test_tasks_position.py` | `test_move_to_the_top`, `test_move_after_another_task`, `test_move_keeps_version_and_updated_at`, `test_move_after_an_unknown_task_returns_400`, `test_move_after_another_users_task_returns_the_same_400`, `test_move_after_itself_returns_400`, `test_move_another_users_task_returns_404` |
 | `test_tasks_search.py` | `test_search_matches_title_or_notes_ignoring_case_in_rank_order`, `test_search_treats_percent_and_underscore_literally`, `test_search_over_200_characters_returns_400`, `test_search_query_can_use_the_trigram_index` (`EXPLAIN` with `enable_seqscan = off` names `ix_tasks_search_trgm`; this catches a wrong operator class) |
 | `test_rank_collation.py` | `test_postgres_sorts_ranks_like_python` (500 keys from a seeded insertion sequence, inserted as one user's tasks, then `ORDER BY rank` == `sorted(keys)`), `test_a_locale_collation_would_misorder_ranks` (the same keys under `COLLATE "und-x-icu"` disagree, which is why the column is `"C"`) |
@@ -941,14 +966,20 @@ The load test does not run in CI. It runs on a Mac with the lead (D18).
 
 ### 8.1 PRs in order
 
-| PR | Branch | Contents | Depends on | Size (bounded work) |
-|---|---|---|---|---|
-| A | `docs/round-1-plan` | The spec commits plus this plan. The branch is stacked on `docs/round-1-spec`, which is not on `main` yet. | | 1 file, 1 PR round |
-| B | `feature/web-design-system` | *(design)* tokens, primitives, views, gallery | Gate G2 | Designer's estimate |
-| C | `feature/backend-api` | All of § 3, § 6.1 to § 6.4, CI `backend`, the `db` and `test-db` services, `backend/CLAUDE.md` | G1 | About 45 files, 1 migration, 14 commits, 2 to 3 PR rounds **(Q-7)** |
-| D | `feature/web-data-layer` | All of § 4, § 6.5, CI `frontend` | B merged (or stacked on B), C's contract | About 30 files, 11 commits, 2 PR rounds |
-| E | `feature/containers` | § 5, § 6.6 to § 6.8, CI `e2e` | C and D merged | About 20 files, 8 commits, 2 PR rounds, plus 2 load sessions with the lead |
-| F | `docs/readme-round-1` | README: running on a Mac, the load results and the capacity figure | E | 1 to 2 files, 1 PR round |
+Each PR merges into `main` after the one before it. A PR is raised against `main` once its base has merged. Until then it can be raised against the previous PR's branch and retargeted to `main` when that merges. Merges are squash-merges, so after each one the next branch is rebased with `git rebase --onto origin/main <previous branch's old tip>`. That way only its own commits remain.
+
+| Order | PR | Branch | Contents | Base (target on raise) | Gate before merge | Size (bounded work) |
+|---|---|---|---|---|---|---|
+| 1 | S1 | `chore/repo-skeleton` | Claude Code setup, hygiene CI, kickoff, `TASK.md`, the transcript hook | `main` | Lead review | Already written; 1 PR round |
+| 2 | S2 | `docs/round-1-spec` | The round 1 spec and the rule updates it carried | `chore/repo-skeleton`, then `main` after S1 | Lead review | Already written; 1 PR round |
+| 3 | A | `docs/round-1-plan` | This plan | `docs/round-1-spec`, then `main` after S2 | G0 | 1 file, 1 PR round |
+| 4 | B | `feature/web-design-system` | *(design)* tokens, primitives, views, gallery. Branched from the spec's tip. | `main` after A (rebased off S2's commits) | G1, G2 | Designer's estimate |
+| 5 | C | `feature/backend-api` | All of § 3, § 6.1 to § 6.4, CI `backend`, the `db` and `test-db` services, `backend/CLAUDE.md` | `main` after A (code starts after G1) | G3 for its compose and CI changes | About 45 files, 1 migration, 14 commits, 2 to 3 PR rounds **(Q-7)** |
+| 6 | D | `feature/web-data-layer` | All of § 4, § 6.5, CI `frontend` | `main` after B and C (built on B's views and C's contract) | G3 for its CI change | About 30 files, 11 commits, 2 PR rounds |
+| 7 | E | `feature/containers` | § 5, § 6.6 to § 6.8, CI `e2e` | `main` after D | G3, CP2, CP3 | About 20 files, 8 commits, 2 PR rounds, plus 2 load sessions with the lead |
+| 8 | F | `docs/readme-round-1` | README: running on a Mac, the load results and the capacity figure | `main` after E | G5 | 1 to 2 files, 1 PR round |
+
+B and C share a base and touch disjoint folders, so either can be reviewed first. B is listed first because it is already being built. The spec's order of work groups "spec and plan" as one PR; they are on separate branches, so here they are two (S2 and A).
 
 **External waits** (not agent time): about 2 minutes of CI per push; the lead's review of each PR, of the design and of every deployment artifact; first-time Docker image pulls and builds; Playwright's browser download in CI; the load runs themselves (about 5 minutes for the 200-user run and about 15 for the stepped run).
 
@@ -978,13 +1009,13 @@ Each row: the test that goes red, then what turns it green. Subjects follow Conv
 | C2 | `feat(api): add the search pattern and patch helpers` | `test_search_pattern_escapes_…`, `test_apply_patch_…` | `search.py`, `patch.py`, `types.py`, `errors.py` |
 | C3 | `feat(auth): add pure session token helpers` | `test_expired_token_is_rejected` and the rest | `tokens.py` |
 | C4 | `feat(auth): hash passwords off the loop, four at a time` | `test_hashing_never_runs_more_than_four_at_once` | `security/passwords.py` |
-| C5 | `feat(api): add settings and queue-backed JSON logging` | `test_json_line_carries_request_and_user_ids` | `config.py`, `log.py` |
+| C5 | `feat(api): add settings and queue-backed JSON logging` | `test_settings_refuse_the_example_jwt_secret_with_secure_cookies`, `test_json_line_carries_request_and_user_ids` | `config.py`, `log.py` |
 | C6 | `feat(db): add the initial schema` (**G3**: compose `db` and `test-db`) | `test_postgres_sorts_ranks_like_python` (no table yet), `test_pooled_connections_carry_both_timeouts` | Compose services, alembic, migration `0001`, models, engine with `server_settings`, DB fixtures, the CI Postgres service and migration round trip. `test_a_locale_collation_would_misorder_ranks`. |
 | C7 | `feat(api): add the app factory, error envelope and probes` | `test_readyz_is_503_when_the_database_is_unreachable`, `test_request_is_503_when_no_connection_frees_up_in_time`, `test_unknown_route_returns_404_envelope`, `test_openapi_document_and_docs_page_are_served`, middleware tests | `main.py`, `middleware.py`, `api/errors.py`, `api/health.py`, `test_errors_map.py` |
 | C8 | `feat(auth): add register, login, logout and me` | `test_register_creates_account_and_signs_in` and the rest of `test_auth_api.py`, `test_origin_guard.py` | `api/auth.py`, `api/deps.py`, `api/schemas.py` (auth), `db/users.py`, `services/auth.py` |
 | C9 | `feat(api): add task create, read and list` | `test_create_puts_the_task_at_the_top_…`, `test_list_returns_only_own_tasks_…` | `api/tasks.py`, `db/tasks.py`, `services/tasks.py` (create without the lock for now) |
 | C10 | `feat(api): add task search` | `test_tasks_search.py` | Search wiring |
-| C11 | `feat(api): add partial updates guarded by If-Match` | `test_patch_with_a_stale_if_match_returns_412` and the rest | `update_task` |
+| C11 | `feat(api): add partial updates guarded by If-Match` | `test_patch_with_a_stale_if_match_returns_412`, `test_patch_rejects_a_string_boolean_with_400` and the rest | `update_task` |
 | C12 | `feat(api): add task moves and deletes` | `test_tasks_position.py`, delete tests | `move_task` (no lock yet), `delete_task` |
 | C13 | `fix(db): serialize order changes per user with an advisory lock` **(CP1)** | `test_race_fifty_concurrent_moves_keep_ranks_unique` and `test_race_creates_and_moves_together_…` fail with the lead watching | `lock_task_order` as the first statement of create and move. All the race tests in § 6.4 land here. The guard-removal demos for the email, version and loop-guard rows run in the session and are reverted. |
 | C14 | `docs(api): add the backend guide` | n/a | `backend/CLAUDE.md`; the `/claude-docs-check` decision commit |
@@ -1032,7 +1063,7 @@ Each row: the test that goes red, then what turns it green. Subjects follow Conv
 | 9.6 | A move changes only `rank`; `version` and `updatedAt` stay | The version guards the fields a person edits. Otherwise a reorder in one tab would trip "Changed elsewhere" in another. |
 | 9.7 | The list's toggle sends no `If-Match`; it bumps `version` | A toggle sets an absolute value, so last-write-wins is correct for it. The bump still warns a stale detail draft. |
 | 9.8 | An empty `PATCH` is 400 | Nothing to change is a client mistake, not a silent no-op that bumps the version |
-| 9.9 | Request models use `extra="forbid"` and `strict=True` | Typos (`after_id`) and coercions (`"yes"` as true) fail loudly as 400 |
+| 9.9 | Request models use `extra="forbid"`, and `completed` is `StrictBool`. No model-wide `strict=True`. | Typos (`after_id`) and boolean coercions (`"yes"` as true) fail as 400. Model-wide strict mode would also reject ISO dates and UUID strings, because FastAPI validates in Python mode (§ 3.6). |
 | 9.10 | Readiness relies on uvicorn closing its sockets at shutdown | uvicorn already refuses new connections before draining; a second flag would duplicate it |
 | 9.11 | Successful probes are left out of the access log | Two probes every 5 s per replica would bury the lines worth reading |
 | 9.12 | Sign-in with an unknown email still runs one dummy verify | Equal timing, so response time does not reveal which emails exist |
@@ -1053,7 +1084,7 @@ Each row: the test that goes red, then what turns it green. Subjects follow Conv
 | Risk | Effect | Mitigation |
 |---|---|---|
 | uvicorn's own 503 and nginx's 502 and 504 carry no envelope | A client that only reads the envelope crashes | The fetch wrapper's fallback (§ 4.2) and a unit test; Q-2 |
-| Idle nginx keep-alive connections count toward `--limit-concurrency` | Spurious 503s under load | `keepalive 16` per nginx worker; the load test watches for 503s |
+| Idle nginx keep-alive connections count toward `--limit-concurrency` | Spurious 503s under load | `worker_processes 2` × `keepalive 16` = at most 32 idle connections in total, so at worst 32 of a replica's 200 slots (16 each when spread evenly). Unpinned, a 10-core Mac could hold 160. The load test watches for 503s. |
 | Load results depend on Docker Desktop's CPU and memory, and k6 shares the Mac | The capacity figure is not comparable across machines | Record Docker's resources with the results; quote them in the README |
 | Zod's `.max()` counts UTF-16 units, Python and Postgres count code points | A 200-emoji title passes the API but not the form | The form is stricter, never looser; documented, no fix in round 1 |
 | Swagger UI loads its files from a CDN | `/api/docs` breaks offline or under a strict CSP | A scoped CSP for that path; Q-13 |
@@ -1067,21 +1098,23 @@ Each row: the test that goes red, then what turns it green. Subjects follow Conv
 
 ## 11. Open questions (each with a recommendation)
 
-| # | Question | Recommendation |
-|---|---|---|
-| Q-1 | The spec writes the move body as `{"after_id": …}`, but `api-contract.md` and the kickoff lock camelCase on the wire | **`afterId`**, per the later and more specific rule. Fix the spec's caption and prose in its next revision. |
-| Q-2 | The spec says a 503 always carries the envelope, but uvicorn's `--limit-concurrency` reply is plain text and cannot | Keep the locked flag. The fetch wrapper maps any non-envelope 502, 503 or 504 to `service_unavailable`. Correct the spec's wording. (Intercepting in nginx would not carry over to round 2's ingress.) |
-| Q-3 | A write with **no** `Origin` header: allow or 403? | **Allow.** Browsers always send `Origin` on writes, so its absence means a script, which cannot carry a victim's cookie. Reject a mismatch and the literal `null`. Reviewers' bulk scripts then work without extra headers. |
-| Q-4 | `python.md` says the transaction comes from a dependency. This plan has the dependency give the session and the service open the transaction. | **Service-owned `session.begin()`.** Sign-in must not hold a pooled connection while it waits for a hash slot, and the advisory lock should sit visibly at the top of its transaction. Update `python.md` in PR C's docs check. |
-| Q-5 | Local backend tests need a Postgres the host can reach, but the spec says only :8080 is published | A `test-db` service under the `test` profile on `127.0.0.1:55432`, on tmpfs, off by default. The main stack still publishes only :8080. |
-| Q-6 | Should `.env.example` hold working local values, so a clean Mac needs only `cp .env.example .env`? | **Yes**, labelled local-only, with the `openssl` lines for real use |
-| Q-7 | The spec plans one backend PR. At about 45 files it is a long line-by-line read. | Split into `feature/api-foundation` (C1 to C8) and `feature/api-tasks` (C9 to C14, including CP1). The commit sequence is the same either way. |
-| Q-8 | The spec names `apply_patch` in the core. With D17's single conditional `UPDATE` it turns a patch into column changes; it does not apply one to a task. | Keep the spec's name for traceability, with the contract in § 3.7.3. Alternative: rename it `changes_from_patch` and update the spec diagram. |
-| Q-9 | `typescript.md` says "no classes"; `ApiError extends Error` is a class | Allow it as the one exception. `instanceof` narrowing and TanStack's typed `defaultError` rely on it. Clarify the rule as "no class components or class-based services". |
-| Q-10 | Playwright's home: the brief says `e2e/`, `map.json` lists `frontend/playwright.config.ts` | **`e2e/browser/`**, next to the live tests. Update `map.json` in PR E's docs check. |
-| Q-11 | "Changed elsewhere … offers to review or reload". What does review lead to? | Review shows the newer values next to the draft, with **Use theirs** (reload) and **Keep mine** (rebase the draft on the new version; the next save sends the new `If-Match`). |
-| Q-12 | The agreed views have no crash screen for the route error boundary | Ask the designer for a small `ErrorView` (message plus "Try again" and "Go to tasks"). Already raised with the designer. Fallback: `NotFoundView` with different copy. |
-| Q-13 | `/api/docs` (Swagger UI) needs a CDN and an inline script | A CSP scoped to that path (§ 5.3). Alternative: serve Swagger UI's files from the API image, which adds a dependency. |
+The tech lead reviewed the recommendations; the last column records the result. All 13 stay open until the lead locks them at G0.
+
+| # | Question | Recommendation | Tech lead |
+|---|---|---|---|
+| Q-1 | The spec writes the move body as `{"after_id": …}`, but `api-contract.md` and the kickoff lock camelCase on the wire | **`afterId`**, per the later and more specific rule. Fix the spec's caption and prose in its next revision. | Agreed by the tech lead |
+| Q-2 | The spec says a 503 always carries the envelope, but uvicorn's `--limit-concurrency` reply is plain text and cannot | Keep the locked flag. The fetch wrapper maps any non-envelope 502, 503 or 504 to `service_unavailable`. Correct the spec's wording. (Intercepting in nginx would not carry over to round 2's ingress.) | Agreed by the tech lead |
+| Q-3 | A write with **no** `Origin` header: allow or 403? | **Allow.** Browsers always send `Origin` on writes, so its absence means a script, which cannot carry a victim's cookie. Reject a mismatch and the literal `null`. Reviewers' bulk scripts then work without extra headers. | Agreed by the tech lead |
+| Q-4 | `python.md` says the transaction comes from a dependency. This plan has the dependency give the session and the service open the transaction. | **Service-owned `session.begin()`.** Sign-in must not hold a pooled connection while it waits for a hash slot, and the advisory lock should sit visibly at the top of its transaction. Update `python.md` in PR C's docs check. | Agreed by the tech lead |
+| Q-5 | Local backend tests need a Postgres the host can reach, but the spec says only :8080 is published | A `test-db` service under the `test` profile on `127.0.0.1:55432`, on tmpfs, off by default. The main stack still publishes only :8080. | Agreed by the tech lead |
+| Q-6 | Should `.env.example` hold working local values, so a clean Mac needs only `cp .env.example .env`? | **Yes**, labelled local-only, with the `openssl` lines for real use | Agreed by the tech lead, provided the app refuses to start with the example `JWT_SECRET` unless `COOKIE_SECURE=false` (now in § 3.1, tested in § 6.2) |
+| Q-7 | The spec plans one backend PR. At about 45 files it is a long line-by-line read. | Split into `feature/api-foundation` (C1 to C8) and `feature/api-tasks` (C9 to C14, including CP1). The commit sequence is the same either way. | Agreed by the tech lead: split |
+| Q-8 | The spec names `apply_patch` in the core. With D17's single conditional `UPDATE` it turns a patch into column changes; it does not apply one to a task. | Keep the spec's name for traceability, with the contract in § 3.7.3. Alternative: rename it `changes_from_patch` and update the spec diagram. | Agreed by the tech lead |
+| Q-9 | `typescript.md` says "no classes"; `ApiError extends Error` is a class | Allow it as the one exception. `instanceof` narrowing and TanStack's typed `defaultError` rely on it. Clarify the rule as "no class components or class-based services". | Agreed by the tech lead |
+| Q-10 | Playwright's home: the brief says `e2e/`, `map.json` lists `frontend/playwright.config.ts` | **`e2e/browser/`**, next to the live tests. Update `map.json` in PR E's docs check. | Agreed by the tech lead |
+| Q-11 | "Changed elsewhere … offers to review or reload". What does review lead to? | Review shows the newer values next to the draft, with **Use theirs** (reload) and **Keep mine** (rebase the draft on the new version; the next save sends the new `If-Match`). | Agreed by the tech lead |
+| Q-12 | The agreed views have no crash screen for the route error boundary | Ask the designer for a small `ErrorView` (message plus "Try again" and "Go to tasks"). Already raised with the designer. Fallback: `NotFoundView` with different copy. | Agreed by the tech lead: keep `ErrorView`; the tech lead confirms with the designer |
+| Q-13 | `/api/docs` (Swagger UI) needs a CDN and an inline script | A CSP scoped to that path (§ 5.3). Alternative: serve Swagger UI's files from the API image, which adds a dependency. | Agreed by the tech lead |
 
 ---
 
@@ -1094,12 +1127,13 @@ Each row: the test that goes red, then what turns it green. Subjects follow Conv
 5. **Playwright location.** `.claude/skills/claude-docs-check/map.json` expects `frontend/playwright.config.ts`; the brief puts Playwright in `e2e/`. → Q-10.
 6. **Classes.** `typescript.md` "no classes" against an `Error` subclass. → Q-9.
 7. **Docs the root `CLAUDE.md` points to.** `backend/CLAUDE.md` and `frontend/CLAUDE.md` do not exist yet. PR C (C14) and PR D (D11) create them.
-8. **Branch base.** `main` does not contain the spec yet (`docs/round-1-spec` is unmerged), so this branch is stacked on it.
+8. **Branch base.** `main` holds only the initial commit. The branches stack `chore/repo-skeleton` → `docs/round-1-spec` → `docs/round-1-plan`, and § 8.1 gives the merge order and each PR's base. The spec's "spec and plan" PR becomes two PRs here.
 
 ---
 
 ## 13. References
 
+- FastAPI request validation in Python mode (`ModelField.validate`): <https://github.com/fastapi/fastapi/blob/master/fastapi/_compat/v2.py>; Pydantic strict and lax conversion table: <https://pydantic.dev/docs/validation/latest/concepts/conversion_table/>
 - FastAPI, dependencies with `yield` and `scope`: <https://fastapi.tiangolo.com/tutorial/dependencies/dependencies-with-yield/>, <https://fastapi.tiangolo.com/advanced/advanced-dependencies/>
 - uvicorn settings: <https://www.uvicorn.org/settings/>; shutdown order: <https://github.com/encode/uvicorn/blob/master/uvicorn/server.py>
 - Starlette pure ASGI middleware: <https://www.starlette.io/middleware/#pure-asgi-middleware>
