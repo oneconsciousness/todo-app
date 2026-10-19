@@ -30,14 +30,15 @@ export const useTasks = (q: string) =>
   });
 
 /**
- * One task, or nothing to fetch when `taskId` is null. A 404 (missing, or someone else's) is an answer the page shows;
- * any other failure goes to the route error boundary.
+ * One task, or nothing to fetch when `taskId` is null. A 404 (missing, or someone else's) is an answer the page shows.
+ * Any other failure goes to the route error boundary only when the task never loaded: a failed reload in the
+ * background keeps the task, and any draft over it, on screen.
  */
 export const useTask = (taskId: string | null) =>
   useQuery({
     queryKey: taskKeys.detail(taskId ?? ""),
     queryFn: taskId === null ? skipToken : ({ signal }) => getTask(taskId, signal),
-    throwOnError: (error) => !isNotFound(error),
+    throwOnError: (error, query) => !isNotFound(error) && query.state.data === undefined,
   });
 
 const isMoving = (client: QueryClient): boolean =>

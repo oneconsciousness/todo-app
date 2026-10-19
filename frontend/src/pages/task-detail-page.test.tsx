@@ -1,5 +1,5 @@
 import { focusManager } from "@tanstack/react-query";
-import { act, screen, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, delay, http } from "msw";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -72,6 +72,30 @@ describe("TaskDetailPage", () => {
     });
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Changed elsewhere");
+    expect(titleField()).toHaveValue("My title");
+  });
+
+  it("keeps the draft when a reload in the background fails", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const reloads = vi.fn<() => void>();
+    await openAndEdit("My title");
+    server.use(
+      http.get(taskUrl, () => {
+        reloads();
+        return errorReply(500, "internal_error");
+      }),
+    );
+
+    act(() => {
+      focusManager.setFocused(false);
+      focusManager.setFocused(true);
+    });
+    await waitFor(() => {
+      expect(reloads).toHaveBeenCalled();
+    });
+    await delay(50);
+
+    expect(screen.queryByRole("heading", { name: "Something went wrong" })).not.toBeInTheDocument();
     expect(titleField()).toHaveValue("My title");
   });
 
