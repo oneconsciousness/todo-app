@@ -1,0 +1,106 @@
+/* Design tokens, drawn from a bookkeeper's ledger: the open page in light, the cloth binding in dark. */
+@theme static {
+  --*: initial;
+
+  /* Colour: each token holds its light and dark value; the root's color-scheme picks one. */
+  --color-canvas: light-dark(#cdd6c1, #08110d);
+  --color-sheet: light-dark(#f5f8ef, #172b22);
+  --color-ink: light-dark(#1b2333, #e4ead9);
+  --color-ink-muted: light-dark(#465063, #a2b2a3);
+  --color-rule: light-dark(#b7c6d0, #2b4337);
+  --color-rule-strong: light-dark(#71889a, #62806f);
+  --color-margin: light-dark(#c8464a, #c4554f);
+  --color-alert: light-dark(#a12e29, #ee8b80);
+  --color-primary: light-dark(#1e4d3b, #d4b263);
+  --color-primary-strong: light-dark(#163a2c, #e5c87f);
+  --color-on-primary: light-dark(#f5f8ef, #13231b);
+  --color-focus: light-dark(#7f5f16, #edd08a);
+  --color-binding: light-dark(#1e4d3b, #123224);
+  --color-gilt: light-dark(#dcc07a, #d4b263);
+  --color-on-binding: light-dark(#e6ecdb, #cfd9c8);
+  --color-shade: light-dark(#1b233333, #00000099);
+
+  /* Type: Besley for display, Libre Franklin for everything read at length. */
+  --font-display: "Besley Variable", Georgia, "Times New Roman", serif;
+  --font-body: "Libre Franklin Variable", "Helvetica Neue", Arial, sans-serif;
+  --default-font-family: var(--font-body);
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --tracking-caps: 0.08em;
+  --text-caption: 0.8125rem;
+  --text-caption--line-height: 1.25rem;
+  --text-body: 1rem;
+  --text-body--line-height: 1.5rem;
+  --text-lead: 1.1875rem;
+  --text-lead--line-height: 1.75rem;
+  --text-title: 1.4375rem;
+  --text-title--line-height: 1.875rem;
+  --text-display: 2.0625rem;
+  --text-display--line-height: 2.5rem;
+  --text-cover: 3rem;
+  --text-cover--line-height: 3.5rem;
+
+  /* Space: a 4px grid. Steps off this list do not exist as utilities. */
+  --spacing-0: 0;
+  --spacing-1: 0.25rem;
+  --spacing-2: 0.5rem;
+  --spacing-3: 0.75rem;
+  --spacing-4: 1rem;
+  --spacing-5: 1.25rem;
+  --spacing-6: 1.5rem;
+  --spacing-8: 2rem;
+  --spacing-12: 3rem;
+  --spacing-16: 4rem;
+  --spacing-touch: 2.75rem;
+
+  /* Layout widths: the ledger page, the width at which a row splits into columns, and the due column. */
+  --container-measure: 50rem;
+  --container-wide: 36rem;
+  --container-due: 10rem;
+  --container-book: 60rem;
+
+  /* Shape and depth, by role. */
+  --radius-control: 0.125rem;
+  --radius-sheet: 0.25rem;
+  --shadow-sheet:
+    0 0 0 1px var(--color-rule), 4px 4px 0 -1px var(--color-sheet), 4px 4px 0 0 var(--color-rule),
+    0 18px 36px -18px var(--color-shade);
+  --shadow-lifted:
+    0 0 0 1px var(--color-rule), 0 2px 6px var(--color-shade), 0 16px 32px -10px var(--color-shade);
+
+  /* Motion: short and calm; reduced motion sets both durations to zero. */
+  --duration-quick: 120ms;
+  --duration-base: 220ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --default-transition-duration: var(--duration-quick);
+  --default-transition-timing-function: var(--ease-standard);
+  --animate-shimmer: shimmer 1.4s var(--ease-standard) infinite;
+
+  @keyframes shimmer {
+    50% {
+      opacity: 0.45;
+    }
+  }
+}
+
+:root {
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-quick: 0ms;
+    --duration-base: 0ms;
+  }
+}
