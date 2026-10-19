@@ -20,6 +20,24 @@ export const summarize = (tasks: readonly Task[]): TaskSummary =>
     { open: 0, done: 0 },
   );
 
+/** True when the search box holds a term, which also turns reordering off (spec D6). */
+export const isSearching = (query: string): boolean => query.trim() !== "";
+
+/** The one line under the list heading: counts, matches, or that a search is running. */
+export const listSummary = (
+  tasks: readonly Task[],
+  query: string,
+  searchPending: boolean,
+): string => {
+  if (searchPending) return "Searching…";
+  if (!isSearching(query)) {
+    const { open, done } = summarize(tasks);
+    return `${String(open)} open · ${String(done)} done`;
+  }
+  const noun = tasks.length === 1 ? "match" : "matches";
+  return `${String(tasks.length)} ${noun} for “${query.trim()}”. Reordering is off while you search.`;
+};
+
 /** Turn a drop of `activeId` onto `overId`'s place into the move the API expects, or null for no change. */
 export const moveFor = (ids: readonly string[], activeId: string, overId: string): Move | null => {
   const from = ids.indexOf(activeId);

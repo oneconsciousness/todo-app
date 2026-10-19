@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { dueLabel } from "./due-date.ts";
+import { dueLabel, longDate } from "./due-date.ts";
 
 const today = "2026-10-19";
+
+describe("longDate", () => {
+  it("spells out the weekday and date, the way a ledger page is headed", () => {
+    expect(longDate(today)).toBe("Monday, October 19");
+  });
+});
 
 describe("dueLabel", () => {
   it("flags an open task whose date has passed", () => {

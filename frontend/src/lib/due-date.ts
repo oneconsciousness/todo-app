@@ -29,6 +29,16 @@ const otherYear = new Intl.DateTimeFormat("en-US", {
   timeZone: "UTC",
 });
 
+const long = new Intl.DateTimeFormat("en-US", {
+  weekday: "long",
+  month: "long",
+  day: "numeric",
+  timeZone: "UTC",
+});
+
+/** Spell out a `YYYY-MM-DD` date as "Monday, October 19", for the heading of a dated page. */
+export const longDate = (isoDate: string): string => long.format(toUtc(isoDate));
+
 const formatDate = (dueDate: string, today: string): string =>
   (dueDate.slice(0, 4) === today.slice(0, 4) ? sameYear : otherYear).format(toUtc(dueDate));
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { makeTask } from "../test/fixtures.ts";
-import { moveFor, summarize, taskPath } from "./task-list.ts";
+import { listSummary, moveFor, summarize, taskPath } from "./task-list.ts";
 
 describe("summarize", () => {
   it("counts open and completed tasks", () => {
@@ -14,6 +14,28 @@ describe("summarize", () => {
 
   it("counts nothing in an empty list", () => {
     expect(summarize([])).toEqual({ open: 0, done: 0 });
+  });
+});
+
+describe("listSummary", () => {
+  const two = [makeTask({ completed: false }), makeTask({ completed: true })];
+
+  it("counts open and done tasks when not searching", () => {
+    expect(listSummary(two, "", false)).toBe("1 open · 1 done");
+  });
+
+  it("counts matches and says reordering is off while searching", () => {
+    expect(listSummary(two, "milk", false)).toBe(
+      "2 matches for “milk”. Reordering is off while you search.",
+    );
+  });
+
+  it("uses the singular for one match", () => {
+    expect(listSummary(two.slice(0, 1), "milk", false)).toMatch(/^1 match for/);
+  });
+
+  it("says it is searching while results load", () => {
+    expect(listSummary(two, "milk", true)).toBe("Searching…");
   });
 });
 
