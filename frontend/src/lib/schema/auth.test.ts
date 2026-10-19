@@ -49,4 +49,9 @@ describe("userSchema", () => {
     const user = { id: "3f0c6f7e-8a51-4f7a-9d64-2f0b9c1e5a10", email: "maya@example.com" };
     expect(userSchema.parse(user)).toEqual(user);
   });
+
+  it("accepts any address the server validated, internationalised ones included", () => {
+    const user = { id: "3f0c6f7e-8a51-4f7a-9d64-2f0b9c1e5a10", email: "josé@exämple.com" };
+    expect(userSchema.parse(user).email).toBe("josé@exämple.com");
+  });
 });

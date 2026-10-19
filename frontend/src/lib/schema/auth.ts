@@ -17,10 +17,14 @@ export const credentialsSchema = z.object({
 /** An email and password, typed from their schema. */
 export type Credentials = z.infer<typeof credentialsSchema>;
 
-/** The signed-in user, as `GET /api/v1/auth/me` returns it. */
+/**
+ * The signed-in user, as `GET /api/v1/auth/me` returns it. The server already validated the email with Pydantic's
+ * `EmailStr`, which accepts internationalised addresses that `z.email()` would reject, so here it is any non-empty
+ * string.
+ */
 export const userSchema = z.object({
   id: z.uuid(),
-  email: z.email(),
+  email: z.string().min(1),
 });
 
 /** The signed-in user, typed from its schema. */
