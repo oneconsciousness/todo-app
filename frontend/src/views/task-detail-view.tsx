@@ -14,7 +14,13 @@ import { dueLabel, formatDay } from "../lib/due-date.ts";
 import { routes } from "../lib/routes.ts";
 import { type FieldErrors, fieldErrors } from "../lib/schema/field-errors.ts";
 import { type Task, type TaskDraft, type TaskEdit, taskDraftSchema } from "../lib/schema/task.ts";
-import { type TaskChanges, changedFieldNames, changesFrom, draftFrom } from "../lib/task-draft.ts";
+import {
+  type TaskChanges,
+  changedFieldNames,
+  changesFrom,
+  draftFields,
+  draftFrom,
+} from "../lib/task-draft.ts";
 import { NotFoundView } from "./not-found-view.tsx";
 
 /** What the detail screen shows: a placeholder, not found (missing or someone else's), or the task. */
@@ -74,8 +80,6 @@ interface Editing {
 interface TaskEntryProps extends Omit<TaskDetailViewProps, "content"> {
   readonly task: Task;
 }
-
-const draftFields = ["title", "notes", "dueDate"] as const satisfies readonly (keyof TaskDraft)[];
 
 const isEmpty = (changes: TaskChanges): boolean => Object.keys(changes).length === 0;
 

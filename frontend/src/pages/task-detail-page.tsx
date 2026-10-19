@@ -6,9 +6,8 @@ import { routes } from "../lib/routes.ts";
 import { serverFieldErrors } from "../lib/schema/field-errors.ts";
 import { taskIdParamSchema } from "../lib/schema/route.ts";
 import type { Task } from "../lib/schema/task.ts";
+import { draftFields } from "../lib/task-draft.ts";
 import { type TaskDetailContent, TaskDetailView } from "../views/task-detail-view.tsx";
-
-const draftFields = ["title", "notes", "dueDate"] as const;
 
 const detailContent = (
   taskId: string | null,
