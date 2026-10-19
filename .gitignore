@@ -1,0 +1,78 @@
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Node
+node_modules/
+dist/
+coverage/
+playwright-report/
+test-results/
+*.tsbuildinfo
+
+# Claude Code per-user overrides (project-level settings.json is committed)
+.claude/settings.local.json
+# Local git worktrees created by Claude Code sessions
+.claude/worktrees/
+# Personal Claude Code notes
+CLAUDE.local.md
+.claude/hooks/__pycache__/
+# Session transcript snapshots; exported to docs/ai-usage/ only after a secrets and personal-data scan
+.ai-transcripts/
+# Scratch folders agents may create
+_temp/
+_ignore/
+
+# Claude Code's own MCP config is per user
+.mcp.json
+
+# Secrets: the same patterns secrets-protection.py protects. Credential stores are named by
+# data extension, so source files such as credentials.py or secrets.ts are still committed.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+*.jks
+id_rsa
+id_rsa.*
+id_ed25519
+id_ed25519.*
+.npmrc
+.pypirc
+credentials.json
+credentials.yaml
+credentials.yml
+credentials.toml
+credentials.env
+credentials.ini
+credentials.cfg
+credentials.conf
+credentials.txt
+credentials.xml
+credentials.csv
+credentials.properties
+secrets.json
+secrets.yaml
+secrets.yml
+secrets.toml
+secrets.env
+secrets.ini
+secrets.cfg
+secrets.conf
+secrets.txt
+secrets.xml
+secrets.csv
+secrets.properties
