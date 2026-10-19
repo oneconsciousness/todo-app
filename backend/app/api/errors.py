@@ -20,7 +20,11 @@ from app.domain.errors import (
     EmptyPatch,
     ForbiddenOrigin,
     InvalidCredentials,
+    InvalidPosition,
+    InvalidPrecondition,
     NotAuthenticated,
+    TaskNotFound,
+    VersionMismatch,
 )
 
 log = logging.getLogger(__name__)
@@ -42,6 +46,10 @@ STATUS_BY_ERROR: Final[Mapping[type[DomainError], HttpError]] = MappingProxyType
         InvalidCredentials: HttpError(401, "invalid_credentials", "The email or password is wrong."),
         ForbiddenOrigin: HttpError(403, "forbidden_origin", "This request came from another site."),
         EmailTaken: HttpError(409, "email_taken", "An account with this email already exists.", field="email"),
+        TaskNotFound: HttpError(404, "not_found", "That task does not exist."),
+        InvalidPosition: HttpError(400, "invalid_position", "The task to place it after is not in your list."),
+        InvalidPrecondition: HttpError(400, "invalid_if_match", "If-Match must be a version number in quotes."),
+        VersionMismatch: HttpError(412, "version_mismatch", "This task changed since you opened it."),
     }
 )
 

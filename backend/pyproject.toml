@@ -52,7 +52,7 @@ addopts = ["--strict-markers", "--strict-config", "--cov", "--cov-report=term-mi
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "session"
 asyncio_default_test_loop_scope = "session"
-markers = ["loop_guard_off: the test exercises the loop guard itself, so the autouse guard stands aside"]
+markers = ["loop_guard_off: the guard cannot judge this test (its own tests, or a framework's one-time build), so it stands aside"]
 
 [tool.coverage.run]
 branch = true

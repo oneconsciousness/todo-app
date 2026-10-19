@@ -42,6 +42,32 @@ class AccountCredentials:
     password: str = field(repr=False)
 
 
+@dataclass(frozen=True)
+class NewTask:
+    """A validated task to create; it always goes to the top of the owner's list."""
+
+    title: str
+    notes: str
+    due_date: date | None
+
+
+class TaskRecord(BaseModel):
+    """A task row as it leaves the repository."""
+
+    model_config = ConfigDict(frozen=True, from_attributes=True)
+
+    id: UUID
+    owner_id: UUID
+    title: str
+    notes: str
+    completed: bool
+    due_date: date | None
+    rank: str
+    version: int
+    created_at: datetime
+    updated_at: datetime
+
+
 class UserRecord(BaseModel):
     """A user row as it leaves the repository."""
 

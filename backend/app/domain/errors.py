@@ -23,3 +23,19 @@ class ForbiddenOrigin(DomainError):
 
 class EmailTaken(DomainError):
     """An account already uses this email, in any letter case."""
+
+
+class TaskNotFound(DomainError):
+    """No task with this id belongs to the signed-in user; another user's task counts as missing."""
+
+
+class InvalidPosition(DomainError):
+    """A move names a task to follow that is unknown, belongs to someone else, or is the task itself."""
+
+
+class InvalidPrecondition(DomainError):
+    """The If-Match header is not a quoted positive version number."""
+
+
+class VersionMismatch(DomainError):
+    """The task changed since the version the client named, so the edit was not applied."""
