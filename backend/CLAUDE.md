@@ -29,6 +29,7 @@ Coverage below 90% fails the run. Unit tests never open a socket; integration te
 `app/config.py` reads environment variables into `Settings`, once, inside `create_app`.
 - Required: `DATABASE_URL` (a `postgresql+asyncpg://` URL) and `JWT_SECRET` (32 characters or more).
 - Optional, with defaults: `APP_ORIGIN` (`http://localhost:8080`), `COOKIE_SECURE` (`false`), `LOG_LEVEL` (`INFO`), `DB_POOL_SIZE` (10), `DB_MAX_OVERFLOW` (5), `DB_POOL_TIMEOUT_SECONDS` (5).
+- `APP_ORIGIN` must be `http(s)://host[:port]`, exactly what browsers send in `Origin`. A trailing slash is dropped; a path, query, credentials or bad port stops start-up. Writes whose `Origin` differs get 403.
 - Migrations read only `DatabaseSettings` (the database URL), so the migrate step never sees the JWT secret.
 - The app refuses to start when `JWT_SECRET` is still the value in `.env.example` and `COOKIE_SECURE` is true. `EXAMPLE_JWT_SECRET` in `config.py` and `.env.example` change together.
 - Unknown variables are ignored, so a misspelt name silently falls back to its default.
@@ -39,9 +40,9 @@ Coverage below 90% fails the run. Unit tests never open a socket; integration te
 - `app/api/`: routers, request dependencies, wire models (camelCase) and the error handlers. `STATUS_BY_ERROR` is the one table from domain error to status, code and message.
 - `app/services/`: use cases. Each opens its own transaction.
 - `app/db/`: the engine and session factory, table mappings and repository functions. Rows leave as Pydantic records.
-- `app/security/`: argon2id password hashing on worker threads, at most four at a time.
+- `app/security/`: argon2id password hashing on worker threads, at most four at a time. At start-up the hasher makes a dummy hash with its own parameters; sign-in checks an unknown email's password against it, so it costs the same as a wrong password.
 - `app/log.py`: JSON lines through a queue, carrying the request and user ids from context variables.
-- `app/middleware.py`: the request id, `X-Served-By`, `Cache-Control: no-store` on `/api/`, and one access line per request.
+- `app/middleware.py`: the request id, `X-Served-By`, `Cache-Control: no-store` on `/api/`, one access line per request, and the 500 envelope for any error nothing else handled.
 - `app/main.py`: `create_app(settings)` and the lifespan; uvicorn runs it with `--factory`.
 - `alembic/versions/`: migrations, numbered. Never edit one that has been applied.
 
@@ -54,6 +55,9 @@ Coverage below 90% fails the run. Unit tests never open a socket; integration te
 - `get_session` is declared with `Depends(..., scope="function")`, so the session closes before the response is sent. Services open the transaction themselves with `async with session.begin()`, and hash passwords outside it so no pooled connection waits on a hash.
 - Every query on `tasks` filters on the owner. A query without it is a bug, even in an admin path.
 - A duplicate email is caught as the unique-index violation on `uq_users_email` and becomes 409. Any other `IntegrityError` stays a 500.
+- Unhandled errors become a 500 inside `RequestContextMiddleware`, not in a FastAPI exception handler. Starlette runs its `Exception` handler outside every middleware, so that 500 would lack the request id and the other headers, and the server would log the traceback a second time.
+- A database that is slow, full or unreachable answers 503 (`/readyz` answers 503 `not_ready`). Opening a connection gives up after 5 s; asyncpg's own default is 60 s. `OSError` counts as unreachable, which covers refused connections and host names that do not resolve.
+- `app/db/models.py` and the migrations are kept in step by hand; nothing generates one from the other. A schema change edits both, in a new migration.
 - The alpine Postgres image includes ICU, which one collation test relies on. The `rank` column is `COLLATE "C"` so Postgres sorts keys byte by byte, as Python does.
 - If `uv` comes from a pyenv shim, it fails inside `backend/`. pyenv reads `backend/.python-version` (3.14.8), which it may not have installed. Install uv on its own, outside pyenv, or run `pyenv install 3.14.8`.
 - Dependencies are pinned to exact versions. Change them with `uv add 'pkg==x.y.z'` and commit `uv.lock`.
