@@ -1,6 +1,6 @@
 import { screen, waitFor } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { routes, signInPath } from "../lib/routes.ts";
 import { submitCredentials } from "../test/credentials.ts";
 import { detailTask, user } from "../test/fixtures.ts";
@@ -10,7 +10,6 @@ import { server } from "../test/server.ts";
 
 describe("SignInPage", () => {
   beforeEach(() => {
-    vi.spyOn(console, "error").mockImplementation(() => undefined);
     server.use(
       http.get("/api/v1/auth/me", () => errorReply(401, "not_authenticated")),
       http.post("/api/v1/auth/login", () => HttpResponse.json(user)),

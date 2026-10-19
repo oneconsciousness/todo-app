@@ -21,6 +21,12 @@ const retryable: ReadonlySet<ApiErrorCode> = new Set([
 
 const maxRetries = 2;
 
+// A wrong password, a taken email, a 404 or a 412 are answers the screens handle; only these mean something broke.
+const isIncident = (error: ApiError): boolean =>
+  error.status >= 500 ||
+  error.code === ApiErrorCode.NetworkError ||
+  error.code === ApiErrorCode.InvalidResponse;
+
 // Only the first part of a key is logged: the rest can hold a search term.
 const resourceOf = (key: QueryKey | undefined): string => {
   const [resource] = key ?? [];
@@ -29,7 +35,8 @@ const resourceOf = (key: QueryKey | undefined): string => {
 
 /**
  * The app's one query client. Data refetches whenever the window regains focus, only a lost connection or a busy
- * server is retried, and an ended session clears every cached answer before `onUnauthenticated` runs.
+ * server is retried, an ended session clears every cached answer before `onUnauthenticated` runs, and only failures
+ * that mean something broke are logged.
  */
 export const createQueryClient = ({ onUnauthenticated }: QueryClientOptions): QueryClient => {
   const handleError = (error: ApiError, key: QueryKey | undefined): void => {
@@ -38,6 +45,7 @@ export const createQueryClient = ({ onUnauthenticated }: QueryClientOptions): Qu
       onUnauthenticated();
       return;
     }
+    if (!isIncident(error)) return;
     console.error("[query] failed", {
       key: resourceOf(key),
       status: error.status,

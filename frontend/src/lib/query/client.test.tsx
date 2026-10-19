@@ -29,7 +29,6 @@ describe("createQueryClient", () => {
   });
 
   it("does not redirect on invalid_credentials", async () => {
-    vi.spyOn(console, "error").mockImplementation(() => undefined);
     server.use(http.post("/api/v1/auth/login", () => errorReply(401, "invalid_credentials")));
     const onUnauthenticated = vi.fn<() => void>();
     const client = createQueryClient({ onUnauthenticated });
@@ -43,5 +42,42 @@ describe("createQueryClient", () => {
 
     expect(onUnauthenticated).not.toHaveBeenCalled();
     expect(client.getQueryData(taskKeys.list(""))).toEqual(tasks);
+  });
+});
+
+// Load the task list through a fresh app client while the API answers with `reply`.
+const loadListAnswering = async (reply: () => Response): Promise<void> => {
+  server.use(http.get("/api/v1/tasks", reply));
+  const client = createQueryClient({ onUnauthenticated: () => undefined });
+  await client
+    .query({ queryKey: taskKeys.list(""), queryFn: ({ signal }) => listTasks("", signal) })
+    .catch(() => undefined);
+};
+
+describe("failure logging", () => {
+  it("logs a failure the server could not handle, with no more than the resource, status and code", async () => {
+    const logError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    await loadListAnswering(() => errorReply(500, "internal_error"));
+
+    expect(logError).toHaveBeenCalledWith("[query] failed", {
+      key: "tasks",
+      status: 500,
+      code: "internal_error",
+    });
+  });
+
+  it.each([
+    [400, "validation_failed"],
+    [401, "invalid_credentials"],
+    [404, "not_found"],
+    [409, "email_taken"],
+    [412, "version_mismatch"],
+  ] as const)("does not log an expected %i %s", async (status, code) => {
+    const logError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    await loadListAnswering(() => errorReply(status, code));
+
+    expect(logError).not.toHaveBeenCalled();
   });
 });

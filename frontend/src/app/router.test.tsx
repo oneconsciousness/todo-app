@@ -13,7 +13,6 @@ const taskUrl = `/api/v1/tasks/${detailTask.id}`;
 
 describe("app router", () => {
   it("shows not found for another user's task id", async () => {
-    vi.spyOn(console, "error").mockImplementation(() => undefined);
     renderApp(routes.task("7b0c1e5a-0000-4000-8000-00000000ffff"));
 
     expect(await screen.findByRole("heading", notFoundHeading)).toBeVisible();

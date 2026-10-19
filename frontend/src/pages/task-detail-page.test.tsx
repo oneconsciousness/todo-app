@@ -122,7 +122,6 @@ describe("TaskDetailPage", () => {
   });
 
   it("shows changed elsewhere after a 412", async () => {
-    vi.spyOn(console, "error").mockImplementation(() => undefined);
     refusedAs(() => errorReply(412, "version_mismatch"));
     await openAndEdit("My title");
 
@@ -132,7 +131,6 @@ describe("TaskDetailPage", () => {
   });
 
   it("use the latest discards the draft", async () => {
-    vi.spyOn(console, "error").mockImplementation(() => undefined);
     refusedAs(() => errorReply(412, "version_mismatch"));
     await openAndEdit("My title");
     await save();
@@ -145,7 +143,6 @@ describe("TaskDetailPage", () => {
   });
 
   it("shows server field errors next to the field", async () => {
-    vi.spyOn(console, "error").mockImplementation(() => undefined);
     server.use(
       http.patch(taskUrl, () =>
         errorReply(400, "validation_failed", [

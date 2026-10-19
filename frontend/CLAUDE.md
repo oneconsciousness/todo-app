@@ -44,7 +44,7 @@ Every commit passes `check`, `test` and `build`.
 - `data-hover`, `data-focus-visible` and `data-active` exist for the gallery only. Never set them in app code.
 - The design build inlines everything; the app build must not inline anything (the nginx CSP is `'self'` only).
 - A request with no MSW handler fails the test. Add one with `server.use` in the test; handlers reset after each test.
-- The query cache logs every failed request with `console.error`. A test that expects a failure silences it with `vi.spyOn(console, "error")`; spies are restored after each test.
+- The query cache logs only failures that mean something broke (5xx, no connection, a response that doesn't match its schema) with `console.error`; expected 4xx answers are not logged. A test that expects such a failure silences it with `vi.spyOn(console, "error")`; spies are restored after each test.
 - `useAuth` reads the `me` query in the component that calls it, not from context. Context only updates when its provider renders again, so a page reading it could act on a session that has already ended.
 - A query that throws to the route error boundary keeps its error cached. The boundary calls `useQueryErrorResetBoundary().reset()` before retrying, or the old error is thrown again without a fetch.
 - Moves share the mutation scope `task-order`, so they reach the server in the order they were made, and the lists refetch only after the last one.

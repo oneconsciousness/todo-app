@@ -116,7 +116,6 @@ describe("TaskListPage", () => {
   });
 
   it("removes the row and says why when a toggle gets 404", async () => {
-    vi.spyOn(console, "error").mockImplementation(() => undefined);
     await renderList();
     server.use(
       http.patch("/api/v1/tasks/:taskId", () => errorReply(404, "not_found")),
