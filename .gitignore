@@ -32,13 +32,59 @@ CLAUDE.local.md
 _temp/
 _ignore/
 
-# Secrets. The same patterns the secrets hook protects.
+# Claude Code's own MCP config is per user
+.mcp.json
+
+# Secrets: the same patterns secrets-protection.py protects. Credential stores are named by
+# data extension, so source files such as credentials.py or secrets.ts are still committed.
 .env
 .env.*
 !.env.example
 *.pem
 *.key
-credentials.*
-secrets.*
-# The patterns above would hide rule docs with those names; keep the rules visible.
-!.claude/rules/*.md
+*.crt
+*.p12
+*.pfx
+*.jks
+id_rsa
+id_rsa.*
+id_ed25519
+id_ed25519.*
+.npmrc
+.pypirc
+credentials.json
+credentials.yaml
+credentials.yml
+credentials.toml
+credentials.env
+credentials.ini
+credentials.cfg
+credentials.conf
+credentials.txt
+credentials.xml
+credentials.csv
+credentials.properties
+secrets.json
+secrets.yaml
+secrets.yml
+secrets.toml
+secrets.env
+secrets.ini
+secrets.cfg
+secrets.conf
+secrets.txt
+secrets.xml
+secrets.csv
+secrets.properties
+task-secrets.json
+task-secrets.yaml
+task-secrets.yml
+task-secrets.toml
+task-secrets.env
+task-secrets.ini
+task-secrets.cfg
+task-secrets.conf
+task-secrets.txt
+task-secrets.xml
+task-secrets.csv
+task-secrets.properties

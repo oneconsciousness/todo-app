@@ -4,6 +4,8 @@
 Format: type(scope): subject. Scope is optional and free-form. Subject starts lowercase and has no trailing period.
 The CI check (if any) stays the real gate; this hook saves a round trip.
 """
+from __future__ import annotations
+
 import json
 import re
 import shlex

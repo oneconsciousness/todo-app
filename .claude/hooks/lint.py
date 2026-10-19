@@ -6,6 +6,8 @@ Report only: it never rewrites the file and never blocks (the edit already happe
 Findings are limited to lines that differ from HEAD; a new file is checked whole. A missing tool keeps the hook quiet.
 Whole-project gates (type checks, the test suites) do not run here; `/verify` runs them.
 """
+from __future__ import annotations
+
 import json
 import os
 import re

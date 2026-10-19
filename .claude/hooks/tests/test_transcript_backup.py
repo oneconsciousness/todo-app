@@ -1,8 +1,11 @@
 """Pipe hook payloads into transcript-backup.py and check the snapshots it leaves."""
+from __future__ import annotations
+
 import json
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -15,7 +18,7 @@ def run(payload: dict[str, str] | str, project: Path) -> subprocess.CompletedPro
     """Run the hook with the payload on stdin and the project root in the environment."""
     body = payload if isinstance(payload, str) else json.dumps(payload)
     env = {**os.environ, "CLAUDE_PROJECT_DIR": str(project)}
-    return subprocess.run(["python3", str(HOOK)], input=body, capture_output=True, text=True, timeout=30, env=env)
+    return subprocess.run([sys.executable, str(HOOK)], input=body, capture_output=True, text=True, timeout=30, env=env)
 
 
 class TranscriptBackup(unittest.TestCase):

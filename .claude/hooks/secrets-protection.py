@@ -10,18 +10,23 @@ Behavior summary:
   - Grep on a secrets path, or with a glob aimed at env dotfiles        -> DENY
   - `.env.example` (exact name, any case) is not a secrets path, unless
     it is a symlink whose target is one                                  -> ALLOW
-  - Bash command reading-and-printing a secrets path
-    (cat / head / tail / less / more / nl / xxd / od / strings,
-     grep without -l/-c/-q, awk on a secrets path)                       -> DENY
-  - Bash commands that mutate secrets in place (sed -i, chmod, echo>>,
-     scripts that the agent has explicitly verified do NOT print
-     secrets to stdout)                                                  -> ALLOW
+  - Bash command whose program prints files (cat, head, sed without -i,
+    base64, grep without -l/-c/-q, awk, ...) given a secrets path, with
+    the command read the way the shell reads it (quotes removed, any
+    directory on the program name ignored)                               -> DENY
+  - Bash commands that only inspect or mutate a key file in place
+    (ls, wc, chmod, sed -i)                                              -> ALLOW
+  - an unreadable payload or a crash in this hook                        -> DENY
   - everything else                                                      -> ALLOW
+
+Env files get stricter treatment in env-protection.py: no agent command
+may touch them at all, except `.env.example`.
 
 Secret patterns (matched case-insensitively against the basename, or against any path segment):
   - .env, .env.*  (any env file)
   - *.pem, *.key, *.crt, *.p12, *.pfx, *.jks  (cryptographic keys/certs)
-  - credentials.*, secrets.*, task-secrets.*  (named secret stores)
+  - credentials.<data ext>, secrets.<data ext>, task-secrets.<data ext>
+    (named secret stores; source files such as credentials.py are not)
   - id_rsa, id_rsa.*, id_ed25519, id_ed25519.* (SSH keys)
   - .npmrc, .pypirc, .docker/config.json, .aws/credentials, .ssh/, .gnupg/, .kube/config
 
@@ -30,59 +35,45 @@ Returns Claude Code's PreToolUse deny shape:
                           "permissionDecision": "deny",
                           "permissionDecisionReason": "..."}}
 """
+from __future__ import annotations
+
 import fnmatch
 import json
 import os
-import re
+import posixpath
+import shlex
 import sys
+from typing import NoReturn
 
 SECTION_REF = "CONTRIBUTING.md § 12 (Secrets discipline)"
 ALLOWED_ENV_FILES = frozenset({".env.example"})  # the committed template; exact basenames only
 ENV_DOTFILE_PROBES = (".env", ".env.local", ".env.production")
+DATA_EXTENSIONS = ("json", "yaml", "yml", "toml", "env", "ini", "cfg", "conf", "txt", "xml", "csv", "properties")
 
 # Pattern matched against the basename. Using fnmatch globs.
 SECRET_BASENAME_GLOBS = (
-    ".env",
-    ".env.*",
-    "*.pem",
-    "*.key",
-    "*.crt",
-    "*.p12",
-    "*.pfx",
-    "*.jks",
-    "credentials.*",
-    "secrets.*",
-    "task-secrets.*",
-    "id_rsa",
-    "id_rsa.*",
-    "id_ed25519",
-    "id_ed25519.*",
-    ".npmrc",
-    ".pypirc",
+    ".env", ".env.*", "*.pem", "*.key", "*.crt", "*.p12", "*.pfx", "*.jks",
+    "id_rsa", "id_rsa.*", "id_ed25519", "id_ed25519.*", ".npmrc", ".pypirc",
+    *(f"{name}.{ext}" for name in ("credentials", "secrets", "task-secrets") for ext in DATA_EXTENSIONS),
 )
 
 # Pattern matched against any path segment.
-SECRET_PATH_FRAGMENTS = (
-    ".docker/config.json",
-    ".aws/credentials",
-    ".aws/config",
-    ".ssh/",
-    ".gnupg/",
-    ".kube/config",
-)
+SECRET_PATH_FRAGMENTS = (".docker/config.json", ".aws/credentials", ".aws/config", ".ssh/", ".gnupg/", ".kube/config")
 
-WRITE_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
-READ_TOOLS = {"Read"}
+WRITE_TOOLS = frozenset({"Edit", "Write", "MultiEdit", "NotebookEdit"})
+SEPARATORS = frozenset({";", "&&", "||", "|", "&", "(", ")", ";;", "|&"})
+COMMAND_PREFIXES = frozenset({"sudo", "command", "exec", "time", "nice", "nohup"})
 
-# Bash readers that print file contents to stdout — denied if their
-# argument matches a secrets path. The grep/awk cases need flag inspection.
-PRINTING_READERS = (
-    "cat", "head", "tail", "less", "more", "nl",
-    "xxd", "od", "strings", "bat", "tac",
-)
+# Programs that print the files they are given. grep and sed need their flags read first.
+PRINTING_READERS = frozenset({
+    "cat", "head", "tail", "less", "more", "nl", "xxd", "od", "strings", "bat", "tac", "awk",
+    "base64", "cut", "sort", "uniq", "diff", "jq", "hexdump", "rev", "fold", "cp", "rg", "egrep", "fgrep",
+})
+GREP_LIKE = frozenset({"grep", "egrep", "fgrep", "rg"})
+GREP_QUIET = frozenset({"-l", "--files-with-matches", "-L", "--files-without-match", "-c", "--count", "-q", "--quiet", "--silent"})
 
 
-def deny(reason: str) -> None:
+def deny(reason: str) -> NoReturn:
     print(json.dumps({
         "hookSpecificOutput": {
             "hookEventName": "PreToolUse",
@@ -93,11 +84,12 @@ def deny(reason: str) -> None:
     sys.exit(0)
 
 
-def allow() -> None:
+def allow() -> NoReturn:
     sys.exit(0)
 
 
 def is_secret_path(path: str) -> bool:
+    """True when the path names a secrets file; `.env.example` only when it resolves to another file."""
     if not path:
         return False
     norm = path.replace("\\", "/")
@@ -105,14 +97,7 @@ def is_secret_path(path: str) -> bool:
     if base in ALLOWED_ENV_FILES:
         real = os.path.realpath(norm)
         return os.path.basename(real).lower() not in ALLOWED_ENV_FILES or any(frag in real for frag in SECRET_PATH_FRAGMENTS)
-    if base:
-        for glob in SECRET_BASENAME_GLOBS:
-            if fnmatch.fnmatch(base, glob):
-                return True
-    for frag in SECRET_PATH_FRAGMENTS:
-        if frag in norm:
-            return True
-    return False
+    return any(fnmatch.fnmatchcase(base, glob) for glob in SECRET_BASENAME_GLOBS) or any(frag in norm for frag in SECRET_PATH_FRAGMENTS)
 
 
 def targets_env_dotfiles(glob: str) -> bool:
@@ -123,78 +108,61 @@ def targets_env_dotfiles(glob: str) -> bool:
     return (pattern.startswith(".") or "env" in pattern) and any(fnmatch.fnmatchcase(p, pattern) for p in ENV_DOTFILE_PROBES)
 
 
-def bash_command_reads_and_prints_secret(command: str) -> tuple[bool, str | None]:
-    """Heuristic check: does this Bash command read a secrets file AND print
-    its contents to stdout? Returns (is_violation, matched_path).
-
-    Splits on shell connectors (;, &&, ||, |, &) and inspects each piece.
-    For pipes (|), printing readers on the LEFT side feed downstream — that's
-    still printing-from-secret (the data flows through the pipe and may land
-    in stdout / agent context). So we treat any printing-reader on a secrets
-    path as a violation.
-    """
-    if not command:
-        return False, None
-    # Split on shell separators that create independent command stages.
-    # Conservative: '|' counted, since the read still happens.
-    parts = re.split(r"\s*(?:\|\||&&|;|\||&)\s*", command)
-    for part in parts:
-        part = part.strip()
-        if not part:
-            continue
-        tokens = part.split()
-        if not tokens:
-            continue
-        head = tokens[0].lstrip("$").lstrip()
-        # Strip leading "sudo" / env var prefixes
-        if head in {"sudo", "command", "exec", "time"}:
-            tokens = tokens[1:]
-            if not tokens:
-                continue
-            head = tokens[0]
-        # PRINTING_READERS check
-        if head in PRINTING_READERS:
-            for arg in tokens[1:]:
-                if arg.startswith("-"):
-                    continue
-                if is_secret_path(arg):
-                    return True, arg
-        # grep without quiet/list-only flags is a printing reader
-        if head == "grep":
-            quiet = any(
-                f in tokens[1:]
-                for f in ("-l", "--files-with-matches",
-                          "-L", "--files-without-match",
-                          "-c", "--count",
-                          "-q", "--quiet", "--silent")
-            )
-            if not quiet:
-                for arg in tokens[1:]:
-                    if arg.startswith("-"):
-                        continue
-                    if is_secret_path(arg):
-                        return True, arg
-        # awk default action prints; treat awk on a secrets path as violation
-        if head == "awk":
-            for arg in tokens[1:]:
-                if arg.startswith("-"):
-                    continue
-                if is_secret_path(arg):
-                    return True, arg
-    return False, None
-
-
-def main() -> None:
-    raw = sys.stdin.read()
+def shell_commands(command: str) -> list[list[str]]:
+    """Split the command the way the shell does, into simple commands with quotes removed."""
+    lexer = shlex.shlex(command, posix=True, punctuation_chars=True)
+    lexer.whitespace_split = True
     try:
-        payload = json.loads(raw)
-    except json.JSONDecodeError:
-        allow()
+        tokens = list(lexer)
+    except ValueError:
+        tokens = command.split()
+    groups: list[list[str]] = [[]]
+    for token in tokens:
+        if token in SEPARATORS:
+            groups.append([])
+        else:
+            groups[-1].append(token)
+    return [g for g in groups if g]
 
-    tool_name = payload.get("tool_name") or ""
-    tool_input = payload.get("tool_input") or {}
 
-    if tool_name in READ_TOOLS:
+def program(words: list[str]) -> tuple[str, list[str]]:
+    """Return the program's base name and its arguments, past assignments and prefixes like `sudo`."""
+    rest = list(words)
+    while rest and ("=" in rest[0] and not rest[0].startswith("-") or posixpath.basename(rest[0]) in COMMAND_PREFIXES):
+        rest = rest[1:]
+    return (posixpath.basename(rest[0]), rest[1:]) if rest else ("", [])
+
+
+def prints_its_files(name: str, args: list[str]) -> bool:
+    """True when this program, with these flags, prints the content of the files it is given."""
+    if name == "grep":
+        return not (GREP_QUIET & set(args))
+    if name == "sed":
+        return not any(a == "-i" or a.startswith(("-i", "--in-place")) for a in args)
+    return name in PRINTING_READERS
+
+
+def file_operands(name: str, args: list[str]) -> list[str]:
+    """Return the arguments that name files: for grep-like programs the first word is the pattern, unless -e or -f gives it."""
+    positional = [a for a in args if not a.startswith("-")]
+    pattern_given = any(a in ("-e", "-f", "--regexp", "--file") or a.startswith(("--regexp=", "--file=")) for a in args)
+    return positional[1:] if name in GREP_LIKE and not pattern_given else positional
+
+
+def printed_secret(command: str) -> str | None:
+    """Return the first secrets path a printing program in the command is given, or None."""
+    for words in shell_commands(command):
+        name, args = program(words)
+        if prints_its_files(name, args):
+            secret = next((a for a in file_operands(name, args) if is_secret_path(a)), None)
+            if secret:
+                return secret
+    return None
+
+
+def decide(tool_name: str, tool_input: dict[str, str]) -> None:
+    """Deny the tool call when it would read, print or write a secrets file."""
+    if tool_name == "Read":
         path = tool_input.get("file_path") or ""
         if is_secret_path(path):
             deny(
@@ -203,9 +171,7 @@ def main() -> None:
                 f"the agent's context. Only `.env.example` is open to agents. "
                 f"Ask the human for the value you need.\n\nSee {SECTION_REF}."
             )
-        allow()
-
-    if tool_name == "Grep":
+    elif tool_name == "Grep":
         path = tool_input.get("path") or ""
         glob = tool_input.get("glob") or ""
         if is_secret_path(path) or targets_env_dotfiles(glob):
@@ -214,48 +180,46 @@ def main() -> None:
                 f"matches a secrets-file pattern, and print matching lines. "
                 f"Only `.env.example` is open to agents.\n\nSee {SECTION_REF}."
             )
-        allow()
-
-    if tool_name in WRITE_TOOLS:
-        path = (
-            tool_input.get("file_path")
-            or tool_input.get("notebook_path")
-            or ""
-        )
+    elif tool_name in WRITE_TOOLS:
+        path = tool_input.get("file_path") or tool_input.get("notebook_path") or ""
         if is_secret_path(path):
             deny(
                 f"Heads up — `{tool_name}` on `{path}` is blocked because the "
-                f"path matches a secrets-file pattern. Agents don't write to "
-                f".env, *.pem, *.key, credentials.*, secrets.*, ssh/aws/gnupg/"
-                f"kube config, etc. — these are user-managed.\n\n"
-                f"What to do instead: write a script that mutates the file "
-                f"in place (e.g., `sed -i 's/^API_TOKEN=.*/API_TOKEN="
-                f"<new>/' .env`) AND never prints the secret contents back. "
-                f"Or print the proposed change as text and ask the user to "
-                f"make the edit.\n\n"
-                f"See {SECTION_REF}."
+                f"path matches a secrets-file pattern. Env files, key material "
+                f"and credential stores are human-managed; only `.env.example` "
+                f"is open to agents.\n\n"
+                f"What to do instead: add the setting to `.env.example` with a "
+                f"safe local value, or post the exact change in chat and ask "
+                f"the human to make it.\n\nSee {SECTION_REF}."
             )
-        allow()
-
-    if tool_name == "Bash":
-        command = (tool_input.get("command") or "").strip()
-        violated, matched = bash_command_reads_and_prints_secret(command)
-        if violated:
+    elif tool_name == "Bash":
+        matched = printed_secret(tool_input.get("command") or "")
+        if matched:
             deny(
                 f"Heads up — this Bash command would read `{matched}` and "
                 f"print it to stdout. The contents would land in the agent's "
                 f"context, exposing secrets.\n\n"
-                f"Allowed alternatives:\n"
-                f"  - In-place mutation: `sed -i 's/^KEY=.*/KEY=<new>/' .env`\n"
-                f"  - Existence/stat only: `ls`, `wc -l`, `stat`, `chmod`\n"
-                f"  - `grep -l` / `grep -q` / `grep -c` (no content printing)\n"
-                f"  - Scripts that you've verified never print secrets\n\n"
-                f"See {SECTION_REF}."
+                f"Allowed alternatives for key material (never for env files):\n"
+                f"  - Existence and metadata only: `ls`, `wc -l`, `stat`, `chmod`\n"
+                f"  - `grep -l` / `grep -q` / `grep -c` (no content printed)\n"
+                f"  - In-place change that prints nothing: `sed -i`\n"
+                f"For a value you need, ask the human.\n\nSee {SECTION_REF}."
             )
-        allow()
 
+
+def main() -> None:
+    try:
+        payload = json.loads(sys.stdin.read())
+    except json.JSONDecodeError:
+        deny("Blocked: the hook payload could not be read, so the call could not be checked for secrets.")
+    decide(payload.get("tool_name") or "", payload.get("tool_input") or {})
     allow()
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except SystemExit:
+        raise
+    except Exception as exc:  # fail closed: a crash must never let a call through unchecked
+        deny(f"Blocked: secrets-protection failed ({type(exc).__name__}: {exc}), so the call could not be checked.")

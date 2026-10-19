@@ -5,6 +5,8 @@ A decision is either a change to a Claude artifact on the branch, or a commit wh
 `/claude-docs-check` produces both. The map's `bases` (fnmatch patterns) name the checked bases: `main` and each round's
 integration branch, so child PRs are checked too. PRs to any other base are not checked.
 """
+from __future__ import annotations
+
 import fnmatch
 import json
 import os

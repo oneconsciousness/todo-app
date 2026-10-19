@@ -9,6 +9,8 @@ warns on stderr when it is not, because that would mean the file was rewritten r
 Exit 0 on success. Exit 2 on any failure: for PreCompact that blocks the compaction, so it never runs without a backup.
 Exit 2 also after PostCompact or SessionEnd when a rewrite is found, which shows the warning to the user without blocking anything.
 """
+from __future__ import annotations
+
 import json
 import os
 import shutil

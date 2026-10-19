@@ -2,6 +2,7 @@ name: ci
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, edited]
   push:
     branches: [main, "round/**"]
 
@@ -15,10 +16,36 @@ concurrency:
 jobs:
   hygiene:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.9", "3.13"]  # 3.9 is what macOS ships; the hooks must run there
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python3 scripts/check_hygiene.py
+      - run: python3 -m unittest discover -s scripts/tests
+      - run: python3 -m unittest discover -s .claude/hooks/tests
+
+  pr-title:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
-      - run: python3 scripts/check_hygiene.py
-      - run: python3 -m unittest discover -s .claude/hooks/tests
+      - name: Check the PR title is a Conventional Commit (it becomes the squash commit's subject)
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          python3 - <<'PY'
+          import importlib.util, os, sys
+          spec = importlib.util.spec_from_file_location("pr_title", ".claude/hooks/pr-title.py")
+          module = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+          error = module.validate(os.environ["TITLE"])
+          print(error or "PR title ok")
+          sys.exit(1 if error else 0)
+          PY
