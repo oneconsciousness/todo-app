@@ -21,9 +21,10 @@ const titleAt = (index: number): string => {
   return task.title;
 };
 
-// Each move answers later than the one sent after it, so only a queue keeps them in order.
+// Each move answers later than the one sent after it, so only a queue keeps them in order. List reads take longer
+// than any keyboard move, so a reload started between moves is always still in flight when the next move cancels it.
 const reorderingServer = () => {
-  server.use(...orderKeepingServer({ moveDelaysMs: [300, 200, 100], listDelayMs: 150 }).handlers);
+  server.use(...orderKeepingServer({ moveDelaysMs: [300, 200, 100], listDelayMs: 1000 }).handlers);
 };
 
 const tickBox = (title: string) => screen.getByRole("checkbox", { name: `Completed: ${title}` });
@@ -53,8 +54,8 @@ describe("TaskListPage", () => {
 
   it("three quick moves end in the order the user made", async () => {
     stackRows();
-    reorderingServer();
     const app = await renderList();
+    reorderingServer();
     const refetchLists = () => {
       void app.client.refetchQueries({ queryKey: taskKeys.lists() });
     };
