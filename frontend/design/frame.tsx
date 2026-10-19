@@ -1,6 +1,6 @@
 import { type ReactNode, type RefObject, useLayoutEffect, useRef, useState } from "react";
 
-/** The two device widths every screen is shown at (spec D20). */
+/** The two device widths every screen is shown at: a phone and a desktop. */
 export const frameWidths = { phone: 390, desktop: 1280 } as const;
 
 const fallbackScale = 0.6;

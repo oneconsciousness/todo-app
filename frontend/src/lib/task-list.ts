@@ -20,7 +20,7 @@ export const summarize = (tasks: readonly Task[]): TaskSummary =>
     { open: 0, done: 0 },
   );
 
-/** True when the search box holds a term, which also turns reordering off (spec D6). */
+/** True when the search box holds a term. Reordering is off while searching, since moving within a filtered list is ambiguous. */
 export const isSearching = (query: string): boolean => query.trim() !== "";
 
 /** The one line under the list heading: counts, matches, or that a search is running. */
