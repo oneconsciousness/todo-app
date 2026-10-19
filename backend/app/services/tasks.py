@@ -79,6 +79,7 @@ async def move_task(session: AsyncSession, owner_id: UUID, task_id: UUID, after_
         InvalidPosition: when `after_id` is the task itself, unknown, or someone else's.
     """
     async with session.begin():
+        await task_rows.lock_task_order(session, owner_id)
         if await task_rows.rank_of(session, owner_id, task_id) is None:
             raise TaskNotFound
         lower, upper = await neighbours(session, owner_id, task_id, after_id)
@@ -103,6 +104,7 @@ async def delete_task(session: AsyncSession, owner_id: UUID, task_id: UUID) -> N
 async def create_task(session: AsyncSession, owner_id: UUID, new_task: NewTask) -> TaskRecord:
     """Create a task at the top of the owner's list."""
     async with session.begin():
+        await task_rows.lock_task_order(session, owner_id)
         top = await task_rows.first_rank(session, owner_id)
         return await task_rows.insert_task(
             session, owner_id, uuid4(), new_task.title, new_task.notes, new_task.due_date, rank_between(None, top)

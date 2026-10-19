@@ -10,6 +10,12 @@ from app.db.models import Task
 from app.domain.types import TaskChanges, TaskRecord
 
 
+async def lock_task_order(session: AsyncSession, owner_id: UUID) -> None:
+    """Hold the owner's order lock until the transaction ends, so their creates and moves pick ranks one at a time."""
+    # One lock per user, keyed by a hash of the id; other users never wait. https://www.postgresql.org/docs/18/explicit-locking.html#ADVISORY-LOCKS
+    await session.execute(select(func.pg_advisory_xact_lock(func.hashtextextended(str(owner_id), 0))))
+
+
 async def first_rank(session: AsyncSession, owner_id: UUID) -> str | None:
     """Return the rank of the owner's top task, or `None` when the list is empty."""
     rank: str | None = await session.scalar(
