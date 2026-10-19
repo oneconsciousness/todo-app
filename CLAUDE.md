@@ -19,8 +19,15 @@ A full-stack To Do list for an engineering challenge. A user signs in and manage
 ## Commands
 ```bash
 python3 scripts/check_hygiene.py      # task markers, debuggers, focused tests, debug-only logs; CI runs it
+GIT_SHA=$(git rev-parse --short HEAD) docker compose up --build --wait   # the stack, on http://localhost:8080
+docker compose down                   # stop it; `down -v` also deletes the database
 ```
 Each app's own commands are in its `CLAUDE.md`; `CONTRIBUTING.md` § 5 lists every gate.
+
+The stack is Postgres, a one-shot `migrate` service, two API replicas and nginx. It needs a `.env` in the repo root, which the human creates once with `cp .env.example .env`. Three suites run against it:
+- Live-server e2e, `e2e/live/` (pytest, Python 3.14.8): `cd e2e/live && uv run pytest`. CI also runs ruff and mypy there.
+- Browser journeys, `e2e/browser/` (Playwright, Chromium): from that folder, `npm ci && npx playwright install chromium` once, then `npm run check && npm test`. The HTML report goes to `playwright-report/`.
+- Load, `load/` (k6 in a compose container): `GIT_SHA=$(git rev-parse --short HEAD) docker compose --profile load run --rm k6 run /scripts/journey.js`. `VUS` and `HOLD` set the users and the hold time (200 and 3m by default). `python3 load/run_stepped.py` steps up the users to find the capacity. Results go to `load/results/`. Run load tests with the lead present.
 
 ## Config and secrets
 - `.env.example` is the only env file an agent may read or edit, by that exact name; it holds safe local values and never a real secret. Never read or edit `.env` or any other `.env.*` file, or key material. Hooks and the deny list block them, and a Bash command that only names such a file is blocked too. When a setting is needed, add it to `.env.example` with a safe local value; the human copies it into `.env` and sets real values there.
@@ -36,10 +43,13 @@ This repo sits inside a larger workspace whose `.claude/rules/` also load. The g
 - The three Bash guards share `.claude/hooks/shell_words.py`. A change there changes all three; run `python3 -m unittest discover -s .claude/hooks/tests` under `/usr/bin/python3` as well as 3.13.
 - The branch-protection hook blocks every commit on `main`. Branch first.
 - FastAPI answers validation errors with 422 unless the app's handler maps them. Keep the handler; the contract says 400.
+- Set `GIT_SHA` on every compose command that builds or runs, `docker compose run` included. Images are tagged with it and fall back to `local`; a command under another tag makes compose recreate the running stack.
+- `load/run_stepped.py` runs `docker compose down -v` before each step. That deletes the local database and every account in it.
+- The browser journeys fail on any `console.error`, uncaught exception or CSP violation in the page, except a 401 from `/api/` (`e2e/browser/fixtures.ts`).
 
 ## Branches and deploy
 - Each round has an integration branch, `round/<n>-<name>`, and one parent PR into `main` that merges only when the round is done and tested. Work on a branch off the round branch and open a child PR into it; the human lead reviews every PR. Child PRs are squash-merged, the parent is rebase-merged (`CONTRIBUTING.md` § 1). Releases are `vX.Y.Z` tags; a tag is never moved.
-- CI runs on every PR: hygiene, plus the backend and frontend gates as those apps land.
+- CI runs on every PR: hygiene, the backend and frontend gates, and an `e2e` job that builds the stack and runs the live and browser suites against it.
 - Deploy stages are in `.claude/rules/deployment.md`. The human reviews every deployment artifact before it is applied, and runs anything against AKS.
 - Guards: a hook blocks commits and pushes on `main` and on round branches, force pushes, `--no-verify` and tag moves. `git push`, `gh pr create`, `kubectl apply`/`delete`, `helm` and `az` always ask. PR titles must be Conventional Commits. A PR also needs a docs decision from `/claude-docs-check`.
 
