@@ -6,6 +6,27 @@
 @source "..";
 @source "../../design";
 
+/* Hover, focus and press also match a data attribute, so the design gallery can show each state on the real components. The app never sets these attributes. */
+@custom-variant hover {
+  &:where([data-hover]) {
+    @slot;
+  }
+  @media (hover: hover) {
+    &:hover {
+      @slot;
+    }
+  }
+}
+@custom-variant focus-visible (&:where(:focus-visible, [data-focus-visible]));
+@custom-variant active (&:where(:active, [data-active]));
+
+/* The binding: a band of cloth with gilt tooling, where the focus ring turns gilt to stay visible. */
+@utility binding {
+  background-color: var(--color-binding);
+  color: var(--color-on-binding);
+  --color-focus: var(--color-gilt);
+}
+
 @layer base {
   body {
     background-color: var(--color-canvas);
@@ -16,7 +37,8 @@
     -webkit-font-smoothing: antialiased;
   }
 
-  :focus-visible {
+  :focus-visible,
+  [data-focus-visible] {
     outline: 2px solid var(--color-focus);
     outline-offset: 2px;
   }

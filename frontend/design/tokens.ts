@@ -75,7 +75,7 @@ export const colorTokens = parseColorTokens(tokensCss);
 
 /** What each colour token is for. The token sheet shows this; a test keeps it in step with the file. */
 export const tokenRoles: Readonly<Record<string, string>> = {
-  canvas: "The desk under the page. App background.",
+  canvas: "The green desk blotter under the page. App background.",
   sheet: "The ledger page. Lists, panels and fields.",
   ink: "Blue-black iron-gall ink. Body text and headings.",
   "ink-muted": "Faded ink. Secondary text, completed tasks, placeholders.",
@@ -87,6 +87,9 @@ export const tokenRoles: Readonly<Record<string, string>> = {
   "primary-strong": "The main action when pressed or hovered.",
   "on-primary": "Text and icons on the main action.",
   focus: "Gilt. The keyboard focus ring.",
+  binding: "The cloth binding. The masthead band and the sign-in cover.",
+  gilt: "Gold tooling on the binding: the ledger title, and focus on the band.",
+  "on-binding": "Text on the binding that is not tooled in gilt.",
   shade: "Shadow under the page and under a lifted row.",
 };
 
@@ -100,6 +103,9 @@ export const contrastPairs: readonly ContrastPair[] = [
   { fg: "alert", bg: "canvas", minimum: 4.5 },
   { fg: "on-primary", bg: "primary", minimum: 4.5 },
   { fg: "on-primary", bg: "primary-strong", minimum: 4.5 },
+  { fg: "on-primary", bg: "alert", minimum: 4.5 },
+  { fg: "gilt", bg: "binding", minimum: 4.5 },
+  { fg: "on-binding", bg: "binding", minimum: 4.5 },
   { fg: "rule-strong", bg: "sheet", minimum: 3 },
   { fg: "primary", bg: "sheet", minimum: 3 },
   { fg: "focus", bg: "sheet", minimum: 3 },

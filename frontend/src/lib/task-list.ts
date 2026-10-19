@@ -47,6 +47,3 @@ export const moveFor = (ids: readonly string[], activeId: string, overId: string
   const reordered = ids.toSpliced(from, 1).toSpliced(to, 0, activeId);
   return { taskId: activeId, afterId: reordered[to - 1] ?? null };
 };
-
-/** The detail route for one task. */
-export const taskPath = (taskId: string): string => `/tasks/${taskId}`;

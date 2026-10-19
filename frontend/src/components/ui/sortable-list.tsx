@@ -2,6 +2,7 @@ import {
   type Announcements,
   DndContext,
   type DragEndEvent,
+  DragOverlay,
   KeyboardSensor,
   type Modifier,
   MouseSensor,
@@ -18,7 +19,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import { moveFor } from "../../lib/task-list.ts";
 import { Icon } from "./icon.tsx";
 
@@ -38,6 +39,16 @@ export interface SortableListProps<T extends Sortable> {
   readonly className?: string;
   readonly itemClassName?: string;
 }
+
+/** A row while it is carried: lifted off the page on the shade token. */
+export const liftedClass = "cursor-grabbing bg-sheet shadow-lifted";
+
+/** The row's place while it is carried, which is where it will drop: an empty dashed slot. */
+export const dropSlotClass =
+  "bg-rule/20 outline-2 -outline-offset-4 outline-rule-strong outline-dashed [&>*]:invisible";
+
+const handleClass =
+  "flex size-touch shrink-0 cursor-grab touch-none items-center justify-center text-ink-muted transition-colors hover:text-ink active:cursor-grabbing";
 
 const verticalOnly: Modifier = ({ transform }) => ({ ...transform, x: 0 });
 
@@ -90,7 +101,9 @@ export function SortableList<T extends Sortable>({
     const item = byId.get(String(id));
     return item ? itemLabel(item) : "item";
   };
+  const [carried, setCarried] = useState<T | null>(null);
   const handleDragEnd = ({ active, over }: DragEndEvent) => {
+    setCarried(null);
     const move = over ? moveFor(ids, String(active.id), String(over.id)) : null;
     if (move) onMove(move.taskId, move.afterId);
   };
@@ -103,6 +116,12 @@ export function SortableList<T extends Sortable>({
       accessibility={{
         announcements: announcementsFor(ids, nameOf),
         screenReaderInstructions: instructions,
+      }}
+      onDragStart={({ active }) => {
+        setCarried(byId.get(String(active.id)) ?? null);
+      }}
+      onDragCancel={() => {
+        setCarried(null);
       }}
       onDragEnd={handleDragEnd}
     >
@@ -120,6 +139,18 @@ export function SortableList<T extends Sortable>({
           ))}
         </ul>
       </SortableContext>
+      <DragOverlay dropAnimation={null}>
+        {carried && (
+          <div aria-hidden="true" inert className={`${itemClassName} ${liftedClass}`}>
+            {children(
+              carried,
+              <span className={handleClass}>
+                <Icon name="grip" />
+              </span>,
+            )}
+          </div>
+        )}
+      </DragOverlay>
     </DndContext>
   );
 }
@@ -155,7 +186,7 @@ function SortableItem<T extends Sortable>({
       {...attributes}
       {...listeners}
       aria-label={`Move ${name}`}
-      className="flex size-touch shrink-0 cursor-grab touch-none items-center justify-center text-ink-muted transition-colors hover:text-ink active:cursor-grabbing"
+      className={handleClass}
     >
       <Icon name="grip" />
     </button>
@@ -163,12 +194,11 @@ function SortableItem<T extends Sortable>({
   return (
     <li
       ref={setNodeRef}
-      data-dragging={isDragging || undefined}
       style={{
         transform: CSS.Translate.toString(transform),
         transition: transition ? "transform var(--duration-base) var(--ease-standard)" : undefined,
       }}
-      className={className}
+      className={`${className} ${isDragging ? dropSlotClass : ""}`}
     >
       {render(item, handle)}
     </li>

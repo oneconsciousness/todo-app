@@ -22,7 +22,7 @@ export function Checkbox({ label, checked, onChange }: CheckboxProps) {
       />
       <span
         aria-hidden="true"
-        className="pointer-events-none flex size-5 items-center justify-center rounded-control border border-rule-strong bg-sheet text-on-primary transition-colors peer-checked:border-primary peer-checked:bg-primary peer-hover:border-ink peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-focus [&>svg]:opacity-0 peer-checked:[&>svg]:opacity-100"
+        className="pointer-events-none flex size-5 items-center justify-center rounded-control border border-rule-strong bg-sheet text-on-primary transition-[background-color,border-color,scale] peer-checked:border-primary peer-checked:bg-primary peer-hover:border-ink peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-focus peer-active:scale-90 [&_path]:transition-[stroke-dashoffset] [&_path]:duration-(--duration-base) [&_path]:[stroke-dasharray:20] [&_path]:[stroke-dashoffset:20] peer-checked:[&_path]:[stroke-dashoffset:0]"
       >
         <Icon name="check" className="size-4" />
       </span>

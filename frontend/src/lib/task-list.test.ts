@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { makeTask } from "../test/fixtures.ts";
-import { listSummary, moveFor, summarize, taskPath } from "./task-list.ts";
+import { listSummary, moveFor, summarize } from "./task-list.ts";
 
 describe("summarize", () => {
   it("counts open and completed tasks", () => {
@@ -64,13 +64,5 @@ describe("moveFor", () => {
 
   it("ignores ids that are not in the list", () => {
     expect(moveFor(ids, "a", "z")).toBeNull();
-  });
-});
-
-describe("taskPath", () => {
-  it("builds the detail route for a task", () => {
-    expect(taskPath("3f0c6f7e-8a51-4f7a-9d64-2f0b9c1e5a10")).toBe(
-      "/tasks/3f0c6f7e-8a51-4f7a-9d64-2f0b9c1e5a10",
-    );
   });
 });
