@@ -11,6 +11,7 @@ import { AuthProvider } from "../lib/auth/auth-context.tsx";
 import { routes, signInPath } from "../lib/routes.ts";
 import { SignInPage } from "../pages/sign-in-page.tsx";
 import { SignUpPage } from "../pages/sign-up-page.tsx";
+import { TaskListPage } from "../pages/task-list-page.tsx";
 import { RequireAuth } from "./require-auth.tsx";
 
 // Every page gets the session, and every `Link` navigates through the router instead of reloading the page.
@@ -39,7 +40,10 @@ export const appRoutes: RouteObject[] = [
       { path: routes.signUp, element: <SignUpPage /> },
       {
         element: <RequireAuth />,
-        children: [{ path: routes.tasks }, { path: routes.task(":taskId") }],
+        children: [
+          { path: routes.tasks, element: <TaskListPage /> },
+          { path: routes.task(":taskId") },
+        ],
       },
     ],
   },
