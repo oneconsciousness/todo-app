@@ -24,7 +24,7 @@ export interface ScreenState {
   readonly draw: () => ReactNode;
 }
 
-/** A screen of the app with every state the spec implies. */
+/** A screen of the app, shown in every state it can be in. */
 export interface Screen {
   readonly id: string;
   readonly title: string;
