@@ -2,12 +2,12 @@
 
 | | |
 |---|---|
-| Status | Reviewed. The lead locked Q-1 to Q-13 on 2026-10-19. Q-14 to Q-18 (versions and one schema detail) are open. |
+| Status | Approved by the lead (gate G0, 2026-10-19). Q-1 to Q-18 are locked. Builds on spec revision 3.2. |
 | Builds on | `docs/specs/round-1.html` (revision 3, D1 to D20, the source of truth), then `docs/kickoff.md` |
 | Out of scope | `FUTURE.md`, and rounds 2 and 3 |
 | Written | 2026-10-19, in parallel with the design artifact on `feature/web-design-system` |
 
-How to read it. § 1 maps every spec decision to the section that builds it. §§ 2 to 7 say what gets built. § 8 says in what order, commit by commit. §§ 9 to 12 list what this plan decided on its own, the risks, the open questions and the contradictions it found. § 13 pins every dependency, § 14 maps the functional style to the code, and § 15 lists the references. A line marked **(Q-n)** follows the locked answer (Q-1 to Q-13) or the recommendation for a question still open (Q-14 on; `CONTRIBUTING.md` § 9.1).
+How to read it. § 1 maps every spec decision to the section that builds it. §§ 2 to 7 say what gets built. § 8 says in what order, commit by commit. §§ 9 to 12 list what this plan decided on its own, the risks, the open questions and the contradictions it found. § 13 pins every dependency, § 14 maps the functional style to the code, and § 15 lists the references. A line marked **(Q-n)** follows the lead's locked answer to that question.
 
 Code here is limited to signatures, short DDL, config fragments and pseudo-steps.
 
@@ -17,8 +17,8 @@ Code here is limited to signatures, short DDL, config fragments and pseudo-steps
 
 | Spec id | What it locks | Plan section(s) |
 |---|---|---|
-| D1 | Stack | 2, 3, 4.1, 5, 13, 14 (Python version: Q-14) |
-| D2 | Postgres 17 from day one | 3.5, 5.4, 6.1, 13 (major version: Q-15) |
+| D1 | Stack, with Python 3.14 since revision 3.2 (Q-14) | 2, 3, 4.1, 5, 13, 14 |
+| D2 | Postgres from day one, 18 since revision 3.2 (Q-15) | 3.5, 5.4, 6.1, 13 |
 | D3 | Open sign-up and sign-in, 12 to 128 character passwords, argon2id; OpenAPI at `/api/docs` | 3.6, 3.9.1, 3.10, 5.3 |
 | D4 | JWT HS256, 8 h, cookie `session` (HttpOnly, SameSite=Strict, Path=/api); Origin check on writes | 3.3, 3.10, 5.3 |
 | D5 | UUID ids minted by the API | 3.5, 3.9 |
@@ -42,7 +42,7 @@ Code here is limited to signatures, short DDL, config fragments and pseudo-steps
 | Two tables | `users`, `tasks` | 3.5.3 |
 | Screens table | Routes, states, optimistic rules, 401 handling | 4.6, 4.7 |
 | Tests table | Five layers plus load | 6 |
-| Order of work | Design before frontend code, gates | 8 |
+| Order of work | Design before frontend code, gates; one parent PR per round with child PRs (revision 3.2) | 8 |
 | Done means | Exit criteria | 8 (gate G5) |
 
 ---
@@ -150,7 +150,7 @@ Constants that are not settings, because the spec fixes them and nothing varies 
 
 Compose also reads `POSTGRES_USER`, `POSTGRES_PASSWORD` and `POSTGRES_DB` for the `db` service. Missing required values fail fast through `${VAR:?message}` in `docker-compose.yml`.
 
-**`.env.example` lines, for the human to create** (agents never write this file). Working local values, so `cp .env.example .env` then `docker compose up --build` works on a clean Mac **(Q-6)**:
+**`.env.example` lines.** Commit C6 creates the file. Agents may create and edit `.env.example` by that exact name, but never `.env` or any other env file (`CONTRIBUTING.md` § 12.2). Working local values, so `cp .env.example .env` then `docker compose up --build` works on a clean Mac **(Q-6)**:
 
 ```dotenv
 # Local development only. Copy to .env. Replace both secrets for anything beyond a laptop:
@@ -289,8 +289,12 @@ CREATE INDEX ix_tasks_search_trgm ON tasks USING gin (title gin_trgm_ops, notes 
 ```
 
 - `uq_tasks_owner_rank` is also the `tasks(owner_id, rank)` index `database.md` asks for. It serves the owner filter, the rank order and the neighbour reads.
-- One multicolumn trigram GIN index serves `title ILIKE :p OR notes ILIKE :p` through a bitmap OR ([pg_trgm: index support](https://www.postgresql.org/docs/17/pgtrgm.html#PGTRGM-INDEX)).
+- One multicolumn trigram GIN index serves `title ILIKE :p OR notes ILIKE :p` through a bitmap OR ([pg_trgm: index support](https://www.postgresql.org/docs/18/pgtrgm.html#PGTRGM-INDEX)).
 - `downgrade()` drops both tables, then both extensions. CI runs upgrade, downgrade, upgrade (§ 7).
+- **What Postgres 18 changes for us: nothing we rely on** ([18 release notes](https://www.postgresql.org/docs/18/release-18.html)). Advisory locks, READ COMMITTED, `citext`, `hashtextextended` and the `"C"` collation have no entries there.
+  - One item touches `pg_trgm`: it now follows the cluster's default collation provider instead of always libc. The official image runs `initdb` with no provider argument and `LANG=en_US.utf8`, so the provider stays libc and trigram behaviour matches 17 ([image Dockerfile](https://github.com/docker-library/postgres/blob/master/18/alpine3.24/Dockerfile), [entrypoint](https://github.com/docker-library/postgres/blob/master/18/alpine3.24/docker-entrypoint.sh)). The image is built `--with-icu`, so `test_a_locale_collation_would_misorder_ranks` can still use `und-x-icu`.
+  - 18 also turns data checksums on by default in `initdb` (a small write cost, which we accept) and deprecates MD5 passwords. The image's default `scram-sha-256` is unaffected.
+- **`uuidv7()` is new in 18, and we don't use it.** D5 keeps ids generated by the API: any replica mints one without a database round trip, and the id is known before the `INSERT` (for `Location` and the logs). We stay on `uuid4`.
 - **`ck_users_email_shape` is the database's layer of email validation** (the other two are in § 3.6). It checks only the basic shape: exactly one `@` (neither side may contain one), a non-empty local part and domain, a dot in the domain, and no whitespace anywhere. It is deliberately looser than the API. The database is the last line against a write that skipped the API's model (a script, a future admin path, a bug). Full email syntax (IDNA domains, part lengths, special-use domains) belongs in one place, the API's validator. A `CHECK` that copied it would drift from the library, could reject internationalised addresses the API accepts, and would need a migration every time the rules moved. Tests: `test_database_rejects_a_malformed_email_inserted_directly` and `test_database_accepts_an_internationalised_email` (§ 6.3).
 
 ### 3.6 Wire models (`app/api/schemas.py`)
@@ -333,7 +337,7 @@ class RequestModel(WireModel):
 - **Normalisation.** email-validator lowercases the domain, decodes an IDNA (punycode) domain to Unicode, and NFC-normalises the whole address. It keeps the case of the local part. The normalised value is what `users.email` stores and what sign-in compares against.
 - **With `citext`.** The unique index compares the whole address case-insensitively, so `Bob@example.com` and `bob@example.com` are one account. RFC 5321 allows a mail server to treat local parts as case-sensitive. We don't, on purpose: it blocks look-alike accounts and matches how mainstream mail providers behave. The stored local part keeps the case the user typed.
 - **Deliverability stays off.** Checking DNS (MX records) would put network I/O on the request path, and a DNS hiccup would fail a sign-up.
-- **Where the layers differ.** The form refuses some addresses the API accepts: internationalised addresses, and a top-level domain with digits. It accepts some the API refuses: a 65-character local part, or a special-use domain such as `example.test`. In the second case the 400 names the field and the form shows the message next to it. **(Q-18)** covers the response schema.
+- **Where the layers differ.** The form refuses some addresses the API accepts: internationalised addresses, and a top-level domain with digits. It accepts some the API refuses: a 65-character local part, or a special-use domain such as `example.test`. In the second case the 400 names the field and the form shows the message next to it. The response side is safe either way: `userSchema.email` is `z.string()` (Q-18, applied on the design branch), so any address the API returns parses.
 
 Headers: `ETag: "<version>"` on `POST /tasks`, `GET /tasks/{id}`, `PATCH /tasks/{id}` and `PUT /tasks/{id}/position`. `If-Match` accepts exactly `"<positive int>"`; anything else → 400 `invalid_if_match`. `Location` is relative (`/api/v1/tasks/{id}`, and `/api/v1/auth/me` after register), which RFC 9110 allows and which needs no host or scheme behind a proxy.
 
@@ -494,7 +498,7 @@ Each function takes the session first and returns a Pydantic record (`model_vali
 | `insert_user(session, id, email, password_hash) -> UserRecord` | `INSERT … RETURNING *`. `IntegrityError` on `uq_users_email` → `EmailTaken` (no check-then-insert) |
 | `find_user_by_email(session, email) -> UserRecord \| None` | `WHERE email = :email` (citext compares case-insensitively) |
 | `get_user(session, user_id) -> UserRecord \| None` | by id |
-| `lock_task_order(session, owner_id) -> None` | `SELECT pg_advisory_xact_lock(hashtextextended(CAST(:owner_id AS text), 0))` ([advisory locks](https://www.postgresql.org/docs/17/functions-admin.html#FUNCTIONS-ADVISORY-LOCKS)) |
+| `lock_task_order(session, owner_id) -> None` | `SELECT pg_advisory_xact_lock(hashtextextended(CAST(:owner_id AS text), 0))` ([advisory locks](https://www.postgresql.org/docs/18/functions-admin.html#FUNCTIONS-ADVISORY-LOCKS)) |
 | `first_rank(session, owner_id) -> str \| None` | `ORDER BY rank LIMIT 1` |
 | `rank_of(session, owner_id, task_id) -> str \| None` | the rank of one task |
 | `next_rank_after(session, owner_id, rank, excluding) -> str \| None` | `rank > :rank AND id <> :excluding ORDER BY rank LIMIT 1` |
@@ -534,7 +538,7 @@ READ COMMITTED throughout. Nothing raises the isolation level.
 | `move_task(session, owner_id, task_id, after_id)` | **`lock_task_order`**; `rank_of(task_id)` or `TaskNotFound`. If `after_id is None`: `lower = None`, `upper = first_rank_excluding(task_id)`. Otherwise: `after_id == task_id` → `InvalidPosition`; `lower = rank_of(after_id)` or `InvalidPosition`; `upper = next_rank_after(lower, excluding=task_id)`. Then `set_rank(task_id, rank_between(lower, upper))` | 400, 404 |
 | `delete_task(session, owner_id, task_id)` | `delete_task` or `TaskNotFound` | 404 |
 
-Why this order is correct under concurrency. The lock makes one user's creates and moves take turns. Under READ COMMITTED each neighbour read after the lock is granted sees the previous holder's commit ([Postgres: read committed](https://www.postgresql.org/docs/17/transaction-iso.html#XACT-READ-COMMITTED)). Edits and deletes do not take the lock (D16). A move does not bump `version`, so reordering in one tab never shows "Changed elsewhere" in another (decision 9.6).
+Why this order is correct under concurrency. The lock makes one user's creates and moves take turns. Under READ COMMITTED each neighbour read after the lock is granted sees the previous holder's commit ([Postgres: read committed](https://www.postgresql.org/docs/18/transaction-iso.html#XACT-READ-COMMITTED)). Edits and deletes do not take the lock (D16). A move does not bump `version`, so reordering in one tab never shows "Changed elsewhere" in another (decision 9.6).
 
 Routers (`app/api/tasks.py`) stay thin. They parse with the wire models, take `owner_id` from `get_current_user`, call the service, then map the record to `TaskRead` and set `ETag` and `Location`.
 
@@ -751,7 +755,7 @@ Every file here is a deployment artifact. The lead reviews each one before it is
 Following [uv's Docker guide](https://docs.astral.sh/uv/guides/integration/docker/):
 
 ```dockerfile
-FROM python:3.13.16-slim-trixie AS build
+FROM python:3.14.8-slim-trixie AS build
 COPY --from=ghcr.io/astral-sh/uv:0.12.23 /uv /bin/uv
 ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=0
 WORKDIR /app
@@ -762,7 +766,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 COPY . .
 RUN --mount=type=cache,target=/root/.cache/uv uv sync --locked --no-dev --no-editable
 
-FROM python:3.13.16-slim-trixie
+FROM python:3.14.8-slim-trixie
 RUN groupadd --system --gid 10001 app && useradd --system --uid 10001 --gid app --no-create-home app
 WORKDIR /app
 COPY --from=build --chown=app:app /app/.venv /app/.venv
@@ -863,12 +867,12 @@ server {
 
 | Service | Image or build | Depends on | Healthcheck | Notes |
 |---|---|---|---|---|
-| `db` | `postgres:17.11-alpine3.24` | | `pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB`, every 5 s, 10 retries, start period 10 s | Volume `pgdata`. No published port. |
+| `db` | `postgres:18.6-alpine3.24` | | `pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB`, every 5 s, 10 retries, start period 10 s | Volume `pgdata` mounted at **`/var/lib/postgresql`**. From 18 the image keeps `PGDATA` at `/var/lib/postgresql/18/docker` beneath it; a mount at the old `/var/lib/postgresql/data` would lose the data when the container is re-created ([image docs](https://hub.docker.com/_/postgres)). No published port. |
 | `migrate` | build `./backend`, image `todo-api:${GIT_SHA:-local}` | `db: service_healthy` | none (one-shot; its exit code is the signal) | `command: ["alembic", "upgrade", "head"]`, `restart: "no"`, only `DATABASE_URL` |
 | `api` | same build and image | `migrate: service_completed_successfully`, `db: service_healthy` ([depends_on conditions](https://docs.docker.com/reference/compose-file/services/#depends_on)) | `python -c "urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=2)"`, every 5 s | `deploy.replicas: 2`, `expose: ["8000"]`, `stop_grace_period: 25s`, the five app env vars |
 | `web` | build `./frontend`, image `todo-web:${GIT_SHA:-local}` | `api: service_healthy` | `wget -q --spider http://127.0.0.1:8080/` | `ports: ["127.0.0.1:8080:8080"]`, the only published port |
 | `k6` | `grafana/k6:2.3.0` | `web: service_healthy` | none (one-shot) | `profiles: ["load"]`. Mounts `./load/k6:/scripts:ro` and `./load/results:/results`. `BASE_URL=http://web:8080`, `APP_ORIGIN`, `VUS`, `HOLD`. |
-| `test-db` | `postgres:17.11-alpine3.24` | | `pg_isready` | `profiles: ["test"]`. `127.0.0.1:55432:5432`, `tmpfs` data, `-c fsync=off -c synchronous_commit=off -c full_page_writes=off`, throwaway credentials. For local backend test runs only **(Q-5)**. |
+| `test-db` | `postgres:18.6-alpine3.24` | | `pg_isready` | `profiles: ["test"]`. `127.0.0.1:55432:5432`, `tmpfs` at `/var/lib/postgresql` (the same 18 data path), `-c fsync=off -c synchronous_commit=off -c full_page_writes=off`, throwaway credentials. For local backend test runs only **(Q-5)**. |
 
 Hardening on `api`, `migrate` and `web`: `read_only: true`, `tmpfs: [/tmp]`, `cap_drop: [ALL]`, `security_opt: ["no-new-privileges:true"]`. `DATABASE_URL` is built in the file: `postgresql+asyncpg://${POSTGRES_USER:?}:${POSTGRES_PASSWORD:?}@db:5432/${POSTGRES_DB:?}`. `migrate` and `api` declare the same build; BuildKit's cache makes the second build a no-op.
 
@@ -1028,13 +1032,15 @@ Each run starts from a fresh stack (`docker compose down -v`, then `up --build -
 
 ## 7. CI (`.github/workflows/ci.yml`)
 
-`hygiene` keeps its steps; its `actions/checkout@v4` and `actions/setup-python@v5` move to `v7.0.1` and `v7.0.0` in PR C. Every action is pinned by its full commit SHA, with the version in a comment, resolved when the workflow is written (§ 13.4).
+`hygiene` keeps its steps; its `actions/checkout@v4` and `actions/setup-python@v5` move to `v7.0.1` and `v7.0.0` in PR Cf. Every action is pinned by its full commit SHA, with the version in a comment, resolved when the workflow is written (§ 13.4).
 
 | Job | Lands in | Steps |
 |---|---|---|
-| `backend` | PR C | Service container `postgres:17.11-alpine3.24` (user and password `todo_test`, health command `pg_isready`, port 5432). `actions/checkout@v7.0.1`, `astral-sh/setup-uv@v10.2.0` with Python 3.13.16, `uv sync --locked`, `ruff check .`, `ruff format --check .`, `mypy`. **Migration round trip** against a scratch database: `alembic upgrade head`, `alembic downgrade base`, `alembic upgrade head`. Then `pytest` with coverage and `HYPOTHESIS_PROFILE=ci`, `TEST_DATABASE_URL=postgresql+asyncpg://todo_test:todo_test@localhost:5432/postgres`. |
+| `backend` | PR Cf | Service container `postgres:18.6-alpine3.24` (user and password `todo_test`, health command `pg_isready`, port 5432). `actions/checkout@v7.0.1`, `astral-sh/setup-uv@v10.2.0` with Python 3.14.8, `uv sync --locked`, `ruff check .`, `ruff format --check .`, `mypy`. **Migration round trip** against a scratch database: `alembic upgrade head`, `alembic downgrade base`, `alembic upgrade head`. Then `pytest` with coverage and `HYPOTHESIS_PROFILE=ci`, `TEST_DATABASE_URL=postgresql+asyncpg://todo_test:todo_test@localhost:5432/postgres`. |
 | `frontend` | PR D (or extended there, if the design PR already added it) | `actions/setup-node@v7.0.0` with Node 24.21.0 and npm cache, `npm ci`, `npm run check`, `npm run test -- --coverage`, `npm run build` |
 | `e2e` | PR E; `needs: [backend, frontend]` | `cp .env.example .env`, then replace both secrets with `openssl rand -hex` values. `GIT_SHA=${{ github.sha }} docker compose up --build --wait`. `uv run pytest e2e/live`. `npx playwright install --with-deps chromium`, `npx playwright test`. On failure: upload `playwright-report` and `docker compose logs`. Always: `docker compose down -v`. |
+
+`ci.yml` already runs on every pull request and on pushes to `main` and `round/**`. So every child merge into `round/1-containers` reruns the full set on the round branch, and the parent PR shows the round's latest result.
 
 The load test does not run in CI. It runs on a Mac with the lead (D18).
 
@@ -1042,39 +1048,56 @@ The load test does not run in CI. It runs on a Mac with the lead (D18).
 
 ## 8. Delivery sequence
 
-### 8.1 PRs in order
+### 8.1 One parent PR, child PRs into the round branch
 
-Each PR merges into `main` after the one before it. A PR is raised against `main` once its base has merged. Until then it can be raised against the previous PR's branch and retargeted to `main` when that merges. Merges are squash-merges, so after each one the next branch is rebased with `git rebase --onto origin/main <previous branch's old tip>`. That way only its own commits remain.
+This follows `CONTRIBUTING.md` § 1 and `git-and-prs.md`. The lead reviews every PR, child and parent alike.
 
-| Order | PR | Branch | Contents | Base (target on raise) | Gate before merge | Size (bounded work) |
-|---|---|---|---|---|---|---|
-| 1 | S1 | `chore/repo-skeleton` | Claude Code setup, hygiene CI, kickoff, `TASK.md`, the transcript hook | `main` | Lead review | Already written; 1 PR round |
-| 2 | S2 | `docs/round-1-spec` | The round 1 spec and the rule updates it carried | `chore/repo-skeleton`, then `main` after S1 | Lead review | Already written; 1 PR round |
-| 3 | A | `docs/round-1-plan` | This plan | `docs/round-1-spec`, then `main` after S2 | G0 | 1 file, 1 PR round |
-| 4 | B | `feature/web-design-system` | *(design)* tokens, primitives, views, gallery. Branched from the spec's tip. | `main` after A (rebased off S2's commits) | G1, G2 | Designer's estimate |
-| 5 | Cf | `feature/api-foundation` | Commits C1 to C8: toolchain, domain core, settings and logging, schema, app factory and probes, auth; CI `backend`; the `db` and `test-db` services; `backend/CLAUDE.md` | `main` after A (code starts after G1) | G3 for its compose and CI changes | About 30 files, 1 migration, 9 commits, 2 PR rounds **(Q-7)** |
-| 6 | Ct | `feature/api-tasks` | Commits C9 to C13: task endpoints, search, updates, moves and deletes, the lock and the race tests | `main` after Cf | CP1 | About 15 files, 6 commits, 2 PR rounds **(Q-7)** |
-| 7 | D | `feature/web-data-layer` | All of § 4, § 6.5, CI `frontend` | `main` after B and Ct (built on B's views and the API contract) | G3 for its CI change | About 30 files, 11 commits, 2 PR rounds |
-| 8 | E | `feature/containers` | § 5, § 6.6 to § 6.8, CI `e2e` | `main` after D | G3, CP2, CP3 | About 20 files, 8 commits, 2 PR rounds, plus 2 load sessions with the lead |
-| 9 | F | `docs/readme-round-1` | README: running on a Mac, the load results and the capacity figure | `main` after E | G5 | 1 to 2 files, 1 PR round |
+| | |
+|---|---|
+| **Round branch** | `round/1-containers`. The human creates it once from `main` (`git push origin main:refs/heads/round/1-containers`); the hook refuses that push from an agent. It is protected like `main`: no direct commits or pushes, only merged PRs. |
+| **Parent PR** | `round/1-containers` → `main`, titled `feat(round-1): run the to do app in containers`, label `round`. It is opened as a draft once S1 has merged into the round branch. It links every child PR and serves as the round's checklist. It stays a draft until G5. After the lead's final review it merges with a **merge commit**, so `git log --first-parent main` shows one merge per round. |
+| **Child PRs** | Each targets `round/1-containers`, or, while stacked, the branch of the unmerged child it builds on. Each is **rebase-merged**, so every green, test-first commit lands on the round branch in order. Nothing is squashed. |
 
-PR C is two PRs since Q-7 was locked: Cf and Ct. In § 8.3 the C14 docs commit moves to the end of Cf, and Ct ends with a docs-check commit that updates `backend/CLAUDE.md`. B and Cf share a base and touch disjoint folders, so either can be reviewed first. B is listed first because it is already being built. The spec's order of work groups "spec and plan" as one PR; they are on separate branches, so here they are two (S2 and A).
+| Order | PR | Branch | Contents | Base when raised → once its parent child merges | Label | Gate before merge | Size (bounded work) |
+|---|---|---|---|---|---|---|---|
+| 1 | S1 | `chore/repo-skeleton` | Claude Code setup, hygiene CI, kickoff, `TASK.md`, the transcript hook, the env and secrets guards, the round PR model | `round/1-containers` | `chore` | Lead review | Written; 1 PR round |
+| 2 | S2 | `docs/round-1-spec` | The spec (revision 3.2) and the rule changes it carried | `chore/repo-skeleton` → `round/1-containers` | `documentation` | Lead review | Written; 1 PR round |
+| 3 | A | `docs/round-1-plan` | This plan | `docs/round-1-spec` → `round/1-containers` | `documentation` | G0 (passed) | 1 file; 1 PR round |
+| 4 | B | `feature/web-design-system` | *(design)* tokens, primitives, views, gallery, with Q-17 and Q-18 applied | `docs/round-1-spec` (it branched from the spec) → `round/1-containers` | `enhancement` | G2 (passed); the PR waits for G1 (spec D20) | Designer's estimate |
+| 5 | Cf | `feature/api-foundation` | Commits C1 to C8, then C14: toolchain, domain core, settings and logging, schema, app factory and probes, auth; CI `backend`; the `db` and `test-db` services; `.env.example`; `backend/CLAUDE.md` | `round/1-containers`, branched after A merges | `enhancement` | G1 before its first commit; G3 for compose and CI | About 30 files, 1 migration, 9 commits, 2 PR rounds |
+| 6 | Ct | `feature/api-tasks` | Commits C9 to C13: task endpoints, search, updates, moves and deletes, the order lock and the race tests | `feature/api-foundation` → `round/1-containers` | `enhancement` | CP1 | About 15 files, 6 commits, 2 PR rounds |
+| 7 | D | `feature/web-data-layer` | All of § 4, § 6.5, CI `frontend` | `round/1-containers` once B and Ct have merged (stacked on Ct if Ct is still open) | `enhancement` | G3 for its CI change | About 30 files, 11 commits, 2 PR rounds |
+| 8 | E | `feature/containers` | § 5, § 6.6 to § 6.8, CI `e2e` | `round/1-containers` once D merges | `enhancement` | G3, CP2, CP3 | About 20 files, 8 commits, 2 PR rounds, plus 2 load sessions with the lead |
+| 9 | F | `docs/readme-round-1` | README: running on a Mac, the load results and the capacity figure | `round/1-containers` once E merges | `documentation` | Lead review; then G5 on the parent PR | 1 to 2 files, 1 PR round |
 
-**External waits** (not agent time): about 2 minutes of CI per push; the lead's review of each PR, of the design and of every deployment artifact; first-time Docker image pulls and builds; Playwright's browser download in CI; the load runs themselves (about 5 minutes for the 200-user run and about 15 for the stepped run).
+B and Cf touch disjoint folders, so either can be reviewed first once A has merged.
+
+**Retargeting a stacked child.** GitHub's rebase-merge replays a child's commits onto the round branch with new SHAs. The branch stacked on it still carries the old ones. Once the parent child merges, the stacked branch is moved onto the round branch:
+
+```bash
+git fetch origin
+git rebase --onto origin/round/1-containers <old tip of the merged child> <stacked branch>
+git push --force-with-lease origin <stacked branch>   # asks first; the hook refuses force pushes only to main and round branches
+gh pr edit <n> --base round/1-containers
+```
+
+`<old tip of the merged child>` is the head SHA of the merged PR (`gh pr view <merged n> --json headRefOid`). After the rebase, the gates run again on the stacked branch before its PR goes back for review, because every commit on it is new.
+
+**External waits** (not agent time): about 2 minutes of CI per push; the lead's review of every PR, child and parent, and of every deployment artifact; first-time Docker image pulls and builds; Playwright's browser download in CI; the load runs themselves (about 5 minutes for the 200-user run and about 15 for the stepped run).
 
 ### 8.2 Gates and checkpoints
 
 | Id | When | Who | What |
 |---|---|---|---|
-| G0 | Now | Lead | Sign off this plan and lock the open questions (§ 11) |
-| G1 | Before PR C's first commit | Lead | The coding-instructions walkthrough with code, comment-style and type-checking samples (kickoff § 4, step 4) |
-| G2 | Before PR D | Lead | Design tokens and screens (designer's gate) |
-| G3 | In PR C (compose `db` and `test-db`, CI job), PR D (CI job), PR E (Dockerfiles, `nginx.conf`, compose, CI `e2e`) | Lead | Each deployment artifact shown and approved before it is applied or merged |
-| **CP1** | PR C, commit C13 | **Lead present** | The race tests: watch them fail without their guards, then pass |
+| G0 | **Passed** 2026-10-19 | Lead | Plan approved and Q-1 to Q-18 locked (kickoff § 5d) |
+| G1 | **Next**, before Cf's first commit | Lead | The coding-instructions walkthrough with code, comment-style and type-checking samples (kickoff § 4, step 4), led by § 14's functional style map |
+| G2 | **Passed** 2026-10-19 | Lead | Design tokens and screens (the design sign-off in `docs/kickoff.md`) |
+| G3 | In PR Cf (compose `db` and `test-db`, CI job), PR D (CI job), PR E (Dockerfiles, `nginx.conf`, compose, CI `e2e`) | Lead | Each deployment artifact shown and approved before it is applied or merged |
+| **CP1** | PR Ct, commit C13 | **Lead present** | The race tests: watch them fail without their guards, then pass |
 | **CP2** | PR E, commit E7, before any load run | **Lead present** | Review `journey.js`, the thresholds and the stepped plan |
 | **CP3** | PR E, after E7 | **Lead present** | Run the 200-user test, then the stepped run, and walk through the results together |
-| G4 | Every PR | Reviewer agent, then the lead | Reviewer agent, `/verify`, `/claude-docs-check`, the PR card, then the lead's line-by-line review and green CI |
-| G5 | After PR F | Lead | Round 1 exit criteria (spec, "Round 1 is done when") |
+| G4 | Every PR, child and parent | Reviewer agent, then the lead | Reviewer agent, `/verify`, `/claude-docs-check`, the PR card, then the lead's line-by-line review and green CI |
+| G5 | After PR F merges into the round branch | Lead | Round 1 exit criteria (spec, "Round 1 is done when"), checked on `round/1-containers`. The parent PR then leaves draft, gets the lead's final review and merges into `main` with a merge commit. |
 
 ### 8.3 Commit sequences (test first; every commit green)
 
@@ -1089,7 +1112,7 @@ Each row: the test that goes red, then what turns it green. Subjects follow Conv
 | C3 | `feat(auth): add pure session token helpers` | `test_expired_token_is_rejected` and the rest | `tokens.py` |
 | C4 | `feat(auth): hash passwords off the loop, four at a time` | `test_hashing_never_runs_more_than_four_at_once` | `security/passwords.py` |
 | C5 | `feat(api): add settings and queue-backed JSON logging` | `test_settings_refuse_the_example_jwt_secret_with_secure_cookies`, `test_json_line_carries_request_and_user_ids` | `config.py`, `log.py` |
-| C6 | `feat(db): add the initial schema` (**G3**: compose `db` and `test-db`) | `test_postgres_sorts_ranks_like_python` (no table yet), `test_pooled_connections_carry_both_timeouts` | Compose services, alembic, migration `0001`, models, engine with `server_settings`, DB fixtures, the CI Postgres service and migration round trip. `test_a_locale_collation_would_misorder_ranks`. |
+| C6 | `feat(db): add the initial schema` (**G3**: compose `db` and `test-db`) | `test_postgres_sorts_ranks_like_python` (no table yet), `test_pooled_connections_carry_both_timeouts` | Compose services, `.env.example` (§ 3.1), alembic, migration `0001`, models, engine with `server_settings`, DB fixtures, the CI Postgres service and migration round trip. `test_a_locale_collation_would_misorder_ranks`. |
 | C7 | `feat(api): add the app factory, error envelope and probes` | `test_readyz_is_503_when_the_database_is_unreachable`, `test_request_is_503_when_no_connection_frees_up_in_time`, `test_unknown_route_returns_404_envelope`, `test_openapi_document_and_docs_page_are_served`, middleware tests | `main.py`, `middleware.py`, `api/errors.py`, `api/health.py`, `test_errors_map.py` |
 | C8 | `feat(auth): add register, login, logout and me` | `test_register_creates_account_and_signs_in`, `test_register_rejects_an_invalid_email_with_400` and the rest of `test_auth_api.py`, `test_origin_guard.py`, `test_schema_constraints.py` | `api/auth.py`, `api/deps.py`, `api/schemas.py` (auth), `db/users.py`, `services/auth.py` |
 | C9 | `feat(api): add task create, read and list` | `test_create_puts_the_task_at_the_top_…`, `test_list_returns_only_own_tasks_…` | `api/tasks.py`, `db/tasks.py`, `services/tasks.py` (create without the lock for now) |
@@ -1174,7 +1197,6 @@ Each row: the test that goes red, then what turns it green. Subjects follow Conv
 | `citext` and `pg_trgm` must be allowed on Azure Postgres | The round 3 migration fails | Both are on Azure's supported list for 17 and 18 ([extensions by engine](https://learn.microsoft.com/en-us/azure/postgresql/extensions/concepts-extensions-by-engine?pivots=postgresql-18)). Note for round 3: allow-list them in the `azure.extensions` server parameter. |
 | Pins age; new CVEs land after 2026-10-19 | A shipped image carries a known bug | Each PR re-checks its pins (decision 9.25); § 13 lists what to recheck |
 | `asgi-lifespan` 2.1.0 has had no release since 2023 | A future Starlette change could break test start-up | It speaks only the ASGI lifespan protocol. Fallback: enter `app.router.lifespan_context(app)` in the fixture. |
-| Python 3.13 now gets security fixes only | Bugs found in 3.13 stay unfixed | Q-14 |
 | Debug-mode asyncio slows the backend suite | A longer CI step | Accepted. The guard is the point. |
 | `hashtextextended` can collide between two users | Two users' order writes occasionally queue together | Harmless (64-bit hash, a few milliseconds at worst) |
 | Rank length grows when many moves land in one gap | Longer keys | Bounded in tests; rebalancing is in `FUTURE.md` |
@@ -1184,7 +1206,7 @@ Each row: the test that goes red, then what turns it green. Subjects follow Conv
 
 ## 11. Open questions (each with a recommendation)
 
-The lead locked Q-1 to Q-13 on 2026-10-19 as recommended, with the tech lead's notes kept in the last column. Q-14 to Q-18 came from the version research and are open.
+The lead locked all eighteen on 2026-10-19 as recommended. Q-1 to Q-13 keep the tech lead's notes, and the decisions are recorded word for word in kickoff § 5d. The plan body follows each answer.
 
 | # | Question | Recommendation | Status |
 |---|---|---|---|
@@ -1201,24 +1223,38 @@ The lead locked Q-1 to Q-13 on 2026-10-19 as recommended, with the tech lead's n
 | Q-11 | "Changed elsewhere … offers to review or reload". What does review lead to? | Review shows the newer values next to the draft, with **Use theirs** (reload) and **Keep mine** (rebase the draft on the new version; the next save sends the new `If-Match`). | Locked by the lead, 2026-10-19 |
 | Q-12 | The agreed views have no crash screen for the route error boundary | Ask the designer for a small `ErrorView` (message plus "Try again" and "Go to tasks"). Already raised with the designer. Fallback: `NotFoundView` with different copy. | Locked by the lead, 2026-10-19 (tech lead's note: keep `ErrorView`; the tech lead confirms with the designer) |
 | Q-13 | `/api/docs` (Swagger UI) needs a CDN and an inline script | A CSP scoped to that path (§ 5.3). Alternative: serve Swagger UI's files from the API image, which adds a dependency. | Locked by the lead, 2026-10-19 |
-| Q-14 | D1 locks Python 3.13. 3.13 is now security-only, with security fixes until 2029-10. 3.14 (3.14.8, 2026-09-30) gets bug fixes until 2027-10 and security fixes until 2030-10. 3.15.0 came out on 2026-10-09. ([Python versions](https://devguide.python.org/versions/)) | **Move to 3.14.8 before PR Cf.** No app code exists yet, so it costs one line in `.python-version`, `pyproject.toml`, the Dockerfile and CI. Every compiled dependency pinned in § 13 ships Python 3.14 wheels (asyncpg, uvloop, httptools, pydantic-core, SQLAlchemy, argon2-cffi-bindings; checked on PyPI). 3.15 is too new under the two-week rule and for wheel coverage. Staying on 3.13 is safe but forgoes a year of bug fixes. | Open |
-| Q-15 | D2 locks Postgres 17. 17.11 is supported until 2029-11. 18 (18.6) is the current major, supported until 2030-11 and a year in production. Azure Database for PostgreSQL offers 18 with `citext` and `pg_trgm`, though `io_method=io_uring` can't be set there. 19 is only at RC. ([versions](https://www.postgresql.org/support/versioning/), [Azure](https://learn.microsoft.com/en-us/azure/postgresql/flexible-server/concepts-supported-versions)) | **Move to 18.6 now**, while there is no data to upgrade. It gives one more year of support, and round 3 starts on the current major. The cost: the official 18 image moved `PGDATA` to `/var/lib/postgresql/18/docker` and its volume to `/var/lib/postgresql`, so the compose volume must mount there; the old path would lose data on re-create ([image docs](https://hub.docker.com/_/postgres)). Nothing in the plan needs an 18-only feature, and nothing in it breaks on 18. | Open |
-| Q-16 | Three pins are under two weeks old: SQLAlchemy 2.0.55 (3 days), asyncpg 0.32.0 (13 days) and nginx 1.30.6 (5 days; image published 2026-10-19). | **Accept all three** (§ 13). The first two fix asyncio cancellation bugs on our exact path: graceful-shutdown cancels, the `/readyz` timeout and pool resets. The third fixes CVEs in features our config uses. Alternative: SQLAlchemy 2.0.54, asyncpg 0.31.0 and nginx 1.30.5 now, re-pinned when PRs Cf and E are raised. | Open |
-| Q-17 | The design branch pins 14 of its 33 packages to releases under two weeks old (§ 13.5). | The designer steps back to the § 13.5 versions before PR B. Two exceptions: jsdom goes to 30.1.1, not 30.1.2, which slowed interaction tests; TypeScript stays 6.0.3, the newest that typescript-eslint supports. | Open |
-| Q-18 | The design branch's `userSchema` parses `email` with `z.email()`, an ASCII pattern. The API accepts internationalised addresses, so a scripted sign-up with one would make `/auth/me` fail to parse in the SPA. | Make `userSchema.email` a `z.string()`: the server has already validated it, and the form keeps the strict pattern for input. Alternative: refuse non-ASCII addresses in the API, which needs a custom validator instead of `EmailStr`. | Open |
+| Q-14 | D1 locks Python 3.13. 3.13 is now security-only, with security fixes until 2029-10. 3.14 (3.14.8, 2026-09-30) gets bug fixes until 2027-10 and security fixes until 2030-10. 3.15.0 came out on 2026-10-09. ([Python versions](https://devguide.python.org/versions/)) | **Move to 3.14.8 before PR Cf.** No app code exists yet, so it costs one line in `.python-version`, `pyproject.toml`, the Dockerfile and CI. Every compiled dependency pinned in § 13 ships Python 3.14 wheels (asyncpg, uvloop, httptools, pydantic-core, SQLAlchemy, argon2-cffi-bindings; checked on PyPI). 3.15 is too new under the two-week rule and for wheel coverage. Staying on 3.13 is safe but forgoes a year of bug fixes. | Locked by the lead, 2026-10-19 (applied: Python 3.14.8 everywhere (§ 13.1)) |
+| Q-15 | D2 locks Postgres 17. 17.11 is supported until 2029-11. 18 (18.6) is the current major, supported until 2030-11 and a year in production. Azure Database for PostgreSQL offers 18 with `citext` and `pg_trgm`, though `io_method=io_uring` can't be set there. 19 is only at RC. ([versions](https://www.postgresql.org/support/versioning/), [Azure](https://learn.microsoft.com/en-us/azure/postgresql/flexible-server/concepts-supported-versions)) | **Move to 18.6 now**, while there is no data to upgrade. It gives one more year of support, and round 3 starts on the current major. The cost: the official 18 image moved `PGDATA` to `/var/lib/postgresql/18/docker` and its volume to `/var/lib/postgresql`, so the compose volume must mount there; the old path would lose data on re-create ([image docs](https://hub.docker.com/_/postgres)). Nothing in the plan needs an 18-only feature, and nothing in it breaks on 18. | Locked by the lead, 2026-10-19 (applied: Postgres 18.6, with its new data path (§ 3.5.3, § 5.4)) |
+| Q-16 | Three pins are under two weeks old: SQLAlchemy 2.0.55 (3 days), asyncpg 0.32.0 (13 days) and nginx 1.30.6 (5 days; image published 2026-10-19). | **Accept all three** (§ 13). The first two fix asyncio cancellation bugs on our exact path: graceful-shutdown cancels, the `/readyz` timeout and pool resets. The third fixes CVEs in features our config uses. Alternative: SQLAlchemy 2.0.54, asyncpg 0.31.0 and nginx 1.30.5 now, re-pinned when PRs Cf and E are raised. | Locked by the lead, 2026-10-19 |
+| Q-17 | The design branch pins 14 of its 33 packages to releases under two weeks old (§ 13.5). | The designer steps back to the § 13.5 versions before PR B. Two exceptions: jsdom goes to 30.1.1, not 30.1.2, which slowed interaction tests; TypeScript stays 6.0.3, the newest that typescript-eslint supports. | Locked by the lead, 2026-10-19 (being applied on the design branch (§ 13.5)) |
+| Q-18 | The design branch's `userSchema` parses `email` with `z.email()`, an ASCII pattern. The API accepts internationalised addresses, so a scripted sign-up with one would make `/auth/me` fail to parse in the SPA. | Make `userSchema.email` a `z.string()`: the server has already validated it, and the form keeps the strict pattern for input. Alternative: refuse non-ASCII addresses in the API, which needs a custom validator instead of `EmailStr`. | Locked by the lead, 2026-10-19 (being applied on the design branch; the data layer relies on `userSchema.email` being `z.string()`) |
 
 ---
 
 ## 12. Spec and rule contradictions found
 
-1. **Wire naming.** The spec's D6 figure caption and the endpoints prose say `after_id`; `api-contract.md` and kickoff § 5a say camelCase. → Q-1.
-2. **503 envelope.** The spec's concurrency caption ("past that wait the client gets a 503 with the error envelope") and D9 cannot hold for uvicorn's own `--limit-concurrency` reply. → Q-2.
-3. **Transaction placement.** `python.md` ("one transaction per request, from a dependency") conflicts with keeping the hash outside the transaction. Also, FastAPI's default `scope="request"` would commit *after* the response is sent. → Q-4.
-4. **Reachable test database.** `testing.md` and the spec's tests table run integration tests against "the compose db", but the topology publishes only :8080. → Q-5.
-5. **Playwright location.** `.claude/skills/claude-docs-check/map.json` expects `frontend/playwright.config.ts`; the brief puts Playwright in `e2e/`. → Q-10.
-6. **Classes.** `typescript.md` "no classes" against an `Error` subclass. → Q-9.
-7. **Docs the root `CLAUDE.md` points to.** `backend/CLAUDE.md` and `frontend/CLAUDE.md` do not exist yet. PR C (C14) and PR D (D11) create them.
-8. **Branch base.** `main` holds only the initial commit. The branches stack `chore/repo-skeleton` → `docs/round-1-spec` → `docs/round-1-plan`, and § 8.1 gives the merge order and each PR's base. The spec's "spec and plan" PR becomes two PRs here.
+**Resolved by the lead's locked answers** (spec errata 3.1 and 3.2, rule edits in `0834204`):
+
+1. **Wire naming:** `after_id` against camelCase. The spec now says `afterId` (Q-1).
+2. **503 envelope:** the spec now says uvicorn's own overload reply is plain text (Q-2).
+3. **Transaction placement:** `python.md` now puts the transaction in the service, so hashing never holds a connection (Q-4).
+4. **Reachable test database:** the plan's `test-db` profile service (Q-5).
+5. **Playwright location:** `map.json` now points at `e2e/browser/` (Q-10).
+6. **Classes:** `typescript.md` now allows `Error` subclasses (Q-9).
+7. **Python 3.13 and Postgres 17:** spec revision 3.2 moves D1 and D2 to 3.14 and 18 (Q-14, Q-15). The plan now pins 3.14.8 and 18.6.
+
+**Found in this pass and fixed in the plan:**
+
+8. **Merge flow.** The plan raised every PR against `main` and squash-merged it. `CONTRIBUTING.md` § 1 and `git-and-prs.md` now use one parent PR per round with rebase-merged children, so §§ 8.1 and 8.2 are rewritten.
+9. **`.env.example` ownership.** The plan said only the human writes it. Since `f27e35a` and `CONTRIBUTING.md` § 12.2, agents create and edit it by that exact name, so commit C6 creates it (§ 3.1).
+10. **Gate state.** G0 and G2 have passed, so § 8.2 records them and names G1 as next.
+
+**Still open, for the tech lead** (outside the plan file, so not edited here):
+
+11. **Parent PR scope.** `feat(round-1): …` uses the scope `round-1`, but `git-and-prs.md` lists only `api`, `web`, `db`, `auth`, `deploy` and `claude`. The PR-title hook accepts any lowercase scope, so nothing blocks it; the rule's list needs a `round-<n>` entry.
+12. **Post-merge fixes.** `CONTRIBUTING.md` § 10.3 still says to branch a fix "off `main`". During a round, a fix to merged child work belongs on a branch off `round/1-containers` with a child PR; `main` applies only after the parent PR merges.
+13. **The README child.** Spec revision 3.2's list of children ends with "containers with the live, browser and load tests" and does not name the README PR. The plan keeps F as the last child before G5, because the exit criteria require the README. This is an addition, not a conflict.
+14. **Docs the root `CLAUDE.md` points to.** `backend/CLAUDE.md` and `frontend/CLAUDE.md` don't exist yet. PR Cf (C14) and PR D (D11) create them.
 
 ---
 
@@ -1230,9 +1266,9 @@ Checked on 2026-10-19 against PyPI's JSON API, the npm registry, Docker Hub tags
 
 | Package | Chosen | Released | Why this one | Known issues and mitigation | Sources |
 |---|---|---|---|---|---|
-| Python | 3.13.16, image `python:3.13.16-slim-trixie` | 2026-09-30 | D1 locks 3.13; this is its latest release | 3.13 is security-only now. 3.14.8 (2026-09-30) and 3.15.0 (2026-10-09) exist: **Q-14** | [python.org releases](https://www.python.org/downloads/), [devguide versions](https://devguide.python.org/versions/) |
+| Python | 3.14.8, image `python:3.14.8-slim-trixie` (on Docker Hub, rebuilt 2026-10-09) | 2026-09-30 | D1 locks 3.14 since revision 3.2 (Q-14). This is the newest 3.14 patch at least two weeks old. 3.15.0 (2026-10-09) is too new. | 3.14 gets bug fixes until 2027-10 and security fixes until 2030-10. Every compiled dependency ships cp314 wheels: SQLAlchemy 2.0.55, asyncpg 0.32.0, uvloop 0.23.0 (universal2 on macOS), httptools 0.8.0, argon2-cffi-bindings and pydantic-core (checked by the tech lead and on PyPI). | [python.org releases](https://www.python.org/downloads/), [devguide versions](https://devguide.python.org/versions/) |
 | Node | 24.21.0, image `node:24.21.0-alpine3.24` | 2026-09-07 | The design branch requires Node ≥ 24 (LTS "Krypton"); newest 24.x at least two weeks old | 24.22.0 (10-14) is too new and is not a security release. 26.x is a Current release with no LTS codename yet in Node's index. | [Node release index](https://nodejs.org/dist/index.json) |
-| PostgreSQL | 17.11, image `postgres:17.11-alpine3.24` | 2026-08-13 | D2 locks 17; this is its latest release | 18.6 is the current major; 19 is at RC: **Q-15** | [versions.json](https://www.postgresql.org/versions.json) |
+| PostgreSQL | 18.6, image `postgres:18.6-alpine3.24` (on Docker Hub, rebuilt 2026-09-21) | 2026-08-13 | D2 locks 18 since revision 3.2 (Q-15). This is its latest release; 19 is only at RC. | The image's data path moved: `PGDATA=/var/lib/postgresql/18/docker` under the volume `/var/lib/postgresql`. § 5.4 mounts there. Behaviour against 17 is checked in § 3.5.3. Supported until 2030-11. | [versions.json](https://www.postgresql.org/versions.json) |
 | nginx (unprivileged image) | 1.30.6, image `nginxinc/nginx-unprivileged:1.30.6-alpine3.24` | 2026-10-14 (image 2026-10-19) | **Exception, for security.** 1.30 is the stable branch. 1.30.6 fixes five CVEs, including CVE-2026-93479: a buffer overflow when string expressions with variables are evaluated for the document root and request logging. Our config uses `$csp` and `$req_id` and writes an access log. | Since 1.29.7, upstream keep-alive is on by default (`keepalive 32 local`), `proxy_http_version` defaults to 1.1 and `Connection` is no longer sent. § 5.3 sets `keepalive 16` explicitly. `resolve` has existed since 1.27.3. | [CHANGES-1.30](https://nginx.org/en/CHANGES-1.30), [upstream module](https://nginx.org/en/docs/http/ngx_http_upstream_module.html#keepalive) |
 | uv | 0.12.23, image `ghcr.io/astral-sh/uv:0.12.23` | 2026-10-03 | Newest at least two weeks old; 0.12.24 and 0.13.x (10-08 onward) are too new | None found | [uv releases](https://github.com/astral-sh/uv/releases) |
 | k6 | 2.3.0, image `grafana/k6:2.3.0` | 2026-09-21 | Newest v2 release at least two weeks old; the v2 major is five months old | v2.0.0 removed old CLI commands, the `externally-controlled` executor and `--no-summary`, none of which we use. `ramping-vus`, thresholds, `exec.test.fail()` and `handleSummary` are all in the current docs. | [k6 v2.0.0 notes](https://github.com/grafana/k6/releases/tag/v2.0.0), [k6 execution API](https://grafana.com/docs/k6/latest/javascript-api/k6-execution/) |
@@ -1287,7 +1323,7 @@ Each action is pinned by its full commit SHA, with the version in a comment. The
 
 ### 13.5 Design branch pins (read-only check of `feature/web-design-system:frontend/package.json`)
 
-19 of the 33 pins pass the rule as they are. **TypeScript 6.0.3 is right.** TypeScript 7.0.2 (2026-07-08) is the latest release, but typescript-eslint 8.71 supports `>=4.8.4 <6.1.0` ([dependency versions](https://typescript-eslint.io/users/dependency-versions/)), so 6.0.3 is the newest one the linter can check. Fourteen pins are under two weeks old (**Q-17**):
+19 of the 33 pins pass the rule as they are. **TypeScript 6.0.3 is right.** TypeScript 7.0.2 (2026-07-08) is the latest release, but typescript-eslint 8.71 supports `>=4.8.4 <6.1.0` ([dependency versions](https://typescript-eslint.io/users/dependency-versions/)), so 6.0.3 is the newest one the linter can check. Fourteen pins are under two weeks old. **Q-17 and Q-18 are locked and being applied on the design branch now**, so PR B arrives with the suggested versions below and with `userSchema.email: z.string()`. The data layer (PR D) relies on exactly that: `email` is a plain string, and `id` is a UUID.
 
 | Package | Pinned (published) | Suggested | Note |
 |---|---|---|---|
@@ -1353,7 +1389,7 @@ For these I read the release notes only, not each project's issue tracker.
 - Starlette pure ASGI middleware: <https://www.starlette.io/middleware/#pure-asgi-middleware>
 - SQLAlchemy asyncio and pooling: <https://docs.sqlalchemy.org/en/20/orm/extensions/asyncio.html>, <https://docs.sqlalchemy.org/en/20/core/pooling.html>
 - asyncpg connection `server_settings`: <https://magicstack.github.io/asyncpg/current/api/index.html#connection>
-- PostgreSQL 17: advisory locks, transaction isolation, pg_trgm, collation: <https://www.postgresql.org/docs/17/functions-admin.html#FUNCTIONS-ADVISORY-LOCKS>, <https://www.postgresql.org/docs/17/transaction-iso.html>, <https://www.postgresql.org/docs/17/pgtrgm.html>, <https://www.postgresql.org/docs/17/collation.html>
+- PostgreSQL 18: release notes <https://www.postgresql.org/docs/18/release-18.html>; advisory locks, transaction isolation, pg_trgm, collation: <https://www.postgresql.org/docs/18/functions-admin.html#FUNCTIONS-ADVISORY-LOCKS>, <https://www.postgresql.org/docs/18/transaction-iso.html>, <https://www.postgresql.org/docs/18/pgtrgm.html>, <https://www.postgresql.org/docs/18/collation.html>
 - Fractional indexing: <https://observablehq.com/@dgreensp/implementing-fractional-indexing>, <https://github.com/rocicorp/fractional-indexing>
 - OWASP password storage and CSRF: <https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html>, <https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html>
 - Fetch Standard, the `Origin` header: <https://fetch.spec.whatwg.org/#append-a-request-origin-header>
