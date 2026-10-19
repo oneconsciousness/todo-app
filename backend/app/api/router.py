@@ -1,4 +1,4 @@
-"""Everything under /api/v1. The Origin guard runs on every route, before any body is parsed."""
+"""Everything under /api/v1. The Origin guard runs on every route, before the body is validated."""
 
 from fastapi import APIRouter, Depends
 

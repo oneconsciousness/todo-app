@@ -7,7 +7,7 @@ REGISTER = "/api/v1/auth/register"
 
 
 async def test_write_from_another_origin_is_forbidden(client: AsyncClient) -> None:
-    # A bad body as well: the guard runs before the body is parsed, so the answer is still 403.
+    # An invalid body as well: the guard runs before the body is validated, so the answer is still 403.
     response = await client.post(REGISTER, json={"email": "not-an-email"}, headers={"Origin": "https://evil.example"})
     assert response.status_code == 403
     assert response.json()["error"]["code"] == "forbidden_origin"
