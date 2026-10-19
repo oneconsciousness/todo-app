@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useDebouncedValue } from "../hooks/use-debounced-value.ts";
 import { localIsoDate } from "../lib/due-date.ts";
 import type { ApiError } from "../lib/api/client.ts";
-import { useTaskNotices, useTasks, useToggleTask } from "../lib/query/tasks.ts";
+import { useMoveTask, useTaskNotices, useTasks, useToggleTask } from "../lib/query/tasks.ts";
 import type { Task } from "../lib/schema/task.ts";
 import { type TaskListContent, TaskListView } from "../views/task-list-view.tsx";
 
@@ -26,6 +26,7 @@ export function TaskListPage() {
   const term = useDebouncedValue(query.trim(), searchDelayMs);
   const list = useTasks(term);
   const toggle = useToggleTask();
+  const move = useMoveTask();
   const { notice, dismiss } = useTaskNotices();
 
   return (
@@ -41,7 +42,9 @@ export function TaskListPage() {
       onToggle={(taskId, completed) => {
         toggle.mutate({ taskId, completed });
       }}
-      onMove={ignore}
+      onMove={(taskId, afterId) => {
+        move.mutate({ taskId, afterId });
+      }}
       onRetry={() => {
         void list.refetch();
       }}

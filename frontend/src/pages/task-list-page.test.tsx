@@ -1,8 +1,11 @@
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, delay, http } from "msw";
 import { describe, expect, it, vi } from "vitest";
+import { z } from "zod";
+import { taskKeys } from "../lib/query/keys.ts";
 import { routes } from "../lib/routes.ts";
+import { moveOnePlace, stackRows } from "../test/drag.ts";
 import { detailTask, tasks } from "../test/fixtures.ts";
 import { errorReply } from "../test/handlers.ts";
 import { renderApp } from "../test/render-app.tsx";
@@ -12,6 +15,42 @@ const taskTitles = (): readonly string[] =>
   within(screen.getByRole("list", { name: "Tasks" }))
     .getAllByRole("link")
     .map((link) => link.textContent);
+
+const titleAt = (index: number): string => {
+  const task = tasks[index];
+  if (!task) throw new Error(`the fixtures have no task at ${String(index)}`);
+  return task.title;
+};
+
+const moveBodySchema = z.object({ afterId: z.string().nullable() });
+
+// The server's side of a move: take the task out, then put it back right after `afterId`.
+const serverMove = (ids: readonly string[], id: string, afterId: string | null) => {
+  const rest = ids.filter((other) => other !== id);
+  return rest.toSpliced(afterId === null ? 0 : rest.indexOf(afterId) + 1, 0, id);
+};
+
+// A server that keeps the order in memory and answers each move later than the one sent after it.
+const reorderingServer = () => {
+  const byId = new Map(tasks.map((task) => [task.id, task]));
+  const state = { ids: tasks.map((task) => task.id), movesReceived: 0 };
+  const moveDelaysMs = [300, 200, 100];
+  server.use(
+    http.get("/api/v1/tasks", async () => {
+      await delay(150);
+      return HttpResponse.json({ items: state.ids.map((id) => byId.get(id)) });
+    }),
+    http.put("/api/v1/tasks/:taskId/position", async ({ params, request }) => {
+      const taskId = String(params.taskId);
+      const { afterId } = moveBodySchema.parse(await request.json());
+      const wait = moveDelaysMs[state.movesReceived] ?? 0;
+      state.movesReceived += 1;
+      await delay(wait);
+      state.ids = serverMove(state.ids, taskId, afterId);
+      return HttpResponse.json(byId.get(taskId));
+    }),
+  );
+};
 
 const tickBox = (title: string) => screen.getByRole("checkbox", { name: `Completed: ${title}` });
 
@@ -36,6 +75,32 @@ describe("TaskListPage", () => {
     await userEvent.type(screen.getByRole("searchbox", { name: "Search tasks" }), "budget");
 
     expect(screen.queryAllByRole("button", { name: /^Move / })).toHaveLength(0);
+  });
+
+  it("three quick moves end in the order the user made", async () => {
+    stackRows();
+    reorderingServer();
+    const app = await renderList();
+    const refetchLists = () => {
+      void app.client.refetchQueries({ queryKey: taskKeys.lists() });
+    };
+
+    // The moves overlap, so the server ends in the user's order only if it applies them in the order they were made.
+    await moveOnePlace(titleAt(0), "down");
+    refetchLists();
+    await moveOnePlace(titleAt(2), "up");
+    refetchLists();
+    await moveOnePlace(titleAt(3), "up");
+    const madeByUser = taskTitles();
+
+    await waitFor(
+      () => {
+        expect(app.client.isMutating() + app.client.isFetching()).toBe(0);
+      },
+      { timeout: 3000 },
+    );
+    expect(madeByUser).not.toEqual(tasks.map((task) => task.title));
+    expect(taskTitles()).toEqual(madeByUser);
   });
 
   it("rolls back an optimistic toggle and says what failed", async () => {

@@ -10,8 +10,9 @@ import {
 } from "@tanstack/react-query";
 import { useState } from "react";
 import { type ApiError, ApiErrorCode } from "../api/client.ts";
-import { listTasks, updateTask } from "../api/tasks.ts";
+import { listTasks, moveTask, updateTask } from "../api/tasks.ts";
 import type { Task } from "../schema/task.ts";
+import { moveAfter } from "../tasks/order.ts";
 import { taskKeys } from "./keys.ts";
 
 /**
@@ -112,14 +113,50 @@ export const useToggleTask = () => {
   });
 };
 
-type NoticeKind = "toggle";
+/** A reorder: put the task right after `afterId`, or at the top when it is null. */
+export interface MoveVariables {
+  readonly taskId: string;
+  readonly afterId: string | null;
+}
+
+const moveIn = (items: readonly Task[], { taskId, afterId }: MoveVariables) =>
+  moveAfter(items, taskId, afterId);
+
+/**
+ * Move a task at once on screen, while the moves themselves reach the server one at a time and in the order the user
+ * made them: they share one mutation scope ([mutation scopes](https://tanstack.com/query/v5/docs/framework/react/guides/mutations#mutation-scopes)).
+ * The lists reload only after the last queued move, so a refetch never lands between two of them
+ * ([concurrent optimistic updates](https://tkdodo.eu/blog/concurrent-optimistic-updates-in-react-query)).
+ */
+export const useMoveTask = () => {
+  const client = useQueryClient();
+  const updateLists = optimisticListUpdate(client, moveIn);
+  return useMutation({
+    mutationKey: taskKeys.mutations.move,
+    scope: { id: "task-order" },
+    mutationFn: ({ taskId, afterId }: MoveVariables) => moveTask(taskId, afterId),
+    onMutate: (vars: MoveVariables) => updateLists(vars),
+    onError: (error, { taskId }, snapshot) => {
+      if (isNotFound(error)) forgetTask(client, taskId);
+      else if (snapshot) restoreLists(client, snapshot);
+    },
+    onSettled: () => {
+      if (client.isMutating({ mutationKey: taskKeys.mutations.move }) === 1)
+        void client.invalidateQueries({ queryKey: taskKeys.lists() });
+    },
+  });
+};
+
+type NoticeKind = "toggle" | "move";
 
 const noticeKinds: Readonly<Record<string, NoticeKind>> = {
   [taskKeys.mutations.toggle[1]]: "toggle",
+  [taskKeys.mutations.move[1]]: "move",
 };
 
 const failedTo: Readonly<Record<NoticeKind, string>> = {
   toggle: "Couldn't update the task, so it's back as it was.",
+  move: "Couldn't move the task, so it's back where it was.",
 };
 
 // A 404 means someone deleted the task elsewhere; anything else says what was undone and why.
