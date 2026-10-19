@@ -3,6 +3,7 @@ import os
 from collections.abc import AsyncIterator
 
 import pytest
+from asgi_lifespan import LifespanManager
 from fastapi import FastAPI
 from httpx import AsyncClient
 from sqlalchemy import URL, make_url, text
@@ -11,7 +12,7 @@ from sqlalchemy.pool import NullPool
 
 from app.config import Settings
 from app.main import create_app
-from tests.support.app import serving
+from tests.support.app import client_for
 from tests.support.database import TEST_DATABASE, migrate, recreate_test_database
 
 # The server and its maintenance database; the suite builds its own database beside it.
@@ -54,13 +55,15 @@ def test_settings(database_url: URL) -> Settings:
 
 
 @pytest.fixture
-def app(test_settings: Settings) -> FastAPI:
-    """A fresh app built from the test settings."""
-    return create_app(test_settings)
+async def app(test_settings: Settings) -> AsyncIterator[FastAPI]:
+    """A fresh app built from the test settings, with its lifespan running."""
+    app = create_app(test_settings)
+    async with LifespanManager(app):
+        yield app
 
 
 @pytest.fixture
 async def client(app: FastAPI) -> AsyncIterator[AsyncClient]:
     """A client for the running app; each request gets its own session and pooled connection."""
-    async with serving(app) as client:
+    async with client_for(app) as client:
         yield client

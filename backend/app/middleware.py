@@ -4,6 +4,7 @@ import logging
 import re
 import socket
 import time
+from collections.abc import Mapping
 from typing import Final
 from uuid import uuid4
 
@@ -16,6 +17,18 @@ access_log = logging.getLogger("app.access")
 
 REQUEST_ID: Final = re.compile(r"[A-Za-z0-9._-]{1,64}")
 PROBE_PATHS: Final = frozenset({"/livez", "/readyz"})
+
+
+def route_template(path: str, path_params: Mapping[str, str]) -> str:
+    """Turn a matched path back into its route template, such as `/api/v1/tasks/{task_id}`.
+
+    FastAPI includes routers by reference, so `scope["route"].path` is relative to the innermost
+    router; the full path with each parameter's value put back as `{name}` is the template.
+    """
+    names_by_value = {value: name for name, value in path_params.items()}
+    return "/".join(
+        f"{{{names_by_value[segment]}}}" if segment in names_by_value else segment for segment in path.split("/")
+    )
 
 
 class RequestContextMiddleware:
@@ -65,12 +78,12 @@ class RequestContextMiddleware:
         """Log the access line, except for a probe that succeeded, which would only bury the useful lines."""
         if scope["path"] in PROBE_PATHS and status < 400:
             return
-        route = scope.get("route")
+        matched = "route" in scope
         access_log.info(
             "request",
             extra={
                 "method": scope["method"],
-                "route": route.path if route is not None else scope["path"],
+                "route": route_template(scope["path"], scope.get("path_params", {})) if matched else scope["path"],
                 "status": status,
                 "duration_ms": round((time.perf_counter() - started) * 1000, 1),
             },

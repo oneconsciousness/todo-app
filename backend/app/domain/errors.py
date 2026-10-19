@@ -11,3 +11,15 @@ class EmptyPatch(DomainError):
 
 class NotAuthenticated(DomainError):
     """The request has no session, or its session token is invalid or expired."""
+
+
+class InvalidCredentials(DomainError):
+    """The email is unknown or the password is wrong; the two are never told apart."""
+
+
+class ForbiddenOrigin(DomainError):
+    """A write came from a page on another origin."""
+
+
+class EmailTaken(DomainError):
+    """An account already uses this email, in any letter case."""

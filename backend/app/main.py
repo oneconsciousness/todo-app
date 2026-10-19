@@ -10,6 +10,7 @@ from fastapi import FastAPI
 
 from app.api.errors import exception_handlers
 from app.api.health import health_router
+from app.api.router import api_router
 from app.config import Settings
 from app.db.engine import create_engine, create_sessionmaker
 from app.log import configure_logging
@@ -56,4 +57,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.log_listener = log_listener
     app.add_middleware(RequestContextMiddleware)
     app.include_router(health_router)
+    app.include_router(api_router)
     return app

@@ -14,23 +14,34 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.responses import Response
 
 from app.api.schemas import ErrorBody, ErrorDetail, ErrorEnvelope
-from app.domain.errors import DomainError, EmptyPatch, NotAuthenticated
+from app.domain.errors import (
+    DomainError,
+    EmailTaken,
+    EmptyPatch,
+    ForbiddenOrigin,
+    InvalidCredentials,
+    NotAuthenticated,
+)
 
 log = logging.getLogger(__name__)
 
 
 class HttpError(NamedTuple):
-    """How one kind of error looks on the wire."""
+    """How one kind of error looks on the wire; `field` names the one field it concerns, if any."""
 
     status: int
     code: str
     message: str
+    field: str | None = None
 
 
 STATUS_BY_ERROR: Final[Mapping[type[DomainError], HttpError]] = MappingProxyType(
     {
         EmptyPatch: HttpError(400, "validation_failed", "Send at least one field to change."),
         NotAuthenticated: HttpError(401, "not_authenticated", "Sign in to continue."),
+        InvalidCredentials: HttpError(401, "invalid_credentials", "The email or password is wrong."),
+        ForbiddenOrigin: HttpError(403, "forbidden_origin", "This request came from another site."),
+        EmailTaken: HttpError(409, "email_taken", "An account with this email already exists.", field="email"),
     }
 )
 
@@ -74,7 +85,9 @@ async def handle_validation_error(request: Request, error: RequestValidationErro
 
 async def handle_domain_error(request: Request, error: DomainError) -> JSONResponse:
     """Answer with the status and code the table gives the error's type."""
-    return error_response(STATUS_BY_ERROR[type(error)])
+    reply = STATUS_BY_ERROR[type(error)]
+    details = [ErrorDetail(field=reply.field, message=reply.message)] if reply.field else []
+    return error_response(reply, details)
 
 
 async def handle_http_exception(request: Request, error: StarletteHTTPException) -> JSONResponse:

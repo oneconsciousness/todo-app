@@ -34,6 +34,17 @@ class TaskChanges(TypedDict, total=False):
     due_date: date | None
 
 
+class UserRecord(BaseModel):
+    """A user row as it leaves the repository."""
+
+    model_config = ConfigDict(frozen=True, from_attributes=True)
+
+    id: UUID
+    email: str
+    password_hash: str
+    created_at: datetime
+
+
 class SessionClaims(BaseModel):
     """Who a session token belongs to, and when it was issued and expires, read from the JWT's claims."""
 

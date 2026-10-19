@@ -1,3 +1,4 @@
+import json
 import logging
 import re
 import socket
@@ -6,7 +7,9 @@ import pytest
 from fastapi import FastAPI
 from httpx import AsyncClient
 
-from tests.support.app import serving
+from app.log import JsonFormatter
+from tests.support.app import client_for
+from tests.support.factories import signed_in_client
 
 GENERATED_REQUEST_ID = re.compile(r"[0-9a-f]{32}")
 
@@ -33,6 +36,31 @@ async def test_api_responses_are_not_cached(client: AsyncClient) -> None:
     assert response.headers["Cache-Control"] == "no-store"
 
 
+class JsonLines(logging.Handler):
+    """Keep each record as the JSON line the app would write, formatted in the request's own context."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.setFormatter(JsonFormatter())
+        self.lines: list[dict[str, object]] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.lines.append(json.loads(self.format(record)))
+
+
+async def test_access_line_has_route_status_duration_and_user_id(app: FastAPI) -> None:
+    access_lines = JsonLines()
+    logging.getLogger("app.access").addHandler(access_lines)
+    try:
+        async with signed_in_client(app) as client:
+            user_id = (await client.get("/api/v1/auth/me")).json()["id"]
+    finally:
+        logging.getLogger("app.access").removeHandler(access_lines)
+    line = access_lines.lines[-1]
+    assert (line["method"], line["route"], line["status"], line["user_id"]) == ("GET", "/api/v1/auth/me", 200, user_id)
+    assert isinstance(line["duration_ms"], float)
+
+
 async def test_unhandled_error_returns_500_envelope_and_logs_the_traceback(
     app: FastAPI, caplog: pytest.LogCaptureFixture
 ) -> None:
@@ -40,7 +68,7 @@ async def test_unhandled_error_returns_500_envelope_and_logs_the_traceback(
         raise RuntimeError("boom")
 
     app.add_api_route("/api/v1/test-only/explode", explode)
-    async with serving(app, raise_app_exceptions=False) as client:
+    async with client_for(app, raise_app_exceptions=False) as client:
         response = await client.get("/api/v1/test-only/explode")
     assert response.status_code == 500
     assert response.json()["error"]["code"] == "internal_error"
