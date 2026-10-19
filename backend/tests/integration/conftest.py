@@ -3,11 +3,15 @@ import os
 from collections.abc import AsyncIterator
 
 import pytest
+from fastapi import FastAPI
+from httpx import AsyncClient
 from sqlalchemy import URL, make_url, text
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from sqlalchemy.pool import NullPool
 
 from app.config import Settings
+from app.main import create_app
+from tests.support.app import serving
 from tests.support.database import TEST_DATABASE, migrate, recreate_test_database
 
 # The server and its maintenance database; the suite builds its own database beside it.
@@ -47,3 +51,16 @@ async def empty_tables(database_engine: AsyncEngine) -> None:
 def test_settings(database_url: URL) -> Settings:
     """Settings that point the app at the test database."""
     return Settings(database_url=database_url.render_as_string(hide_password=False), jwt_secret=SIGNING_KEY)
+
+
+@pytest.fixture
+def app(test_settings: Settings) -> FastAPI:
+    """A fresh app built from the test settings."""
+    return create_app(test_settings)
+
+
+@pytest.fixture
+async def client(app: FastAPI) -> AsyncIterator[AsyncClient]:
+    """A client for the running app; each request gets its own session and pooled connection."""
+    async with serving(app) as client:
+        yield client

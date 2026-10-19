@@ -2,10 +2,12 @@
 
 import asyncio
 from dataclasses import dataclass
-from typing import Self
+from typing import Final, Self
 
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
+
+HASH_CONCURRENCY: Final = 4
 
 
 @dataclass(frozen=True)
