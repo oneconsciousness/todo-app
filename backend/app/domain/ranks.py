@@ -178,7 +178,11 @@ def rank_between(lower: str | None, upper: str | None) -> str:
             if fraction and integer != SMALLEST_INTEGER:
                 # The bare integer sorts just before any key that extends it.
                 return integer
-            return decrement(integer) or integer + midpoint("", fraction)
+            previous = decrement(integer)
+            if previous is None:
+                return integer + midpoint("", fraction)
+            # The smallest integer is never a key on its own, so a key inside it needs a fraction.
+            return previous + midpoint("", None) if previous == SMALLEST_INTEGER else previous
         case (str() as lower_rank, None):
             integer, fraction = split_rank(lower_rank)
             return increment(integer) or integer + midpoint(fraction, None)

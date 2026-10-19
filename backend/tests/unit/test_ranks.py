@@ -84,6 +84,22 @@ def test_rank_before_a0_is_Zz() -> None:
     assert rank_between(None, "a0") == "Zz"
 
 
+def test_rank_before_the_integer_just_above_the_smallest_is_a_valid_key() -> None:
+    upper = "A" + ZERO * 25 + "1"
+    rank = rank_between(None, upper)
+    assert validate_rank(rank) < upper
+
+
+def test_rank_before_a_key_inside_the_smallest_integer_stays_inside_it() -> None:
+    upper = SMALLEST_INTEGER + "V"
+    assert rank_between(None, upper) == SMALLEST_INTEGER + "F"
+
+
+def test_rank_after_the_largest_integer_grows_a_fraction() -> None:
+    largest_integer = "z" + DIGITS[-1] * 26
+    assert rank_between(largest_integer, None) == largest_integer + "V"
+
+
 @pytest.mark.parametrize(("lower", "upper"), [("a1", "a0"), ("a0", "a0")])
 def test_rank_between_rejects_unordered_bounds(lower: str, upper: str) -> None:
     with pytest.raises(InvalidRankOrder):
