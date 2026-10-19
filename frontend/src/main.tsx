@@ -1,3 +1,5 @@
+// First, so Zod is configured before any schema module is evaluated.
+import "./lib/schema/zod-config.ts";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
