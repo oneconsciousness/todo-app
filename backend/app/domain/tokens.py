@@ -22,7 +22,8 @@ def encode_session(user_id: UUID, *, now: datetime, secret: str) -> str:
 def decode_session(token: str, *, now: datetime, secret: str) -> SessionClaims:
     """Return the claims of a token signed with `secret` that has not expired at `now`.
 
-    Expiry is checked here against `now` rather than by PyJWT, so a test can set the time.
+    PyJWT's own time checks read the wall clock, so they are off and expiry is checked against `now`
+    (https://pyjwt.readthedocs.io/en/stable/api.html#jwt.decode).
 
     Raises:
         NotAuthenticated: when the token is malformed, signed with another key or algorithm,
@@ -33,7 +34,7 @@ def decode_session(token: str, *, now: datetime, secret: str) -> SessionClaims:
             token,
             secret,
             algorithms=[ALGORITHM],
-            options={"verify_exp": False, "require": ["sub", "iat", "exp"]},
+            options={"verify_exp": False, "verify_iat": False, "require": ["sub", "iat", "exp"]},
         )
         claims = SessionClaims(
             user_id=UUID(payload["sub"]),

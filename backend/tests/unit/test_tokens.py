@@ -17,6 +17,14 @@ def test_session_token_round_trips_the_user_id() -> None:
     assert decode_session(token, now=ISSUED + timedelta(hours=1), secret=SIGNING_KEY).user_id == user_id
 
 
+def test_decoding_reads_only_the_given_time_not_the_wall_clock() -> None:
+    issued_after_the_wall_clock = datetime(2999, 1, 5, 9, 0, tzinfo=UTC)
+    user_id = uuid4()
+    token = encode_session(user_id, now=issued_after_the_wall_clock, secret=SIGNING_KEY)
+    claims = decode_session(token, now=issued_after_the_wall_clock + timedelta(hours=1), secret=SIGNING_KEY)
+    assert claims.user_id == user_id
+
+
 def test_expired_token_is_rejected() -> None:
     token = encode_session(uuid4(), now=ISSUED, secret=SIGNING_KEY)
     with pytest.raises(NotAuthenticated):
