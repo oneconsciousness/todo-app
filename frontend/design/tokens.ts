@@ -48,6 +48,28 @@ export const contrastRatio = (a: string, b: string): number => {
   return (lighter + 0.05) / (darker + 0.05);
 };
 
+/** A non-colour token: its name within its group, and its value as written. */
+export interface Token {
+  readonly name: string;
+  readonly value: string;
+}
+
+// The theme block ends at the first closing brace in column 0; overrides such as reduced motion come after it.
+const themeBlock = (css: string): string => css.slice(0, css.search(/^\}/m) + 1 || undefined);
+
+/** Read every `--<group>-<name>: value;` declaration in the theme block, skipping sub-properties such as `--text-body--line-height`. */
+export const parseTokenGroup = (css: string, group: string): readonly Token[] =>
+  [...themeBlock(css).matchAll(new RegExp(`--${group}-([a-z0-9-]+?):\\s*([^;]+);`, "g"))]
+    .map(([, name = "", value = ""]) => ({ name, value: value.trim() }))
+    .filter(({ name }) => !name.includes("--"));
+
+/** The value of one custom property, such as `text-body--line-height`, or an empty string. */
+export const tokenValue = (css: string, property: string): string =>
+  new RegExp(`--${property}:\\s*([^;]+);`).exec(css)?.[1]?.trim() ?? "";
+
+/** The raw token file, for the gallery's type, space, shape and motion sections. */
+export const tokenSource = tokensCss;
+
 /** Every colour token in `src/styles/tokens.css`, in file order. */
 export const colorTokens = parseColorTokens(tokensCss);
 

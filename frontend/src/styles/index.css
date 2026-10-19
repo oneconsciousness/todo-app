@@ -3,6 +3,7 @@
 @import "@fontsource-variable/libre-franklin/wght.css";
 @import "./tokens.css";
 
+@source "..";
 @source "../../design";
 
 @layer base {
