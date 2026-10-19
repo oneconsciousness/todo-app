@@ -198,7 +198,7 @@ def create_app(settings: Settings | None = None) -> FastAPI: ...
 | same | present and different, including the literal `null` | `ForbiddenOrigin` → 403 `forbidden_origin` |
 | same | absent | pass **(Q-3)** |
 
-Browsers always attach `Origin` to a non-GET request, and send `null` rather than leaving it out when a policy hides it ([Fetch: append a request Origin header](https://fetch.spec.whatwg.org/#append-a-request-origin-header)). So a missing header means a non-browser client (curl, k6, a reviewer's script), which cannot ride the user's cookie in a CSRF attack. Router-level dependencies run before the body is parsed, so a cross-origin write with a bad body still gets 403.
+Browsers always attach `Origin` to a non-GET request, and send `null` rather than leaving it out when a policy hides it ([Fetch: append a request Origin header](https://fetch.spec.whatwg.org/#append-a-request-origin-header)). So a missing header means a non-browser client (curl, k6, a reviewer's script), which cannot ride the user's cookie in a CSRF attack. Router-level dependencies run before the body is validated, so a cross-origin write with an invalid body still gets 403. (FastAPI decodes the JSON first, so malformed JSON is still a 400.)
 
 ### 3.4 Errors: one envelope, one map
 
