@@ -1,7 +1,7 @@
 import { addTask, expect, signUp, taskTitles, test } from "./fixtures.ts";
 
 // A date in next year, so the screen spells it with its year whatever day the suite runs.
-const nextYear = new Date().getUTCFullYear() + 1;
+const nextYear = new Date().getFullYear() + 1;
 const dueDate = `${String(nextYear)}-03-14`;
 const dueText = `Due ${new Intl.DateTimeFormat("en-US", {
   weekday: "short",

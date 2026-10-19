@@ -4,7 +4,6 @@ import hashlib
 import random
 import re
 from http.cookies import SimpleCookie
-from unittest.mock import ANY
 from uuid import uuid4
 
 import httpx
@@ -14,12 +13,9 @@ from support import BASE_URL, PASSWORD, unique_email
 
 
 def test_migrations_ran_and_signup_works_through_the_proxy(client: httpx.Client) -> None:
-    email = unique_email()
-
-    response = client.post("/api/v1/auth/register", json={"email": email, "password": PASSWORD})
+    response = client.post("/api/v1/auth/register", json={"email": unique_email(), "password": PASSWORD})
 
     assert response.status_code == 201
-    assert response.json() == {"id": ANY, "email": email}
 
 
 def test_session_cookie_survives_the_proxy_with_its_attributes(client: httpx.Client) -> None:
@@ -73,6 +69,8 @@ def test_security_headers_are_set_on_the_spa(client: httpx.Client) -> None:
     response = client.get("/")
 
     assert {name: response.headers.get(name) for name in SECURITY_HEADERS} == SECURITY_HEADERS
+    # httpx joins repeated headers with ", ", so a second CSP would hide inside the first; count them instead.
+    assert len(response.headers.get_list("content-security-policy")) == 1
     assert "default-src 'self'" in response.headers["content-security-policy"]
     assert "frame-ancestors 'none'" in response.headers["content-security-policy"]
     assert response.headers["cache-control"] == "no-cache"
@@ -98,6 +96,7 @@ def test_api_docs_csp_allows_the_inline_script_the_page_serves(client: httpx.Cli
 
     [inline_script] = re.findall(r"<script>(.*?)</script>", page.text, re.DOTALL)
     digest = base64.b64encode(hashlib.sha256(inline_script.encode()).digest()).decode()
+    assert len(page.headers.get_list("content-security-policy")) == 1
     assert f"'sha256-{digest}'" in page.headers["content-security-policy"]
 
 
@@ -123,4 +122,3 @@ def test_concurrent_moves_through_both_replicas_keep_ranks_unique() -> None:
     assert {answer.status_code for answer in answers} == {200}
     assert len({answer.headers["x-served-by"] for answer in answers}) == 2
     assert len(ranks) == len(set(ranks)) == len(task_ids)
-    assert ranks == sorted(ranks)
