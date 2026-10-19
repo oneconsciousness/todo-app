@@ -99,6 +99,22 @@ describe("TaskListPage", () => {
     expect(tickBox(detailTask.title)).not.toBeChecked();
   });
 
+  it("keeps a dismissed notice gone after opening a task and coming back", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    server.use(http.patch("/api/v1/tasks/:taskId", () => errorReply(500, "internal_error")));
+    await renderList();
+    await userEvent.click(tickBox(detailTask.title));
+    await userEvent.click(
+      within(await screen.findByRole("alert")).getByRole("button", { name: "Dismiss" }),
+    );
+
+    await userEvent.click(screen.getByRole("link", { name: detailTask.title }));
+    await userEvent.click(await screen.findByRole("link", { name: "All tasks" }));
+
+    expect(await screen.findByRole("list", { name: "Tasks" })).toBeVisible();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
   it("removes the row and says why when a toggle gets 404", async () => {
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     await renderList();

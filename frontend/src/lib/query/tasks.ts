@@ -1,4 +1,5 @@
 import {
+  type Mutation,
   type MutationKey,
   type QueryClient,
   type QueryKey,
@@ -9,7 +10,6 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { useState } from "react";
 import { type ApiError, ApiErrorCode } from "../api/client.ts";
 import { createTask, deleteTask, getTask, listTasks, moveTask, updateTask } from "../api/tasks.ts";
 import type { Task } from "../schema/task.ts";
@@ -296,23 +296,25 @@ interface FailedChange {
   readonly kind: NoticeKind;
   readonly error: ApiError;
   readonly submittedAt: number;
+  readonly mutation: Mutation;
 }
 
 /**
- * The newest failed list change, wherever it was started (the detail screen included), until the user dismisses it.
- * It is read from the mutation cache, so no other store holds it.
+ * The newest failed list change, wherever it was started (the detail screen included). The mutation cache is the only
+ * store: dismissing a notice removes its failed change from the cache, so it stays gone on every page.
  */
 export const useTaskNotices = (): {
   readonly notice: string | null;
   readonly dismiss: () => void;
 } => {
-  const [dismissed, setDismissed] = useState<ReadonlySet<number>>(new Set());
+  const client = useQueryClient();
   const failures = useMutationState({
     filters: { mutationKey: taskKeys.all, status: "error" },
     select: (mutation) => ({
       kind: kindOf(mutation.options.mutationKey),
       error: mutation.state.error,
       submittedAt: mutation.state.submittedAt,
+      mutation,
     }),
   });
   const newest = failures
@@ -320,8 +322,7 @@ export const useTaskNotices = (): {
       (failure): failure is FailedChange =>
         failure.kind !== undefined &&
         failure.error !== null &&
-        isWorthTelling(failure.kind, failure.error) &&
-        !dismissed.has(failure.submittedAt),
+        isWorthTelling(failure.kind, failure.error),
     )
     .reduce<FailedChange | null>(
       (latest, failure) => (latest && latest.submittedAt >= failure.submittedAt ? latest : failure),
@@ -330,7 +331,7 @@ export const useTaskNotices = (): {
   return {
     notice: newest && noticeFor(newest.kind, newest.error),
     dismiss: () => {
-      if (newest) setDismissed((current) => new Set([...current, newest.submittedAt]));
+      if (newest) client.getMutationCache().remove(newest.mutation);
     },
   };
 };
