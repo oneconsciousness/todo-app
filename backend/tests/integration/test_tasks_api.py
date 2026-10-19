@@ -1,5 +1,6 @@
 from uuid import uuid4
 
+import pytest
 from fastapi import FastAPI
 from httpx import AsyncClient
 
@@ -24,8 +25,22 @@ async def test_list_returns_only_own_tasks_in_rank_order(app: FastAPI) -> None:
     assert [item["rank"] for item in items] == sorted(item["rank"] for item in items)
 
 
-async def test_list_without_a_session_returns_401(client: AsyncClient) -> None:
-    response = await client.get(TASKS)
+@pytest.mark.parametrize(
+    ("method", "path", "body"),
+    [
+        ("GET", TASKS, None),
+        ("POST", TASKS, {"title": "Buy milk"}),
+        ("GET", task_path(uuid4()), None),
+        ("PATCH", task_path(uuid4()), {"completed": True}),
+        ("PUT", f"{task_path(uuid4())}/position", {"afterId": None}),
+        ("DELETE", task_path(uuid4()), None),
+    ],
+    ids=["list", "create", "read", "edit", "move", "delete"],
+)
+async def test_every_task_route_without_a_session_returns_401(
+    client: AsyncClient, method: str, path: str, body: dict[str, object] | None
+) -> None:
+    response = await client.request(method, path, json=body)
     assert response.status_code == 401
     assert response.json()["error"]["code"] == "not_authenticated"
 
