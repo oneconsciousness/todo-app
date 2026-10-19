@@ -29,6 +29,10 @@ class TaskNotFound(DomainError):
     """No task with this id belongs to the signed-in user; another user's task counts as missing."""
 
 
+class InvalidPosition(DomainError):
+    """A move names a task to follow that is unknown, belongs to someone else, or is the task itself."""
+
+
 class InvalidPrecondition(DomainError):
     """The If-Match header is not a quoted positive version number."""
 

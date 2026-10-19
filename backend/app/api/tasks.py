@@ -7,7 +7,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Header, Query, Response, status
 
 from app.api.deps import CurrentUserDep, SessionDep
-from app.api.schemas import ErrorEnvelope, TaskCreate, TaskList, TaskRead, TaskUpdate
+from app.api.schemas import ErrorEnvelope, TaskCreate, TaskList, TaskMove, TaskRead, TaskUpdate
 from app.domain.errors import InvalidPrecondition
 from app.domain.types import TaskRecord
 from app.services import tasks as task_service
@@ -51,6 +51,23 @@ async def create_task(body: TaskCreate, response: Response, claims: CurrentUserD
 async def get_task(task_id: UUID, response: Response, claims: CurrentUserDep, session: SessionDep) -> TaskRead:
     """Return one task."""
     return read_with_etag(await task_service.get_task(session, claims.user_id, task_id), response)
+
+
+@tasks_router.put(
+    "/{task_id}/position",
+    responses={400: {"model": ErrorEnvelope}, 404: {"model": ErrorEnvelope}},
+)
+async def move_task(
+    task_id: UUID, body: TaskMove, response: Response, claims: CurrentUserDep, session: SessionDep
+) -> TaskRead:
+    """Put the task right after `afterId`, or at the top when it is null."""
+    return read_with_etag(await task_service.move_task(session, claims.user_id, task_id, body.after_id), response)
+
+
+@tasks_router.delete("/{task_id}", status_code=status.HTTP_204_NO_CONTENT, responses={404: {"model": ErrorEnvelope}})
+async def delete_task(task_id: UUID, claims: CurrentUserDep, session: SessionDep) -> None:
+    """Delete the task."""
+    await task_service.delete_task(session, claims.user_id, task_id)
 
 
 def expected_version(if_match: Annotated[str | None, Header()] = None) -> int | None:

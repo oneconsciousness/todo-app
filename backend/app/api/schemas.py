@@ -91,6 +91,12 @@ class TaskUpdate(RequestModel):
         return TaskPatch(**{name: getattr(self, name) for name in self.model_fields_set})
 
 
+class TaskMove(RequestModel):
+    """Where to put a task: right after `afterId`, or at the top when it is null. The key is required."""
+
+    after_id: UUID | None
+
+
 class TaskRead(WireModel):
     """One task as the client sees it."""
 

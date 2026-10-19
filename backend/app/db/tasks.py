@@ -3,7 +3,7 @@
 from datetime import date
 from uuid import UUID
 
-from sqlalchemy import ColumnElement, func, insert, or_, select, update
+from sqlalchemy import ColumnElement, delete, func, insert, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Task
@@ -16,6 +16,44 @@ async def first_rank(session: AsyncSession, owner_id: UUID) -> str | None:
         select(Task.rank).where(Task.owner_id == owner_id).order_by(Task.rank).limit(1)
     )
     return rank
+
+
+async def rank_of(session: AsyncSession, owner_id: UUID, task_id: UUID) -> str | None:
+    """Return the rank of one of the owner's tasks, or `None` when it is missing or someone else's."""
+    rank: str | None = await session.scalar(select(Task.rank).where(Task.id == task_id, Task.owner_id == owner_id))
+    return rank
+
+
+async def next_rank_after(session: AsyncSession, owner_id: UUID, rank: str, excluding: UUID) -> str | None:
+    """Return the first rank below `rank` in the owner's list, skipping the task being moved."""
+    statement = (
+        select(Task.rank)
+        .where(Task.owner_id == owner_id, Task.rank > rank, Task.id != excluding)
+        .order_by(Task.rank)
+        .limit(1)
+    )
+    next_rank: str | None = await session.scalar(statement)
+    return next_rank
+
+
+async def first_rank_excluding(session: AsyncSession, owner_id: UUID, excluding: UUID) -> str | None:
+    """Return the owner's top rank, skipping the task being moved."""
+    statement = select(Task.rank).where(Task.owner_id == owner_id, Task.id != excluding).order_by(Task.rank).limit(1)
+    rank: str | None = await session.scalar(statement)
+    return rank
+
+
+async def set_rank(session: AsyncSession, owner_id: UUID, task_id: UUID, rank: str) -> TaskRecord | None:
+    """Give a task a new rank, leaving its version and updated time as they are."""
+    statement = update(Task).where(Task.id == task_id, Task.owner_id == owner_id).values(rank=rank).returning(Task)
+    task = await session.scalar(statement)
+    return TaskRecord.model_validate(task) if task is not None else None
+
+
+async def delete_task(session: AsyncSession, owner_id: UUID, task_id: UUID) -> bool:
+    """Delete one of the owner's tasks; return whether there was one to delete."""
+    statement = delete(Task).where(Task.id == task_id, Task.owner_id == owner_id).returning(Task.id)
+    return await session.scalar(statement) is not None
 
 
 async def insert_task(

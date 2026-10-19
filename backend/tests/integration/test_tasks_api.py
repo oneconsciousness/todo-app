@@ -165,6 +165,33 @@ async def test_patch_rejects_an_empty_body_with_400(app: FastAPI) -> None:
     assert response.json()["error"]["code"] == "validation_failed"
 
 
+async def test_patch_after_delete_returns_404(app: FastAPI) -> None:
+    async with signed_in_client(app) as client:
+        [task] = await create_tasks(client, ["Buy milk"])
+        await client.delete(task_path(task.id))
+        response = await client.patch(task_path(task.id), json={"completed": True}, headers={"If-Match": '"1"'})
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "not_found"
+
+
+async def test_delete_returns_204_and_the_task_is_gone(app: FastAPI) -> None:
+    async with signed_in_client(app) as client:
+        [task] = await create_tasks(client, ["Buy milk"])
+        response = await client.delete(task_path(task.id))
+        after = await client.get(task_path(task.id))
+    assert (response.status_code, response.content) == (204, b"")
+    assert after.status_code == 404
+
+
+async def test_delete_another_users_task_returns_404(app: FastAPI) -> None:
+    async with signed_in_client(app) as ada, signed_in_client(app) as bob:
+        [task] = await create_tasks(ada, ["Ada's task"])
+        response = await bob.delete(task_path(task.id))
+        still_there = await ada.get(task_path(task.id))
+    assert response.status_code == 404
+    assert still_there.status_code == 200
+
+
 async def test_patch_another_users_task_returns_404(app: FastAPI) -> None:
     async with signed_in_client(app) as ada, signed_in_client(app) as bob:
         [task] = await create_tasks(ada, ["Ada's task"])
