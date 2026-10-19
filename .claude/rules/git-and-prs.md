@@ -6,7 +6,7 @@
 - Releases are `vX.Y.Z` tags on `main`. A tag is never moved or deleted; a wrong tag is fixed by cutting the next version. A hook blocks tag moves.
 
 ## Commits
-- One logical change per commit, and every commit is green (see `testing.md`). Conventional Commits: `type(scope): subject`. Types: feat, fix, chore, docs, refactor, perf, test, ci, build, revert, release. Scopes: `api`, `web`, `db`, `auth`, `deploy`, `claude`, or none. Subject starts lowercase, no trailing period, imperative mood.
+- One logical change per commit, and every commit is green (see `testing.md`). Conventional Commits: `type(scope): subject`. Types: feat, fix, chore, docs, refactor, perf, test, ci, build, revert, release. Scopes: `api`, `web`, `db`, `auth`, `deploy`, `claude`, `round-<n>` (a parent PR), or none. Subject starts lowercase, no trailing period, imperative mood.
 - The body says why, not what.
 - Add `Refs: #<issue>` or `Refs: docs/plans/<file>.md` when there is one.
 
@@ -17,5 +17,5 @@
 - Label: exactly one, taken from the branch prefix through the table in `CONTRIBUTING.md` § 2. A prefix with no row in that table is a gap; ask before raising.
 - Description: what, why, how to test, risks and rollback. Link sources instead of restating them.
 - Child PRs target the round branch. One parent PR per round (`round/<n>-<name>` → `main`, label `round`) stays a draft until the round is done and tested; link each child PR from it.
-- The lead reviews every PR. Child PRs are rebase-merged (each commit is green, so the test-first history stays), and the parent PR is merged with a merge commit. The lead has the final call.
+- The human lead reviews every PR. Child PRs are squash-merged (the PR title becomes the commit subject, so it must be Conventional), and the parent PR is rebase-merged into `main`. The human lead has the final call.
 - `git push` and `gh pr create` always ask before running. That is intended.

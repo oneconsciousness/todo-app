@@ -31,12 +31,13 @@ This repo sits inside a larger workspace whose `.claude/rules/` also load. The g
 
 ## Gotchas
 - `transcript-backup.py` snapshots the session transcript into `.ai-transcripts/` before and after every compaction and at session end, and blocks a compaction it could not back up. The snapshots are the record of AI use; never delete them.
-- macOS ships bash 3.2. Repo scripts are Python 3 standard library, like the hooks, so they run on a reviewer's Mac and in CI.
+- macOS ships bash 3.2 and Python 3.9. Repo scripts and hooks are Python standard library and start with `from __future__ import annotations`, so they run on a reviewer's Mac; CI tests them on 3.9 and 3.13. The guard hooks fail closed: a crash denies the call.
+- A commit message that names an env file trips the env guard when passed with `-m`; use `git commit -F <file>`.
 - The branch-protection hook blocks every commit on `main`. Branch first.
 - FastAPI answers validation errors with 422 unless the app's handler maps them. Keep the handler; the contract says 400.
 
 ## Branches and deploy
-- Each round has an integration branch, `round/<n>-<name>`, and one parent PR into `main` that merges only when the round is done and tested. Work on a branch off the round branch and open a child PR into it; the lead reviews every PR. Child PRs are rebase-merged, the parent with a merge commit (`CONTRIBUTING.md` § 1). Releases are `vX.Y.Z` tags; a tag is never moved.
+- Each round has an integration branch, `round/<n>-<name>`, and one parent PR into `main` that merges only when the round is done and tested. Work on a branch off the round branch and open a child PR into it; the human lead reviews every PR. Child PRs are squash-merged, the parent is rebase-merged (`CONTRIBUTING.md` § 1). Releases are `vX.Y.Z` tags; a tag is never moved.
 - CI runs on every PR: hygiene, plus the backend and frontend gates as those apps land.
 - Deploy stages are in `.claude/rules/deployment.md`. The human reviews every deployment artifact before it is applied, and runs anything against AKS.
 - Guards: a hook blocks commits and pushes on `main` and on round branches, force pushes, `--no-verify` and tag moves. `git push`, `gh pr create`, `kubectl apply`/`delete`, `helm` and `az` always ask. PR titles must be Conventional Commits. A PR also needs a docs decision from `/claude-docs-check`.

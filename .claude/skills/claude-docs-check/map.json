@@ -1,7 +1,12 @@
 {
-  "bases": ["main", "round/*"],
+  "bases": [
+    "main",
+    "round/*"
+  ],
   "artifact_prefixes": [
-    ".claude/",
+    ".claude/rules/",
+    ".claude/skills/",
+    ".claude/agents/",
     "CLAUDE.md",
     "CONTRIBUTING.md",
     "backend/CLAUDE.md",
@@ -80,11 +85,12 @@
     },
     {
       "paths": [
-        ".claude/*",
-        "CLAUDE.md"
+        ".claude/hooks/*",
+        ".claude/settings.json"
       ],
       "artifacts": [
-        ".claude/skills/claude-docs-check/map.json"
+        "CONTRIBUTING.md (sections 8.4 and 12)",
+        "CLAUDE.md (Config and secrets, Branches and deploy)"
       ]
     }
   ]

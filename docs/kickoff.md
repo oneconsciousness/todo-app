@@ -59,7 +59,7 @@ Claude Code writes each session as JSONL, one event per line with a timestamp, u
 | 5 | PRs carry one label taken from the branch prefix (`CONTRIBUTING.md` § 2). |
 | 6 | One monorepo: `backend/`, `frontend/`, and later `e2e/` and `deploy/`, with one root `.claude/`. |
 | 7 | The challenge brief (`TASK.md`) is committed at the repo root, unchanged. |
-| 8 | Every change reaches `main` through a branch and a PR. The agent shows the PR card and waits for a yes; the human reviews and merges each PR. |
+| 8 | Every change reaches `main` through a PR, and since 2026-10-19 through a round: child PRs into the round branch (squash-merged), one parent PR per round into `main` (rebase-merged). The agent shows the PR card and waits for a yes; the human lead reviews and merges every PR. |
 | 9 | Three rounds: round 1 runs in containers (`docker compose`), round 2 on a local k3d cluster, round 3 live on AKS. Each round starts after the previous one is proven and signed off. |
 | 10 | The session transcript is snapshotted before every compaction, so no compaction can lose its contents (`.claude/hooks/transcript-backup.py`). |
 | 11 | High-level choices and a solution diagram are specced and signed off (a Claude artifact) before the detailed coding plan is written. |

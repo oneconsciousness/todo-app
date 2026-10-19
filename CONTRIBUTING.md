@@ -2,7 +2,7 @@
 
 This file is the canonical reference for *how* we work in this repo. The *why* (requirements, architecture, design decisions) lives in `docs/`: start with `docs/kickoff.md`.
 
-> **TL;DR for first-time contributors:** branch off the current round branch (`round/<n>-<name>`), use Conventional Commits, run the tests before opening a PR into the round branch, get the lead's review. The round reaches `main` in one parent PR once it is done and tested.
+> **TL;DR for first-time contributors:** branch off the current round branch (`round/<n>-<name>`), use Conventional Commits, run the tests before opening a PR into the round branch, get the human lead's review. The round reaches `main` in one parent PR once it is done and tested.
 
 ---
 
@@ -15,19 +15,19 @@ feature/<name>              ←  you work here, branched off the round branch
        │
        │  GATE — every suite passes on this branch (§ 5)
        ▼
-  child PR  →  round/<n>-<name>   ←  reviewed by the lead, then rebase-merged
-       │                             (every green, test-first commit is kept)
+  child PR  →  round/<n>-<name>   ←  reviewed by the human lead, then squash-merged
+       │                             (one commit per child PR, titled by the PR)
        │  GATE — the round is done: exit criteria met, every suite green
        ▼
  parent PR  →  main              ←  open (as a draft) for the whole round;
-       │                             merged with a merge commit once tested
+       │                             rebase-merged once tested (one commit per child on main)
        ▼
    vX.Y.Z tag                    ←  a release is a tag on main; a tag is never moved or deleted
 ```
 
-- **The parent PR** is opened as a draft as soon as the round branch has its first merged child, and is titled for the round (`feat(round-1): run the to do app in containers`). It is the round's checklist: each child PR is linked from it. It leaves draft only when the round's exit criteria are met, and it merges only after the lead's final review.
-- **`main` only ever receives finished, tested rounds.** `git log --first-parent main` reads one merge per round; the full history underneath keeps every test-first commit.
-- **Child PRs** target the round branch and are rebase-merged, so the branch stays linear and every commit on it is green. A child that depends on an unmerged child targets that child's branch until it merges, then is retargeted to the round branch.
+- **The parent PR** is opened as a draft as soon as the round branch has its first merged child, and is titled for the round (`feat(round-1): run the to do app in containers`). It is the round's checklist: each child PR is linked from it. It leaves draft only when the round's exit criteria are met, and it merges only after the human lead's final review.
+- **`main` only ever receives finished, tested rounds.** Rebase-merging the parent lays the round's child commits onto `main` in order, so `main` stays linear with one commit per child PR. Each child's test-first commits stay visible in its merged PR on GitHub.
+- **Child PRs** target the round branch and are squash-merged, so the PR title becomes the commit subject (the PR-title hook and CI keep it Conventional). Every commit on the PR branch is still green, and the test-first order stays in the PR. A child that depends on an unmerged child targets that child's branch until it merges, then is rebased onto the round branch (`git rebase --onto origin/round/<n>-<name> <old tip of the merged child>`) and retargeted.
 - **The round branch is protected like `main`:** no direct commits or pushes, only merged PRs. It is created once from `main` by the human (`git push origin main:refs/heads/round/<n>-<name>`), because the hook refuses that push from an agent.
 
 **Never push directly to `main` or a round branch.** Always go through a PR. A wrong tag is fixed by cutting the next version, never by moving the existing one.
@@ -94,9 +94,9 @@ What could break? How to revert?
 Inline if helpful.
 ```
 
-- The lead reviews every PR, child and parent alike.
+- The human lead reviews every PR, child and parent alike.
 - CI must be green before merge.
-- **Child PRs are rebase-merged** into the round branch, which keeps each green commit and the test-first order visible. **The parent PR is merged into `main` with a merge commit**, so `main` gains one merge per round.
+- **Child PRs are squash-merged** into the round branch: one commit per child, its subject the PR title. **The parent PR is rebase-merged into `main`**, so `main` gains the round's child commits in order, with no merge commits.
 
 ## 5. Test gates
 
@@ -136,9 +136,9 @@ The session shape:
 
 Useful prompts:
 
-- `"Create a new branch off main called feature/<name> and switch to it."`
+- `"Create a new branch off the round branch called feature/<name> and switch to it."`
 - `"Stage and commit my changes with a Conventional Commits message. Type is fix, scope is api, refs issue #42."`
-- `"Sync my branch with origin/main, rebase, resolve conflicts conservatively and ask before discarding anything."`
+- `"Sync my branch with the round branch, rebase, resolve conflicts conservatively and ask before discarding anything."`
 - `"Before doing anything that touches main, follow CONTRIBUTING.md § 8 (the kind-stop protocol)."`
 
 ## 8. The kind-stop protocol — when you're about to break a rule
@@ -153,13 +153,13 @@ For Claude Code specifically, mechanical enforcement runs via the hooks in `.cla
 
 Any of these in a single session:
 
-1. Committing directly on `main` (no feature branch)
-2. Pushing directly to `main` (no PR)
+1. Committing directly on `main` or a round branch (no feature branch)
+2. Pushing directly to `main` or a round branch (no PR)
 3. Force-pushing to a shared branch (`main`, anything someone else might be on)
 4. Using a personal-name or vague branch name (`<name>-fix`, `claude-update`, `tmp`, `wip`, `update`, `fix`)
 5. Skipping the test gate before opening a PR
 6. Using `--no-verify` to bypass a git hook
-7. Squashing the commits on a PR branch before merge (the test-first history is evidence; keep it)
+7. Squashing the commits on a PR branch before merge (squash happens *on merge*; the PR keeps the test-first history)
 8. Moving, deleting or re-creating a release tag
 9. Editing files in any folder marked "generated" or "source — do not modify"
 10. A commit message that isn't Conventional Commits format
@@ -212,13 +212,15 @@ For Claude Code users, the rules above are enforced by hooks wired in `.claude/s
 
 | Hook | Event | Blocks |
 |---|---|---|
-| `branch-protection.py` | Bash | commits and pushes on `main` (any form, including `HEAD:main`), force pushes, `--no-verify`, chained `git checkout main && git commit`, moving or deleting a `vX.Y.Z` tag |
-| `env-protection.py` | Bash | any command that names or globs a `.env*` path other than exactly `.env.example`, recursive `grep`, `rg --hidden`, and the `docker` commands that print resolved secrets |
+| `branch-protection.py` | Bash | commits and pushes on `main` and round branches in any spelling (`HEAD:main`, quoted, `refs/heads/`, `+`, `--all`, `--mirror`), force pushes, `--no-verify` (also `-n` in a cluster), chained `git checkout main && git commit`, moving or deleting a `vX.Y.Z` tag |
+| `env-protection.py` | Bash | any command that names, globs or brace-expands to a `.env*` path other than exactly `.env.example`; bulk reads that would sweep `.env` up (`find -exec cat`, `xargs cat`, recursive `grep`, `git grep --no-index`, `rg` on hidden or ignored files); the `docker` commands that print resolved secrets |
 | `secrets-protection.py` | Bash, Read, Grep, Edit, Write, NotebookEdit | reads and writes of env files (except `.env.example`), key material and credential files, and Bash commands that print them (`cat`, `grep` without `-l/-c/-q`, `awk`, ...) |
 | `pr-title.py` | Bash | `gh pr create` / `gh pr edit` with a title that is not Conventional Commits |
 | `docs-check.py` | Bash | `gh pr create` when the branch touched a path in `.claude/skills/claude-docs-check/map.json` and carries no docs decision |
 | `lint.py` | after Edit, Write | nothing; it reports lint findings on the changed lines back to the agent |
 | `transcript-backup.py` | PreCompact, PostCompact, SessionEnd | compaction, when the transcript snapshot fails; it copies the session transcript to `.ai-transcripts/` and reports a rewritten transcript |
+
+The guard hooks fail closed: an unreadable payload or a crash in the hook denies the call. They run on Python 3.9 and later, so the `python3` that ships with macOS is enough; CI runs their tests on 3.9 and 3.13.
 
 They do **not** catch:
 - Anyone running git outside Claude Code (terminal, IDE git pane, GitHub Desktop)
@@ -314,7 +316,7 @@ If any of the three is false, the PR doesn't merge yet.
 
 ### 10.3 If issues are found *after* merge, raise a NEW PR
 
-Do not reopen the merged PR, force-push over the merged commit, amend it, or revert and recommit on the same branch. Raise a fresh `fix/...` branch off `main`, fix the issue, open a new PR, get it reviewed, merge.
+Do not reopen the merged PR, force-push over the merged commit, amend it, or revert and recommit on the same branch. Raise a fresh `fix/...` branch off the round branch, fix the issue, open a new child PR, get it reviewed, merge. Once a round has reached `main`, the fix belongs to the next round's branch.
 
 The one exception is a critical regression that breaks `main` for everyone: there, a `git revert` PR (a NEW commit that undoes the merged one) is the right tool. Even then, the *fix* lands as a separate, reviewed PR after the revert.
 
@@ -338,7 +340,7 @@ Secrets files (`.env`, `.env.*`, `*.pem`, `*.key`, `*.crt`, `*.p12`, `credential
 
 1. **Agents never write, edit or append to secrets files via `Edit` / `Write` / `MultiEdit` / `NotebookEdit`.** Even when the agent has the new value (a freshly minted token), the *write* belongs to the user. The agent prints the proposed change as text; the user pastes it.
 2. **Agents never read-and-print secrets files via Bash.** `cat .env`, `head .env`, `grep <pattern> .env`, `awk ... .env`, `xxd key.pem`, all blocked. The contents would land in the agent's context window and become exposable through transcript replay or compaction.
-3. **Agents may write *scripts* that mutate secrets files, with one binding constraint: the script must not print secrets to stdout.** A `sed -i` that updates a token in place is fine. A script that opens `.env`, transforms it and writes back is fine *if* you've verified by reading it that nothing prints the value.
+3. **Agents never touch env files other than `.env.example`, not even through a script.** For key material and credential stores, an agent may write a script that changes the file in place (a `sed -i`), with one binding constraint: the script must not print secrets to stdout.
 
 ### 12.2 `.env.example` is the one env file agents may touch
 
@@ -348,20 +350,22 @@ A real secret never goes into `.env.example`. If one ever lands there, treat it 
 
 ### 12.3 Allowed patterns the hook still blocks
 
-These don't expose contents, but `env-protection.py` blocks every Bash command that names a `.env*` path. Run them yourself, or add a one-off allow in `.claude/settings.local.json`:
+These don't expose contents, but `env-protection.py` blocks every Bash command that names a `.env*` path, and an allow rule cannot override a hook. They are the human's to run:
 
 - `ls -la .env`, `wc -l .env`, `chmod 600 .env`
 - `grep -l`, `grep -q`, `grep -c` on `.env`
 - `sed -i 's/^KEY=.*/KEY=<new>/' .env`
 - `echo "NEW_KEY=value" >> .env` (append; the agent must not have read the existing contents)
 
-For the wider set (`*.pem`, `credentials.*`, ...) `secrets-protection.py` blocks only the printing readers, so `ls`, `wc`, `chmod`, `grep -l/-q/-c` and `sed -i` pass.
+For the wider set (`*.pem`, `credentials.json`, ...) `secrets-protection.py` blocks only the programs that print files, so `ls`, `wc`, `chmod`, `grep -l/-q/-c` and `sed -i` pass.
+
+A commit message that mentions an env file trips `env-protection.py` when passed with `-m`. Write the message to a file and commit with `git commit -F <file>`.
 
 ### 12.4 What to do when the agent needs to update a secret
 
-1. **Print the proposed change as text** in chat: *"replace line 41 with: `API_TOKEN=…`"*. The user makes the edit.
-2. **Or write a `sed -i` command** that updates the value in place without reading the existing value back.
-3. **Or write an external script** the user invokes themselves.
+1. **For a new setting,** add it to `.env.example` with a safe local value and tell the human which real value to set in `.env`.
+2. **For a value that changes,** print the proposed change as text in chat: *"set `API_TOKEN` to …"*. The human makes the edit.
+3. **For key material,** a `sed -i` that changes it in place without reading the existing value back, or an external script the human runs.
 
 ### 12.5 The warning format
 
@@ -369,7 +373,7 @@ Use the § 8.2 shape with the rule reference `CONTRIBUTING.md § 12 (Secrets dis
 
 ### 12.6 Mechanical enforcement
 
-- `.claude/settings.json` denies `Read` and `Edit` (which covers Write, MultiEdit and NotebookEdit) on `.env`, `*.pem`, `*.key`, `credentials.*` and `secrets.*` anywhere in the repo. Permission rules cannot express "every `.env.*` except one", so the other `.env.*` names are enforced by the hook below.
+- `.claude/settings.json` denies `Read` and `Edit` (which covers Write, MultiEdit and NotebookEdit) on `.env`, `*.pem`, `*.key`, and `credentials` and `secrets` files with a data extension (`.json`, `.yaml`, `.yml`, `.toml`) anywhere in the repo. Source files such as `credentials.py` stay readable. Permission rules cannot express "every `.env.*` except one", so the other `.env.*` names are enforced by the hook below.
 - `env-protection.py` blocks any Bash command whose `.env…` tokens, raw or after shell unquoting, are not exactly `.env.example` (case-insensitive, as macOS file systems are). It also blocks dotfile globs that would reach `.env` (`.e*`, `.[e]nv`), recursive `grep` (it reads hidden files; use `rg` or `git grep`), `rg --hidden` or `-uu`, `docker compose config` without `--no-interpolate`, `docker inspect`, and `env` or `printenv` inside a container.
 - `secrets-protection.py` blocks Read, Grep, Edit, Write, MultiEdit and NotebookEdit on the full pattern list, Grep globs aimed at env dotfiles, a `.env.example` that resolves to another file, and Bash commands that print one of those files.
 
@@ -403,5 +407,7 @@ A "restart" can fail to bind the port because the old process still holds it; th
 A lesson card records the mistake that produced a rule, so the rule stays understood. One per rule birth. Shape:
 
 > **YYYY-MM-DD (context).** What happened, in two or three sentences. What the agent or human should have done instead, in one sentence. Which section this produced or changed.
+
+> **2026-10-19 (round 1, S1 review).** The hooks used `str | None` in signatures, which Python evaluates when the function is defined. Under the `python3` that ships with macOS (3.9) every hook crashed on import, Claude Code treats a crashed hook as "allow", and so every guard was silently off on a reviewer's Mac. CI only ran 3.13, so nothing caught it. Hooks and scripts now start with `from __future__ import annotations`, the guards fail closed on any crash, and CI runs the hook tests on 3.9 as well. Produced the fail-closed note in § 8.4.
 
 > **2026-10-18 (repo skeleton).** The first hygiene gate was a bash script using `declare -n` and `git grep -P`. macOS ships bash 3.2 and Apple git may lack PCRE, so it would not have run on a reviewer's Mac. Repo scripts are Python 3 standard library, like the hooks. Produced `scripts/check_hygiene.py`.
