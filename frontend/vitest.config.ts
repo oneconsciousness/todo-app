@@ -14,7 +14,7 @@ export default mergeConfig(
         provider: "v8",
         include: ["src/**/*.{ts,tsx}"],
         exclude: ["src/main.tsx", "src/test/**", "src/**/*.test.{ts,tsx}"],
-        thresholds: { lines: 85, branches: 85 },
+        thresholds: { lines: 85, branches: 85, functions: 85, statements: 85 },
       },
     },
   }),
