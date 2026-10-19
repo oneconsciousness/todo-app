@@ -68,6 +68,8 @@ export const useUpdateTask = () => {
     mutationKey: taskKeys.mutations.update,
     mutationFn: ({ taskId, changes, version }: UpdateVariables) =>
       updateTask(taskId, changes, version),
+    // A read already in flight would answer with the version before this save and overwrite it.
+    onMutate: ({ taskId }) => client.cancelQueries({ queryKey: taskKeys.detail(taskId) }),
     onSuccess: (task) => {
       client.setQueryData(taskKeys.detail(task.id), task);
       void refreshListsUnlessMoving(client);

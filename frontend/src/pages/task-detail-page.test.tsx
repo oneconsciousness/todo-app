@@ -75,6 +75,28 @@ describe("TaskDetailPage", () => {
     expect(titleField()).toHaveValue("My title");
   });
 
+  it("keeps the saved version when an older read answers after the save", async () => {
+    const saved = { ...detailTask, title: "My title", version: detailTask.version + 1 };
+    await openAndEdit("My title");
+    server.use(
+      http.get(taskUrl, async () => {
+        await delay(200);
+        return HttpResponse.json(detailTask);
+      }),
+      http.patch(taskUrl, () => HttpResponse.json(saved)),
+    );
+    act(() => {
+      focusManager.setFocused(false);
+      focusManager.setFocused(true);
+    });
+
+    await save();
+    expect(await screen.findByRole("heading", { level: 1, name: saved.title })).toBeVisible();
+    await delay(300);
+
+    expect(screen.getByRole("heading", { level: 1, name: saved.title })).toBeVisible();
+  });
+
   it("keeps the draft when a reload in the background fails", async () => {
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     const reloads = vi.fn<() => void>();
