@@ -187,13 +187,19 @@ describe("TaskDetailPage", () => {
 
   it("restores the task when delete fails", async () => {
     vi.spyOn(console, "error").mockImplementation(() => undefined);
+    renderApp(routes.tasks);
+    await userEvent.click(await screen.findByRole("link", { name: detailTask.title }));
+    // From here the list's reads answer late, so the task that comes back is the rollback's, not a reload's.
     server.use(
       http.delete(taskUrl, async () => {
         await delay(50);
         return errorReply(500, "internal_error");
       }),
+      http.get("/api/v1/tasks", async () => {
+        await delay(1000);
+        return HttpResponse.json({ items: tasks });
+      }),
     );
-    renderApp(routes.task(detailTask.id));
 
     await confirmDelete();
 

@@ -6,6 +6,7 @@ import { detailTask, searchMatches, tasks } from "../../test/fixtures.ts";
 import { type OrderServerTiming, errorReply, orderKeepingServer } from "../../test/handlers.ts";
 import { queryWrapper } from "../../test/query-wrapper.tsx";
 import { server } from "../../test/server.ts";
+import type { Task } from "../schema/task.ts";
 import { taskKeys } from "./keys.ts";
 import { useDeleteTask, useMoveTask, useTasks, useToggleTask } from "./tasks.ts";
 
@@ -172,5 +173,84 @@ describe("queued moves", () => {
     await settled(client);
 
     expect(shown.slice(fromQueued)).not.toContain(original);
+  });
+
+  it("reload the lists once, after the last of them", async () => {
+    const { client, hooks, order } = await renderOrderedList({
+      moveDelaysMs: [50, 50],
+      listDelayMs: 0,
+    });
+    const before = order.state.listRequests;
+
+    act(() => {
+      hooks.current.move.mutate({ taskId: idAt(0), afterId: idAt(1) });
+      hooks.current.move.mutate({ taskId: idAt(2), afterId: null });
+    });
+    await settled(client);
+    await delay(20);
+
+    expect(order.state.listRequests - before).toBe(1);
+  });
+});
+
+// Once loaded, the list's reads answer after `reloadMs`, so a test can tell the hook's own handling from fresh data.
+const renderWithSlowReload = async (reloadMs: number) => {
+  const view = await renderOrderedList({ moveDelaysMs: [], listDelayMs: 0 });
+  server.use(
+    http.get("/api/v1/tasks", async () => {
+      await delay(reloadMs);
+      return HttpResponse.json({ items: tasks });
+    }),
+  );
+  return view;
+};
+
+// The cached full list's ids; the hooks write the cache before a failed change's promise rejects.
+const cachedIds = (client: QueryClient) =>
+  client.getQueryData<readonly Task[]>(taskKeys.list(""))?.map((task) => task.id);
+
+describe("optimistic list changes", () => {
+  it("keep their change when a list read started before them answers after them", async () => {
+    const { client, hooks } = await renderWithSlowReload(200);
+    server.use(
+      http.patch("/api/v1/tasks/:taskId", async () => {
+        await delay(400);
+        return HttpResponse.json(detailTask);
+      }),
+    );
+
+    void client.refetchQueries({ queryKey: taskKeys.lists() });
+    act(() => {
+      hooks.current.toggle.mutate({ taskId: idAt(0), completed: true });
+    });
+    await delay(300);
+
+    expect(client.getQueryData<readonly Task[]>(taskKeys.list(""))?.[0]?.completed).toBe(true);
+    await settled(client);
+  });
+
+  it("put the list back when a move fails", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const { client, hooks } = await renderWithSlowReload(800);
+    server.use(http.put("/api/v1/tasks/:taskId/position", () => errorReply(500, "internal_error")));
+
+    await act(() =>
+      hooks.current.move.mutateAsync({ taskId: idAt(0), afterId: idAt(1) }).catch(() => undefined),
+    );
+
+    expect(cachedIds(client)).toEqual(tasks.map((task) => task.id));
+    await settled(client);
+  });
+
+  it("take a task out of the list when its move finds it deleted", async () => {
+    const { client, hooks } = await renderWithSlowReload(800);
+    server.use(http.put("/api/v1/tasks/:taskId/position", () => errorReply(404, "not_found")));
+
+    await act(() =>
+      hooks.current.move.mutateAsync({ taskId: idAt(0), afterId: idAt(1) }).catch(() => undefined),
+    );
+
+    expect(cachedIds(client)).not.toContain(idAt(0));
+    await settled(client);
   });
 });
