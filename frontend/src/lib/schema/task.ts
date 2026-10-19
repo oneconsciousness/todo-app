@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-/** A task title as the user types it: trimmed, 1 to 200 characters (spec D8). */
+/** A task title as the user types it: trimmed, 1 to 200 characters. */
 export const titleSchema = z
   .string()
   .trim()

@@ -184,6 +184,14 @@ What it settled:
 | Merges | Asked how to merge, the lead answered: "yeah let's squash child PRs and rebase parent PRs." Child PRs are squash-merged into the round branch; each round's parent PR is rebase-merged into `main`. The human lead created `round/1-containers` from `main` on 2026-10-19. |
 | Plan | Approved (gate G0). Build starts after the instructions walkthrough (G1). |
 
+## 5e. Instructions walkthrough (gate G1, verbatim)
+
+> ON your comment example, i would say don't refer to spec, planning files etc. You don't have to reference any decision making that led to this particular choice. Point of comments is if someone new comes to the code base, they should be able to read it very easily. Any areas that may be hard to understand should have a single line comment above it, you know, in some way concisely describing what happens there. If it's related to a particular SDK or library, you can add that SDK's docs link directly over there. Or if in our repo inside the docs folder, if we create any specific docs for that particular app's module, then we can reference that doc, but don't reference plans or spec files, etc. That doesn't look good in comments or add any value. It's a lot to process for someone who's new and coming into this. Apart from this, I agree with all your other points on the comments.
+>
+> Overall, looks great to me! Approved! Go time!
+
+What it settled: G1 is passed (2026-10-19). Comments are written for a newcomer and never cite the spec, the plan or decision ids; a library's docs or a module page under `docs/` may be linked (`coding-standards.md`). The walkthrough's other points stand: ruff (pyflakes, pycodestyle, annotations, bugbear, pyupgrade, simplify, import order, T20, RUF; 120 columns) with `ruff format` and `mypy --strict`; one-line summaries with sections only when they add something; `match` for structural dispatch and `reduce` only where state carries. The seven frontend comments that cited the spec were rewritten in the same change.
+
 ## 6. Before submission
 
 - [ ] Share the spec artifact, and the design artifact, so the reviewers can open them; put the links in the final report.

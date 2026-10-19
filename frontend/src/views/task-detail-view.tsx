@@ -32,7 +32,7 @@ export interface TaskDetailViewProps {
   readonly deleting: boolean;
   /** What the last save or delete failed with, in words for the user; null when nothing failed. */
   readonly failure: string | null;
-  /** Save the changed fields. `version` is the one the edit started from, sent as If-Match (D17). */
+  /** Save the changed fields. `version` is the one the edit started from; the API rejects the save if the task has changed since. */
   readonly onSave: (taskId: string, changes: TaskChanges, version: number) => void;
   readonly onToggle: (taskId: string, completed: boolean) => void;
   readonly onDelete: (taskId: string) => void;

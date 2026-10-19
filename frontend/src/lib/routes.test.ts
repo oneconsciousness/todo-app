@@ -8,7 +8,7 @@ describe("routes", () => {
     );
   });
 
-  it("names the fixed screens of spec's Screens table", () => {
+  it("names the fixed screens", () => {
     expect([routes.signIn, routes.signUp, routes.tasks]).toEqual([
       "/sign-in",
       "/sign-up",

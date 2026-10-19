@@ -1,4 +1,4 @@
-/** The app's paths, from the spec's Screens table. Views link with these; the router will match them. */
+/** The app's paths. Views link with these, and the router matches them. */
 export const routes = {
   signIn: "/sign-in",
   signUp: "/sign-up",

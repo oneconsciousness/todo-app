@@ -1,7 +1,7 @@
 import { defineConfig, mergeConfig } from "vitest/config";
 import appConfig from "./vite.config.ts";
 
-/** Vitest config: jsdom, Testing Library matchers, and the 85% coverage floor from spec D12. */
+/** Vitest config: jsdom, Testing Library matchers, and an 85% coverage floor for lines, branches, functions and statements. */
 export default mergeConfig(
   appConfig,
   defineConfig({
