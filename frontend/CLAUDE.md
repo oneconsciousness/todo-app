@@ -35,3 +35,5 @@ Every commit passes `check`, `test` and `build`.
 - Vitest stubs CSS imports; only `tokens.css` is processed, so the token tests can read it.
 - `data-hover`, `data-focus-visible` and `data-active` exist for the gallery only. Never set them in app code.
 - The design build inlines everything; the app build must not inline anything (the nginx CSP is `'self'` only).
+- `npm ci` from the committed lockfile works with the npm that ships with Node 24. Regenerating the lockfile from scratch crashes that npm (11.5.1) in arborist ("reading 'edgesOut'"), so change dependencies with `npx npm@11.21.0 install`, then confirm a clean `npm ci` with the default npm.
+- Dependencies are pinned to exact versions, each published at least two weeks before it was chosen (plan § 13). A newer version needs a reason: a fix or an advisory.
