@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import functools
 import re
 import subprocess
 import sys
@@ -23,6 +24,7 @@ COMMENT_STARTS: dict[str, tuple[str, ...]] = {
 NAMED_FILES: dict[str, tuple[str, ...]] = {"Dockerfile": HASH_COMMENT, "Containerfile": HASH_COMMENT}
 SKIP_PARTS = frozenset({"node_modules", ".venv", "dist", "build", "coverage", "playwright-report", "test-results"})
 QUOTES = frozenset("'\"`")
+DOCSTRING_QUOTES = ('"""', "'''")  # a Python docstring is commentary, so markers in it count
 
 
 @dataclass(frozen=True)
@@ -104,6 +106,25 @@ def comment_text(line: str, starts: tuple[str, ...]) -> str:
     return ""
 
 
+def comment_texts(path: PurePosixPath, lines: list[str]) -> list[str]:
+    """Return each line's commentary, carrying block comments (`/* … */`) and Python docstrings across lines."""
+    starts = comment_starts(path)
+    quotes = DOCSTRING_QUOTES if path.suffix == ".py" else ()
+
+    def step(acc: tuple[tuple[str, ...], str], line: str) -> tuple[tuple[str, ...], str]:
+        texts, closer = acc
+        if closer:
+            return texts + (line,), "" if closer in line else closer
+        quote = next((q for q in quotes if q in line), "")
+        if quote:
+            return texts + (line,), quote if line.count(quote) % 2 else ""
+        text = comment_text(line, starts)
+        opens_block = "/*" in starts and "/*" in text and "*/" not in text[text.index("/*") + 2:]
+        return texts + (text,), "*/" if opens_block else ""
+
+    return list(functools.reduce(step, lines, ((), ""))[0])
+
+
 def repo_root() -> Path:
     """Return the top of the git work tree."""
     out = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True, check=True).stdout
@@ -129,12 +150,12 @@ def scan(root: Path, path: PurePosixPath, checks: Iterable[Check]) -> Iterator[H
         lines = (root / path).read_text(encoding="utf-8").splitlines()
     except (OSError, UnicodeDecodeError):
         return
-    starts = comment_starts(path)
+    comments = comment_texts(path, lines)
     yield from (
         Hit(c.label, path, n, line.strip())
-        for n, line in enumerate(lines, start=1)
+        for n, (line, comment) in enumerate(zip(lines, comments), start=1)
         for c in applicable
-        if c.pattern.search(comment_text(line, starts) if c.comments_only else line)
+        if c.pattern.search(comment if c.comments_only else line)
     )
 
 
