@@ -214,5 +214,7 @@ export function handleSummary(data) {
     failed.length === 0 ? "budgets: all met" : `budgets missed: ${failed.join("; ")}`,
     "",
   ].join("\n");
-  return { [`${RESULTS_DIR}/summary-${VUS}.json`]: JSON.stringify(data, null, 2), stdout: text };
+  // setup()'s return value holds every account's email and the run's password, so it never reaches the file.
+  const { setup_data: _accounts, ...summary } = data;
+  return { [`${RESULTS_DIR}/summary-${VUS}.json`]: JSON.stringify(summary, null, 2), stdout: text };
 }
