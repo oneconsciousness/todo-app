@@ -11,8 +11,10 @@ from uuid import uuid4
 from starlette.datastructures import Headers, MutableHeaders
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from app.api.errors import INTERNAL_ERROR, error_response
 from app.log import request_id_var, user_id_var
 
+log = logging.getLogger(__name__)
 access_log = logging.getLogger("app.access")
 
 REQUEST_ID: Final = re.compile(r"[A-Za-z0-9._-]{1,64}")
@@ -53,7 +55,7 @@ class RequestContextMiddleware:
         request_id = sent_id if REQUEST_ID.fullmatch(sent_id) else uuid4().hex
         request_id_var.set(request_id)
         user_id_var.set(None)
-        response_status = 500
+        response_status: int | None = None
         started = time.perf_counter()
 
         async def send_with_headers(message: Message) -> None:
@@ -70,9 +72,15 @@ class RequestContextMiddleware:
         try:
             await self.app(scope, receive, send_with_headers)
         except Exception:
-            self.log_access(scope, 500, started)
-            raise
-        self.log_access(scope, response_status, started)
+            if response_status is not None:
+                # Part of the response is already sent, so no 500 can replace it; the server logs the error.
+                self.log_access(scope, 500, started)
+                raise
+            # Handled here, inside this middleware, so the 500 carries the same headers as any response
+            # and the traceback is logged once; Starlette's own 500 handler runs outside every middleware.
+            log.error("unhandled error", exc_info=True, extra={"where": scope["path"], "then": 500})
+            await error_response(INTERNAL_ERROR)(scope, receive, send_with_headers)
+        self.log_access(scope, response_status or 500, started)
 
     def log_access(self, scope: Scope, status: int, started: float) -> None:
         """Log the access line, except for a probe that succeeded, which would only bury the useful lines."""

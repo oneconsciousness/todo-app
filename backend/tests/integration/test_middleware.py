@@ -2,9 +2,11 @@ import json
 import logging
 import re
 import socket
+from collections.abc import AsyncIterator
 
 import pytest
 from fastapi import FastAPI
+from fastapi.responses import StreamingResponse
 from httpx import AsyncClient
 
 from app.log import JsonFormatter
@@ -61,21 +63,55 @@ async def test_access_line_has_route_status_duration_and_user_id(app: FastAPI) -
     assert isinstance(line["duration_ms"], float)
 
 
-async def test_unhandled_error_returns_500_envelope_and_logs_the_traceback(
-    app: FastAPI, caplog: pytest.LogCaptureFixture
-) -> None:
+@pytest.fixture
+def exploding_app(app: FastAPI) -> FastAPI:
+    """The running app with a test-only route that raises an error nothing handles."""
+
     async def explode() -> None:
         raise RuntimeError("boom")
 
     app.add_api_route("/api/v1/test-only/explode", explode)
-    async with client_for(app, raise_app_exceptions=False) as client:
+    return app
+
+
+async def test_unhandled_error_returns_500_envelope_and_logs_the_traceback(
+    exploding_app: FastAPI, caplog: pytest.LogCaptureFixture
+) -> None:
+    # The client re-raises any error that escapes the app, as uvicorn would log it a second time.
+    async with client_for(exploding_app) as client:
         response = await client.get("/api/v1/test-only/explode")
     assert response.status_code == 500
     assert response.json()["error"]["code"] == "internal_error"
     assert "boom" not in response.text
-    [record] = [r for r in caplog.records if r.levelno == logging.ERROR and r.exc_info]
+    [record] = [r for r in caplog.records if r.exc_info]
+    assert record.levelno == logging.ERROR
     assert record.exc_info is not None
     assert isinstance(record.exc_info[1], RuntimeError)
+
+
+async def test_a_500_carries_the_same_headers_as_any_response(exploding_app: FastAPI) -> None:
+    async with client_for(exploding_app, raise_app_exceptions=False) as client:
+        response = await client.get("/api/v1/test-only/explode", headers={"X-Request-ID": "trace-500"})
+    assert response.status_code == 500
+    assert (response.headers.get("X-Request-ID"), response.headers.get("X-Served-By")) == (
+        "trace-500",
+        socket.gethostname(),
+    )
+    assert response.headers.get("Cache-Control") == "no-store"
+
+
+async def test_an_error_after_the_response_started_is_left_to_the_server(app: FastAPI) -> None:
+    async def chunks() -> AsyncIterator[bytes]:
+        yield b"first chunk"
+        raise RuntimeError("boom mid-stream")
+
+    async def stream() -> StreamingResponse:
+        return StreamingResponse(chunks())
+
+    app.add_api_route("/api/v1/test-only/stream", stream)
+    async with client_for(app) as client:
+        with pytest.raises(RuntimeError, match="boom mid-stream"):
+            await client.get("/api/v1/test-only/stream")
 
 
 async def test_unknown_route_returns_404_envelope(client: AsyncClient) -> None:

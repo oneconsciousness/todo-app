@@ -108,21 +108,17 @@ async def handle_database_error(request: Request, error: Exception) -> JSONRespo
     return error_response(SERVICE_UNAVAILABLE)
 
 
-async def handle_unexpected_error(request: Request, error: Exception) -> JSONResponse:
-    """Answer 500 without revealing anything, and log the traceback."""
-    log.error("unhandled error", exc_info=error, extra={"where": request.url.path, "then": 500})
-    return error_response(INTERNAL_ERROR)
-
-
 type ExceptionHandler = Callable[[Request, Any], Coroutine[Any, Any, Response]]
 
 
 def exception_handlers() -> dict[int | type[Exception], ExceptionHandler]:
-    """Return every handler, keyed by the error type it answers; Starlette picks the closest match."""
+    """Return every handler, keyed by the error type it answers; Starlette picks the closest match.
+
+    Any other error becomes a 500 in `RequestContextMiddleware`, so that response carries the usual headers.
+    """
     return {
         RequestValidationError: handle_validation_error,
         DomainError: handle_domain_error,
         StarletteHTTPException: handle_http_exception,
         **dict.fromkeys(DATABASE_ERRORS, handle_database_error),
-        Exception: handle_unexpected_error,
     }
