@@ -75,10 +75,118 @@ Claude Code writes each session as JSONL, one event per line with a timestamp, u
 7. **Gate:** round 2 (k3d) proven and the human satisfied → round 3, AKS through GitHub Actions, if time permits. Every deployment artifact reviewed before it is applied.
 8. README, the transcript export and the human-versus-agent time report.
 
-## 5. Open for the spec phase
+## 5. Spec review, round 1 (verbatim) and what it settled
 
-- Auth: how accounts exist (sign-up screen or seeded users), token format and lifetime, where the frontend keeps the token.
-- Ordering: how positions are stored so a reorder is one cheap, consistent write.
-- Search: server-side or client-side, which fields, and whether it combines with ordering.
-- Task fields beyond title and done state (description, due date, priority).
-- Deployment target details: ingress, the managed Postgres choice for AKS, and how images reach the cluster registry.
+The round 1 spec is `docs/specs/round-1.html`, published as a Claude artifact. The lead's first review:
+
+> 1. Remind me before we submit to make the artifact public and also we'll include in the final report.
+> 2. Well done, on the presentation. It neat and easy to skim and understand.
+> 3. I understand you want to prove memory isn't saved in the backend api and its isolated with the replica. I think, let's save that for round 2.
+> 4. Good on postgresql for storage and all replicas must share one store, true.
+> 5. I want to hear your thoughts on the following topics within the spec itself `Async and concurrency`, `Races and consistency` and Testing and Explainability against those topics too from a FastAPI/Uvicorn pov keeping mind that many users would use the application at the same time. Its important we take this into account during our spec and planning stages itself so the expectation is set straight.
+> 6. For the frontend, I'd like you to create a design artifact first of every screen. I'll review the design tokens before we proceed to build frontend. note this down as the order in the spec. This will be run in parallel while writing the plan. Build the design artifact such that you can directly reuse those components for the actual frontend too. Reduce the redundancy of your work.
+
+> DECISIONS:
+> 1. Agreed. It also allows for the reviewer to script the testing in bulk if required. we should also test this before we submit, i.e., load testing.
+> 2. Agreed. It secure enough for this demo. Note down as something we would implement in the future (i recommend a FUTURE.md doc) that we would use msft or google login or apple login depending on client needs.
+> 3. Agreed! Appreciate the well thought of walkthrough of D6 in spec. helped me understand your thought process!
+> 4. This is well thought off. I like the 250ms touch. its great!
+> 5. I agree. Note down here that. After all functionality is working fine, we may change the create/update new task to essentially an AI operation if time exists. where the user describes in text or voice what they want to create/update and we update. For now, put it in FUTURE.md. We could also have a TASK summary home page driven by AI in the future, potentially using a framework like AGUI.
+> 6. Yeah tbh, that's fine with me! I understand the intent. scratch my guidance in the thoughts/feedback point 3.
+> 7. Agreed.
+
+> Additional notes: agreed on endpoints, check on whether (health vs healthz; what is expected and the best practice).
+
+What it settled:
+
+| Spec id | Locked |
+|---|---|
+| D3 | Open sign-up and sign-in by email and password. Reviewers can script bulk tests against the API (OpenAPI docs at `/api/docs`). A load test runs before submission. |
+| D4 | JWT in an httpOnly `SameSite=Strict` cookie, 8 hours. Sign-in with Microsoft, Google or Apple goes in `FUTURE.md`. |
+| D6 | Fractional ranks; new tasks at the top; reordering off while searching. |
+| D7 | Server-side search over title and notes, trigram index, 250 ms debounce. |
+| D8 | Fields: title, notes, completed, due date. AI task entry (text or voice) and an AI summary home page (possibly AG-UI) go in `FUTURE.md`. |
+| D10 | Two API replicas from round 1, with `X-Served-By`. Feedback point 3 is withdrawn by decision 6. |
+| D12 | Coverage floors: 90% backend, 85% frontend. |
+| Order | The frontend starts with a design artifact of every screen, built from the real components, made while the plan is written; the lead reviews the design tokens before the frontend is built. |
+| Endpoints | Agreed, with the health check naming researched in revision 2 (D19). |
+
+Revision 2 of the spec answers points 5 and 6 and the health check question with D13 to D20, signed off below.
+
+## 5a. Spec review, round 2 (verbatim) and what it settled
+
+> D13 - Understood well and agreed.
+> D14 - Understood well and agreed. It will make a difference on high app load.
+> D15 - Understood well and agreed. It would also be good to showcase realistic numbers in our final report on how many concurrent users we could end up handling at the end of each round.
+> D16 - Understood and agreed. I would like to actively involved when we test this.
+> D17 - Is this specifically to overcome cases where two tabs update the same todo item one after the other and tab 2 doesn't have the tab 1 update loaded? validate my understanding. I also believe, that a good todo app's tab when in focus by the user should refresh and update every time the user comes back to focus on that tab. that way we won't run into edit mismatches.
+> D18 - a load test is an amazing idea. Agreed! Keep me actively in the loop.
+> D19 - agreed.
+> D20 - agreed.
+>
+> 1/ Agreed on endpoints. 2/ Agreed on tables. neat and concise. 3/ Screens. Agreed! 4/ Tests. Agreed! 5/ For the design - tips: stellar look and premium feel + vintage colors + 0 redundancy.
+
+What it settled: D1 to D20 are locked (spec revision 3), and the rules carry them (`api-contract.md`, `testing.md`, `deployment.md`, `python.md`, `database.md`).
+
+| Spec id | Note |
+|---|---|
+| D15 | The final report gives a measured concurrent-user capacity for each round. |
+| D16, D18 | The lead takes part in the race tests and the load tests. |
+| D17 | The lead's understanding is right. Refetch on focus is the first layer, a "Changed elsewhere" notice covers unsaved drafts, and `If-Match`/412 is the guarantee. |
+| Design | A stellar look, a premium feel, vintage colours, zero redundancy. |
+| Wire format | JSON field names are camelCase, so the frontend uses the API's shapes without a mapping layer (agent decision, recorded in `api-contract.md`). |
+
+## 5b. Plan review (verbatim) and what it settled
+
+> 1. On the sdk/library versions - did the sub-agent planner ensure to research the web for official docs, find the latest+stable version before proceeding? also ensuring to review the community for any known bugs. If not, please send the same sub-agent back to do this step.
+> 2. While reviewing `3.5.3 Migration 0001_initial_schema`, i had a question. I hope we're also planning to verify if its an actual email address, i.e., does it have '@' and other basic tests.
+> 3. White reviewing `3.7.1 rank_between`, did you check to ensure ask per the TASK.md (`● Bonus points: Code in a functional, concise, declarative way. Things we will look for:higher-order functions, function composition, correct use of basic data structures and manipulations (map, reduce, apply, etc.)`) has been taken into consideration, researched and well planned?
+> 4. I've reviewed the plan in detail. On the open questions, I agree with your (tech lead) decision making.
+>
+> What's left/next? List out the todo list in chat, I'll review and give you the go ahead. Note: We should wait for design to be approved as well before we begin coding.
+
+What it settled:
+
+| Item | Outcome |
+|---|---|
+| Plan Q-1 to Q-13 | Locked as the tech lead recommended. Spec revision 3.1 carries the errata (Q-1 `afterId`, Q-2 plain-text 503); `python.md` (Q-4), `typescript.md` (Q-9) and the docs map (Q-10) are updated. |
+| Versions | The planner had not researched current stable versions or known bugs. Sent back to pin every dependency from official sources with known issues and mitigations. |
+| Email | Three layers: Zod in the form, Pydantic `EmailStr` in the API, a basic-shape `CHECK` in the database, each tested. |
+| Functional style | `rank_between` redesigned declaratively, and a "Functional style map" section ties each `TASK.md` item to concrete code. |
+| Order | Coding starts only after the design is approved and the instructions walkthrough is done. |
+
+## 5c. Design sign-off (gate G2)
+
+> Design looks good to me! Nice vintage color choice and nice touch on the notepad style edit looks.
+
+Signed off 2026-10-19 10:52 EDT, on the design artifact built from `feature/web-design-system` (the bookkeeper's ledger direction). One polish fix (a balanced cover subtitle) follows before its PR.
+
+## 5d. Version decisions, PR model and the go (verbatim)
+
+> Q-14: Agreed, anyways, our final deployment is going to be containerized, so it doesn't worry me given that you've already proven that all dependency ships for this version.
+> Q-15: Agreed.
+> Q-16: Agreed. Solid reasoning!
+> Q-17: Agreed.
+> Q-18: Ok
+>
+> On the todo list and plan, one thought on the PR structuring, I would open one main PR for the entire effort and then have multiple sub-PRs for all the child tasks to be completed. If done this way, we can land a clean tree to main branch once the work is done and tested. Parent PR doesn't merge until the round is done and tested thoroughly. So one parent PR per round (titled appropriately).
+>
+> Additionally, each PR (irrespective of level), I review. Plan is approved! It's GO TIME!
+
+What it settled:
+
+| Item | Outcome |
+|---|---|
+| Q-14, Q-15 | Python 3.14 and Postgres 18 replace 3.13 and 17 (spec revision 3.2, D1 and D2). |
+| Q-16 | SQLAlchemy 2.0.55, asyncpg 0.32.0 and nginx 1.30.6 are pinned although under two weeks old, for the fixes they carry. |
+| Q-17, Q-18 | The design branch steps its young pins back and `userSchema.email` accepts any string, before its PR. |
+| PR model | One draft parent PR per round (`round/<n>-<name>` → `main`), merged only when the round is done and tested; child PRs into the round branch; the human lead reviews every PR (`CONTRIBUTING.md` § 1). |
+| Merges | Asked how to merge, the lead answered: "yeah let's squash child PRs and rebase parent PRs." Child PRs are squash-merged into the round branch; each round's parent PR is rebase-merged into `main`. The human lead created `round/1-containers` from `main` on 2026-10-19. |
+| Plan | Approved (gate G0). Build starts after the instructions walkthrough (G1). |
+
+## 6. Before submission
+
+- [ ] Share the spec artifact, and the design artifact, so the reviewers can open them; put the links in the final report.
+- [ ] Run the load test (D18) with the lead, and quote its results and each round's capacity figure in the README.
+- [ ] Export the session transcripts from `.ai-transcripts/` into `docs/ai-usage/` after a secrets and personal-data scan; write the human-versus-agent time split.
+- [x] The GitHub repository is public (created public on 2026-10-18, at the lead's request).

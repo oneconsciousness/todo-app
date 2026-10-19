@@ -19,9 +19,10 @@ Do not start a stage before the previous one is proven and the human says go.
 - The agent never applies anything to AKS or any shared cloud resource. It prepares the change and the exact command; the human runs it (`CONTRIBUTING.md` § 11). `kubectl apply`, `kubectl delete`, `helm` and `az` always ask, even against k3d.
 
 ## Built for more than one replica
+- One uvicorn process per container; scale with replicas, never with in-container workers.
 - The backend is stateless: auth is a signed token checked on every request, with no in-memory sessions or caches that requests write to. Any replica can serve any request.
 - One set of manifests (Kustomize base) with one overlay per target (`k3d`, `aks`). No copy-pasted manifests per environment.
 - Images are tagged with the git sha, never `latest`, and the same image moves from one stage to the next.
 - Migrations run once per release as a Job before the backend rolls out, never from every pod at startup.
-- Every backend pod has a liveness probe (`/healthz`, process up) and a readiness probe (`/readyz`, database reachable). Requests and limits are set. Containers run as a non-root user with a read-only root filesystem where the runtime allows.
+- Every backend pod has a liveness probe (`/livez`, process up, checks no dependencies) and a readiness probe (`/readyz`, database reachable, fails once shutdown starts). Neither is routed by nginx or the ingress. Requests and limits are set. Containers run as a non-root user with a read-only root filesystem where the runtime allows.
 - Config comes from env vars through ConfigMaps; secrets come from Kubernetes Secrets the human creates. Neither is ever committed.
