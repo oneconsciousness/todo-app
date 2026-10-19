@@ -1,6 +1,6 @@
 # backend
 
-The REST API: FastAPI on Python 3.14, async SQLAlchemy with asyncpg, alembic migrations, Postgres 18. Today it serves the health probes and sign-up, sign-in, sign-out and the current user.
+The REST API: FastAPI on Python 3.14, async SQLAlchemy with asyncpg, alembic migrations, Postgres 18. Today it serves the health probes, sign-up, sign-in, sign-out and the current user, and the signed-in user's tasks: create, read, list, search, edit, move and delete.
 
 ## Commands
 
@@ -10,6 +10,7 @@ Run from `backend/` unless noted.
 uv sync                                    # Python 3.14.8 and the locked dependencies
 uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pytest   # the gate; every commit passes it
 HYPOTHESIS_PROFILE=ci uv run pytest        # 1,000 examples per property, as CI runs them (200 by default)
+uv run pytest tests/integration/test_races.py --no-cov   # one file alone; without --no-cov the 90% floor fails it
 DATABASE_URL=postgresql+asyncpg://... uv run alembic upgrade head   # apply migrations; `downgrade base` undoes them
 ```
 
@@ -51,9 +52,13 @@ Coverage below 90% fails the run. Unit tests never open a socket; integration te
 - The access line's route is rebuilt from the request's `path` and `path_params`. FastAPI includes routers by reference, so `scope["route"].path` is relative to the innermost router (`/auth/me`, not `/api/v1/auth/me`).
 - `decode_session` turns off PyJWT's own time checks (`verify_exp`, `verify_iat`), which read the wall clock. Expiry is checked against the `now` argument, so tests set the time without mocking.
 - `SessionClaims` reads JWT times with `val_temporal_unit="seconds"`. Pydantic's default reads an integer above 2e10 as milliseconds.
-- The loop guard (`tests/support/loop_guard.py`) yields once after turning on asyncio debug mode. The loop times only callbacks that started after debug was on. Its own tests carry the `loop_guard_off` marker.
+- The loop guard (`tests/support/loop_guard.py`) yields once after turning on asyncio debug mode. The loop times only callbacks that started after debug was on. It pauses the garbage collector while it times, since a full pass over the suite's heap can outlast the threshold. Its own tests and the OpenAPI test (FastAPI builds that document synchronously, once) carry the `loop_guard_off` marker.
 - `get_session` is declared with `Depends(..., scope="function")`, so the session closes before the response is sent. Services open the transaction themselves with `async with session.begin()`, and hash passwords outside it so no pooled connection waits on a hash.
 - Every query on `tasks` filters on the owner. A query without it is a bug, even in an admin path.
+- Creates and moves call `lock_task_order` first in their transaction, then read the neighbouring ranks. The lock is per user, so other users never wait. Edits and deletes do not take it, since neither picks a rank.
+- The order lock relies on READ COMMITTED, Postgres's default. Each statement after the lock reads a fresh snapshot, so it sees the rank the last holder wrote. At REPEATABLE READ the snapshot would predate the wait, and two creates would pick the same rank.
+- A task's `version` is its ETag, sent as a quoted number (`"3"`). A `PATCH` with `If-Match` checks the version in the `UPDATE`'s `WHERE` and answers 412 when it moved on; without `If-Match` the edit always lands. Every edit bumps the version. A move does not, so reordering never makes an open edit fail with 412.
+- `tests/integration/test_races.py` fires its requests together with `asyncio.TaskGroup`. Each request gets its own session and pooled connection, so Postgres sees separate, concurrent transactions.
 - A duplicate email is caught as the unique-index violation on `uq_users_email` and becomes 409. Any other `IntegrityError` stays a 500.
 - Unhandled errors become a 500 inside `RequestContextMiddleware`, not in a FastAPI exception handler. Starlette runs its `Exception` handler outside every middleware, so that 500 would lack the request id and the other headers, and the server would log the traceback a second time.
 - A database that is slow, full or unreachable answers 503 (`/readyz` answers 503 `not_ready`). Opening a connection gives up after 5 s; asyncpg's own default is 60 s. `OSError` counts as unreachable, which covers refused connections and host names that do not resolve.

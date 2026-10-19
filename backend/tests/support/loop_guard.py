@@ -1,6 +1,7 @@
 """Catch code that blocks the event loop while a test runs."""
 
 import asyncio
+import gc
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -35,6 +36,9 @@ async def blocked_loop_guard(threshold: float = 0.05) -> AsyncIterator[None]:
     asyncio_logger.addHandler(collector)
     # The slow-callback line is a WARNING; a quieter configured level would drop it before the collector sees it.
     asyncio_logger.setLevel(logging.WARNING)
+    # A full GC pass can outlast the threshold with no blocking code: https://docs.python.org/3/library/gc.html
+    collector_was_on = gc.isenabled()
+    gc.disable()
     loop.set_debug(True)
     loop.slow_callback_duration = threshold
     try:
@@ -46,6 +50,8 @@ async def blocked_loop_guard(threshold: float = 0.05) -> AsyncIterator[None]:
         loop.slow_callback_duration = previous_threshold
         asyncio_logger.removeHandler(collector)
         asyncio_logger.setLevel(previous_level)
+        if collector_was_on:
+            gc.enable()
     slow = [record.getMessage() for record in collector.records if record.msg.startswith("Executing")]
     if slow:
         raise AssertionError("the event loop was blocked:\n" + "\n".join(slow))

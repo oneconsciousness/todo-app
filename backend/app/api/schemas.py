@@ -1,12 +1,22 @@
 """Request and response bodies, camelCase on the wire."""
 
+from datetime import date, datetime
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, EmailStr, StringConstraints
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    EmailStr,
+    StrictBool,
+    StringConstraints,
+    TypeAdapter,
+    WithJsonSchema,
+    field_validator,
+)
 from pydantic.alias_generators import to_camel
 
-from app.domain.types import AccountCredentials
+from app.domain.types import AccountCredentials, NewTask, TaskPatch
 
 
 class WireModel(BaseModel):
@@ -46,6 +56,80 @@ class UserRead(WireModel):
 
     id: UUID
     email: str
+
+
+# Surrounding spaces are dropped, so a title of only spaces is empty and refused.
+Title = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+Notes = Annotated[str, StringConstraints(max_length=5000)]
+
+
+class TaskCreate(RequestModel):
+    """A new task: a title, with optional notes and due date."""
+
+    title: Title
+    notes: Notes = ""
+    due_date: date | None = None
+
+    def to_domain(self) -> NewTask:
+        """Return the validated values as the tasks service takes them."""
+        return NewTask(title=self.title, notes=self.notes, due_date=self.due_date)
+
+
+def published_as(kind: object) -> WithJsonSchema:
+    """Publish a field with `kind`'s own JSON schema, leaving how it validates unchanged."""
+    return WithJsonSchema(TypeAdapter(kind).json_schema())
+
+
+class TaskUpdate(RequestModel):
+    """The fields to change on a task; any left out stay as they are.
+
+    Only `dueDate` may be sent as null, which clears it. `completed` must be a JSON boolean: a string
+    such as "true" is a client bug, so it fails validation instead of being coerced.
+    """
+
+    # None only marks a field as left out; a sent null is refused, so the published schema leaves null out.
+    title: Annotated[Title | None, published_as(Title)] = None
+    notes: Annotated[Notes | None, published_as(Notes)] = None
+    completed: Annotated[StrictBool | None, published_as(StrictBool)] = None
+    due_date: date | None = None
+
+    @field_validator("title", "notes", "completed", mode="before")
+    @classmethod
+    def refuse_null(cls, value: object) -> object:
+        """Refuse an explicit null; leaving a field out is how a client keeps it."""
+        if value is None:
+            raise ValueError("may not be null")
+        return value
+
+    def to_patch(self) -> TaskPatch:
+        """Return only the fields the client sent, as the domain's patch."""
+        return TaskPatch(**{name: getattr(self, name) for name in self.model_fields_set})
+
+
+class TaskMove(RequestModel):
+    """Where to put a task: right after `afterId`, or at the top when it is null. The key is required."""
+
+    after_id: UUID | None
+
+
+class TaskRead(WireModel):
+    """One task as the client sees it."""
+
+    id: UUID
+    title: str
+    notes: str
+    completed: bool
+    due_date: date | None
+    rank: str
+    version: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class TaskList(WireModel):
+    """The user's tasks in rank order, in an envelope so paging can be added later."""
+
+    items: list[TaskRead]
 
 
 class ErrorDetail(WireModel):
