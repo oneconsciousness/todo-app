@@ -192,6 +192,23 @@ What it settled:
 
 What it settled: G1 is passed (2026-10-19). Comments are written for a newcomer and never cite the spec, the plan or decision ids; a library's docs or a module page under `docs/` may be linked (`coding-standards.md`). The walkthrough's other points stand: ruff (pyflakes, pycodestyle, annotations, bugbear, pyupgrade, simplify, import order, T20, RUF; 120 columns) with `ruff format` and `mypy --strict`; one-line summaries with sections only when they add something; `match` for structural dispatch and `reduce` only where state carries. The seven frontend comments that cited the spec were rewritten in the same change.
 
+## 5f. Backend tasks review and CP1 (verbatim)
+
+> SQ&M#9 -> done!
+>
+> DECISIONS: ON OPEN QUESTIONS:
+>
+> 1. TBH that's ok. Point proven with the one test.
+> 2. all good on this.
+
+What it settled: CP1 passed with the lead present (2026-10-19). The five race tests went red without the per-user order lock and green with it, held over 50 runs, and each guard (the lock, its per-user key, the unique email index, the version check) was shown failing its test when removed. Ct merged as #9. On the open questions: (1) 503 is proven once, on the task list; every route shares the same handler, so the contract's "each error code per endpoint" is met for 503 by that one test. (2) The OpenAPI test opts out of the blocked-loop guard, since FastAPI builds that document synchronously once and caches it; the document is not built at startup.
+
+## 5g. Containers review (gate G3, verbatim)
+
+> on #1, #2, #3, #4, #5, #6, #7 - agreed with your recommendations on all.
+
+What it settled: G3 is passed for PR E's deployment files (2026-10-19). (1) The API image pins plain `uvicorn` with `uvloop` and `httptools`, not `uvicorn[standard]`. (2) Both build contexts exclude env files. (3) nginx declares the security headers once with `add_header_inherit merge` instead of repeating them per location; the docs page's CSP is picked by path, since merge would otherwise send two CSPs. (4) nginx sets `worker_rlimit_nofile 8192`. (5) No CPU or memory limits in round 1; the machine's spec is recorded with the capacity figure, and limits arrive with k3d. (6) `/api/docs` keeps Swagger UI from jsDelivr for local round 1; self-hosting or disabling it is in `FUTURE.md`. (7) uvicorn's access logger is kept out of the JSON log, so each request writes one access line and healthchecks write none.
+
 ## 6. Before submission
 
 - [ ] Share the spec artifact, and the design artifact, so the reviewers can open them; put the links in the final report.
