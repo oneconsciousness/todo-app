@@ -1,5 +1,7 @@
+import asyncio
 import base64
 import hashlib
+import random
 import re
 from http.cookies import SimpleCookie
 from unittest.mock import ANY
@@ -8,7 +10,7 @@ from uuid import uuid4
 import httpx
 import pytest
 
-from support import PASSWORD, unique_email
+from support import BASE_URL, PASSWORD, unique_email
 
 
 def test_migrations_ran_and_signup_works_through_the_proxy(client: httpx.Client) -> None:
@@ -97,3 +99,28 @@ def test_api_docs_csp_allows_the_inline_script_the_page_serves(client: httpx.Cli
     [inline_script] = re.findall(r"<script>(.*?)</script>", page.text, re.DOTALL)
     digest = base64.b64encode(hashlib.sha256(inline_script.encode()).digest()).decode()
     assert f"'sha256-{digest}'" in page.headers["content-security-policy"]
+
+
+async def fire_moves_through_both_replicas(moves: int, seed: int) -> tuple[list[httpx.Response], list[str], list[str]]:
+    """Sign up, create ten tasks, then send every move at once; return the answers, task ids and listed ids."""
+    async with httpx.AsyncClient(base_url=BASE_URL, headers={"Origin": BASE_URL}, timeout=30.0) as client:
+        await client.post("/api/v1/auth/register", json={"email": unique_email(), "password": PASSWORD})
+        task_ids = [(await client.post("/api/v1/tasks", json={"title": f"task {n}"})).json()["id"] for n in range(10)]
+        pick = random.Random(seed)
+        pairs = [pick.sample(task_ids, 2) for _ in range(moves)]
+        async with asyncio.TaskGroup() as group:
+            sent = [
+                group.create_task(client.put(f"/api/v1/tasks/{task}/position", json={"afterId": after}))
+                for task, after in pairs
+            ]
+        listed = (await client.get("/api/v1/tasks")).json()["items"]
+    return [move.result() for move in sent], task_ids, [item["rank"] for item in listed]
+
+
+def test_concurrent_moves_through_both_replicas_keep_ranks_unique() -> None:
+    answers, task_ids, ranks = asyncio.run(fire_moves_through_both_replicas(moves=50, seed=7))
+
+    assert {answer.status_code for answer in answers} == {200}
+    assert len({answer.headers["x-served-by"] for answer in answers}) == 2
+    assert len(ranks) == len(set(ranks)) == len(task_ids)
+    assert ranks == sorted(ranks)
