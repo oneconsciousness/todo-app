@@ -155,6 +155,12 @@ What it settled:
 | Functional style | `rank_between` redesigned declaratively, and a "Functional style map" section ties each `TASK.md` item to concrete code. |
 | Order | Coding starts only after the design is approved and the instructions walkthrough is done. |
 
+## 5c. Design sign-off (gate G2)
+
+> Design looks good to me! Nice vintage color choice and nice touch on the notepad style edit looks.
+
+Signed off 2026-10-19 10:52 EDT, on the design artifact built from `feature/web-design-system` (the bookkeeper's ledger direction). One polish fix (a balanced cover subtitle) follows before its PR.
+
 ## 6. Before submission
 
 - [ ] Share the spec artifact, and the design artifact, so the reviewers can open them; put the links in the final report.
