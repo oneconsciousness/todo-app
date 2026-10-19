@@ -1,9 +1,16 @@
+import { type User, userSchema } from "../lib/schema/auth.ts";
 import { type Task, taskSchema } from "../lib/schema/task.ts";
 import type { TaskDetailViewProps } from "../views/task-detail-view.tsx";
 import type { TaskListViewProps } from "../views/task-list-view.tsx";
 
 /** The date every fixture is relative to: Monday 19 October 2026. */
 export const today = "2026-10-19";
+
+/** The signed-in user every app test runs as. */
+export const user: User = userSchema.parse({
+  id: "00000000-0000-4000-8000-0000000000aa",
+  email: "maya@example.com",
+});
 
 /** Build one valid task, parsed through the real schema, with any fields overridden; pass an id when several must differ. */
 export const makeTask = (overrides: Partial<Task> = {}): Task =>

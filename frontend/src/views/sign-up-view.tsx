@@ -4,6 +4,7 @@ import { CredentialsForm, unreachableMessage } from "../components/credentials-f
 import { Link, textLinkClass } from "../components/ui/link.tsx";
 import { routes } from "../lib/routes.ts";
 import type { Credentials } from "../lib/schema/auth.ts";
+import type { FieldErrors } from "../lib/schema/field-errors.ts";
 
 /** Why the last sign-up failed: a 409 for a registered email, or no answer from the server. */
 export type SignUpFailure = "email-taken" | "unreachable";
@@ -12,6 +13,8 @@ export type SignUpFailure = "email-taken" | "unreachable";
 export interface SignUpViewProps {
   readonly submitting: boolean;
   readonly failure: SignUpFailure | null;
+  /** The server's problems with the email or password sent, shown next to each field. */
+  readonly fieldErrors?: FieldErrors<Credentials> | undefined;
   readonly onSubmit: (credentials: Credentials) => void;
 }
 
@@ -28,7 +31,7 @@ const messages: Readonly<Record<SignUpFailure, ReactNode>> = {
 };
 
 /** Create an account with an email and a password of 12 to 128 characters. */
-export function SignUpView({ submitting, failure, onSubmit }: SignUpViewProps) {
+export function SignUpView({ submitting, failure, fieldErrors, onSubmit }: SignUpViewProps) {
   return (
     <AuthLayout
       title="Create an account"
@@ -48,6 +51,7 @@ export function SignUpView({ submitting, failure, onSubmit }: SignUpViewProps) {
         passwordHint="At least 12 characters."
         submitting={submitting}
         failure={failure && messages[failure]}
+        fieldErrors={fieldErrors}
         onSubmit={onSubmit}
       />
     </AuthLayout>

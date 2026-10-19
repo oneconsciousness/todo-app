@@ -1,0 +1,68 @@
+import {
+  type DataRouter,
+  Navigate,
+  Outlet,
+  type RouteObject,
+  createBrowserRouter,
+  useNavigate,
+} from "react-router";
+import { NavigationProvider } from "../components/ui/link.tsx";
+import { AuthProvider } from "../lib/auth/auth-context.tsx";
+import { routes, signInPath } from "../lib/routes.ts";
+import { NotFoundPage } from "../pages/not-found-page.tsx";
+import { SignInPage } from "../pages/sign-in-page.tsx";
+import { SignUpPage } from "../pages/sign-up-page.tsx";
+import { TaskDetailPage } from "../pages/task-detail-page.tsx";
+import { TaskListPage } from "../pages/task-list-page.tsx";
+import { RequireAuth } from "./require-auth.tsx";
+import { RouteErrorPage } from "./route-error.tsx";
+
+// Every page gets the session, and every `Link` navigates through the router instead of reloading the page.
+function AppRoot() {
+  const navigate = useNavigate();
+  return (
+    <AuthProvider>
+      <NavigationProvider
+        navigate={(href) => {
+          void navigate(href);
+        }}
+      >
+        <Outlet />
+      </NavigationProvider>
+    </AuthProvider>
+  );
+}
+
+/** The app's route table. */
+export const appRoutes: RouteObject[] = [
+  {
+    element: <AppRoot />,
+    errorElement: <RouteErrorPage />,
+    children: [
+      { path: "/", element: <Navigate to={routes.tasks} replace /> },
+      { path: routes.signIn, element: <SignInPage /> },
+      { path: routes.signUp, element: <SignUpPage /> },
+      {
+        element: <RequireAuth />,
+        children: [
+          { path: routes.tasks, element: <TaskListPage /> },
+          { path: routes.task(":taskId"), element: <TaskDetailPage /> },
+        ],
+      },
+      { path: "*", element: <NotFoundPage /> },
+    ],
+  },
+];
+
+/** The router the browser runs, with history in the address bar. */
+export const createAppRouter = (): DataRouter => createBrowserRouter(appRoutes);
+
+/**
+ * Send the user to sign-in from wherever they are, keeping that place to come back to; for an ended session. A late
+ * 401 that arrives once they are already there leaves the way back as it is.
+ */
+export const goToSignIn = (router: DataRouter) => (): void => {
+  const { pathname, search } = router.state.location;
+  if (pathname === routes.signIn) return;
+  void router.navigate(signInPath(pathname + search), { replace: true });
+};

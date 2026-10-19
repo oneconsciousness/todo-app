@@ -17,6 +17,8 @@ export interface CredentialsFormProps {
   readonly submitting: boolean;
   /** What went wrong on the last attempt, shown above the fields; null when nothing did. */
   readonly failure: ReactNode;
+  /** The server's problems with the last values sent, shown next to each field until the user edits it. */
+  readonly fieldErrors?: FieldErrors<Credentials> | undefined;
   readonly initialEmail?: string | undefined;
   readonly onSubmit: (credentials: Credentials) => void;
 }
@@ -29,22 +31,33 @@ export function CredentialsForm({
   passwordHint,
   submitting,
   failure,
+  fieldErrors: serverErrors,
   initialEmail = "",
   onSubmit,
 }: CredentialsFormProps) {
   const [values, setValues] = useState<Credentials>({ email: initialEmail, password: "" });
   const [errors, setErrors] = useState<FieldErrors<Credentials>>({});
+  const [edited, setEdited] = useState<ReadonlySet<keyof Credentials>>(new Set());
 
   const edit = (field: keyof Credentials) => (event: ChangeEvent<HTMLInputElement>) => {
     setValues((current) => ({ ...current, [field]: event.target.value }));
     setErrors((current) => ({ ...current, [field]: undefined }));
+    setEdited((current) => new Set([...current, field]));
   };
+
+  // The form's own check wins; the server's message stays until the field is edited after the last submit.
+  const errorFor = (field: keyof Credentials): string | undefined =>
+    errors[field] ?? (edited.has(field) ? undefined : serverErrors?.[field]);
 
   const handleSubmit = (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
     const result = credentialsSchema.safeParse(values);
-    if (result.success) onSubmit(result.data);
-    else setErrors(fieldErrors(result.error));
+    if (!result.success) {
+      setErrors(fieldErrors(result.error));
+      return;
+    }
+    setEdited(new Set());
+    onSubmit(result.data);
   };
 
   return (
@@ -56,7 +69,7 @@ export function CredentialsForm({
           type="email"
           autoComplete="email"
           value={values.email}
-          error={errors.email}
+          error={errorFor("email")}
           onChange={edit("email")}
         />
         <TextField
@@ -65,7 +78,7 @@ export function CredentialsForm({
           autoComplete={passwordAutoComplete}
           hint={passwordHint}
           value={values.password}
-          error={errors.password}
+          error={errorFor("password")}
           onChange={edit("password")}
         />
       </fieldset>

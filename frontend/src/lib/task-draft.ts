@@ -3,7 +3,12 @@ import type { Task, TaskDraft, TaskEdit } from "./schema/task.ts";
 /** The fields a PATCH changes, holding only the ones that differ from the task. */
 export type TaskChanges = Partial<TaskEdit>;
 
-const editable = ["title", "notes", "dueDate"] as const satisfies readonly (keyof TaskEdit)[];
+/** The fields the edit form holds and a save can change. */
+export const draftFields = [
+  "title",
+  "notes",
+  "dueDate",
+] as const satisfies readonly (keyof TaskEdit)[];
 
 const compared = [
   "title",
@@ -28,7 +33,7 @@ export const draftFrom = (task: Task): TaskDraft => ({
 
 /** The fields of a validated edit that differ from the task, so the PATCH sends only those. */
 export const changesFrom = (task: Task, edit: TaskEdit): TaskChanges =>
-  editable.reduce<TaskChanges>(
+  draftFields.reduce<TaskChanges>(
     (changes, field) =>
       task[field] === edit[field] ? changes : { ...changes, [field]: edit[field] },
     {},

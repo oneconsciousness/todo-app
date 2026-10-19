@@ -36,6 +36,12 @@ const long = new Intl.DateTimeFormat("en-US", {
   timeZone: "UTC",
 });
 
+/** The calendar day of `date` on the user's own clock, as `YYYY-MM-DD`; the screens read due dates against it. */
+export const localIsoDate = (date: Date): string =>
+  [date.getFullYear(), date.getMonth() + 1, date.getDate()]
+    .map((part) => String(part).padStart(2, "0"))
+    .join("-");
+
 /** Spell out a `YYYY-MM-DD` date as "Monday, October 19", for the heading of a dated page. */
 export const longDate = (isoDate: string): string => long.format(toUtc(isoDate));
 
