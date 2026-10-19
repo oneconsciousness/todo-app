@@ -63,7 +63,7 @@
         "backend/tests/conftest.py",
         "frontend/src/test/*",
         "frontend/vitest.config.ts",
-        "frontend/playwright.config.ts",
+        "e2e/browser/playwright.config.ts",
         "e2e/*"
       ],
       "artifacts": [

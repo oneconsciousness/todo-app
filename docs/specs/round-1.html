@@ -107,7 +107,7 @@ footer { color: var(--muted); font-size: 0.88rem; border-top: 1px solid var(--li
     <span class="eyebrow">todo-app · spec · revision 3 · signed off</span>
     <h1>Round 1: the app, running in containers</h1>
     <p class="lede">The high-level choices for the To Do app and how the pieces fit, before the detailed coding plan is written. Each choice names what it beat and what it costs. Every decision is now <span class="pill pill-locked">locked</span>: revision 1 settled the product choices, and revision 2 added how the API behaves when many people use it at once. Revision 3 records the lead's sign-off and notes.</p>
-    <div class="meta"><span>2026-10-19 · revision 3</span><span>Lives at <code>docs/specs/round-1.html</code></span><span>Builds on <code>docs/kickoff.md</code></span><span>Later ideas: <code>FUTURE.md</code></span></div>
+    <div class="meta"><span>2026-10-19 · revision 3.1</span><span>Lives at <code>docs/specs/round-1.html</code></span><span>Builds on <code>docs/kickoff.md</code></span><span>Later ideas: <code>FUTURE.md</code></span></div>
     <div class="rounds" aria-label="The three rounds">
       <div class="now"><span class="eyebrow">Round 1 · this spec</span><b>Containers</b><span><code>docker compose up</code> on a Mac. Every suite green.</span></div>
       <div><span class="eyebrow">Round 2</span><b>Local k3d</b><span>Same images, Kubernetes manifests, three API replicas.</span></div>
@@ -345,7 +345,7 @@ footer { color: var(--muted); font-size: 0.88rem; border-top: 1px solid var(--li
           <text x="480" y="266" class="t-muted">property-tested: for any a &lt; b, a &lt; mid &lt; b</text>
         </svg>
       </div>
-      <figcaption>The API takes <code>PUT /api/v1/tasks/{id}/position</code> with <code>{"after_id": … | null}</code>. The server looks up the neighbours itself, inside one transaction, so a client with a stale view can't put a task between two tasks that are no longer next to each other.</figcaption>
+      <figcaption>The API takes <code>PUT /api/v1/tasks/{id}/position</code> with <code>{"afterId": … | null}</code>. The server looks up the neighbours itself, inside one transaction, so a client with a stale view can't put a task between two tasks that are no longer next to each other.</figcaption>
     </figure>
   </section>
 
@@ -458,7 +458,7 @@ footer { color: var(--muted); font-size: 0.88rem; border-top: 1px solid var(--li
           <text x="764" y="75" text-anchor="middle" class="t-mono">asyncpg</text>
         </svg>
       </div>
-      <figcaption>Everything the loop hands off has a limit: 200 requests in progress per replica, 15 database connections, 4 hashes at a time. When a limit is reached, requests wait for a bounded time; past that wait the client gets a 503 with the error envelope, never a hung connection.</figcaption>
+      <figcaption>Everything the loop hands off has a limit: 200 requests in progress per replica, 15 database connections, 4 hashes at a time. When a limit is reached, requests wait for a bounded time; past that wait the client gets a 503, never a hung connection. The API's own 503s carry the error envelope; uvicorn's overload reply is plain text, and the frontend treats both the same way.</figcaption>
     </figure>
     <div class="decisions">
 
@@ -630,7 +630,7 @@ footer { color: var(--muted); font-size: 0.88rem; border-top: 1px solid var(--li
         </dl>
       </div></div>
     </div>
-    <p class="prose">List responses are wrapped as <code>{"items": [...]}</code>, so a paging cursor can be added later without breaking the client. An <code>after_id</code> that doesn't exist and one that belongs to someone else get the same 400, so the response doesn't reveal which it was.</p>
+    <p class="prose">List responses are wrapped as <code>{"items": [...]}</code>, so a paging cursor can be added later without breaking the client. An <code>afterId</code> that doesn't exist and one that belongs to someone else get the same 400, so the response doesn't reveal which it was.</p>
   </section>
 
   <section id="data">
@@ -779,7 +779,8 @@ footer { color: var(--muted); font-size: 0.88rem; border-top: 1px solid var(--li
       <li><b>D17:</b> a tab refreshes when the user comes back to it. Kept as the first layer, with the version check as the guarantee.</li>
       <li><b>Design:</b> a stellar look, a premium feel, vintage colours and zero redundancy.</li>
     </ul>
-    <p class="prose">The detailed coding plan (<code>docs/plans/round-1.md</code>) and the design artifact are now being written in parallel.</p>
+    <p class="prose"><b>Errata, revision 3.1</b> (from the coding plan's open questions, locked by the lead): the move body is <code>afterId</code>, camelCase like every other field (Q-1); and a 503 carries the error envelope only when the API sends it, since uvicorn's own overload reply is plain text (Q-2).</p>
+    <p class="prose">The detailed coding plan is at <code>docs/plans/round-1.md</code>.</p>
   </section>
 
   <footer>Drafted by Claude (agent) for review by the project lead. Revision 1 reviewed and answered by the lead; revision 2 added D13 to D20; revision 3 records their sign-off. Decisions marked locked are recorded in <code>docs/kickoff.md</code>.</footer>

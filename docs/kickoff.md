@@ -136,6 +136,25 @@ What it settled: D1 to D20 are locked (spec revision 3), and the rules carry the
 | Design | A stellar look, a premium feel, vintage colours, zero redundancy. |
 | Wire format | JSON field names are camelCase, so the frontend uses the API's shapes without a mapping layer (agent decision, recorded in `api-contract.md`). |
 
+## 5b. Plan review (verbatim) and what it settled
+
+> 1. On the sdk/library versions - did the sub-agent planner ensure to research the web for official docs, find the latest+stable version before proceeding? also ensuring to review the community for any known bugs. If not, please send the same sub-agent back to do this step.
+> 2. While reviewing `3.5.3 Migration 0001_initial_schema`, i had a question. I hope we're also planning to verify if its an actual email address, i.e., does it have '@' and other basic tests.
+> 3. White reviewing `3.7.1 rank_between`, did you check to ensure ask per the TASK.md (`● Bonus points: Code in a functional, concise, declarative way. Things we will look for:higher-order functions, function composition, correct use of basic data structures and manipulations (map, reduce, apply, etc.)`) has been taken into consideration, researched and well planned?
+> 4. I've reviewed the plan in detail. On the open questions, I agree with your (tech lead) decision making.
+>
+> What's left/next? List out the todo list in chat, I'll review and give you the go ahead. Note: We should wait for design to be approved as well before we begin coding.
+
+What it settled:
+
+| Item | Outcome |
+|---|---|
+| Plan Q-1 to Q-13 | Locked as the tech lead recommended. Spec revision 3.1 carries the errata (Q-1 `afterId`, Q-2 plain-text 503); `python.md` (Q-4), `typescript.md` (Q-9) and the docs map (Q-10) are updated. |
+| Versions | The planner had not researched current stable versions or known bugs. Sent back to pin every dependency from official sources with known issues and mitigations. |
+| Email | Three layers: Zod in the form, Pydantic `EmailStr` in the API, a basic-shape `CHECK` in the database, each tested. |
+| Functional style | `rank_between` redesigned declaratively, and a "Functional style map" section ties each `TASK.md` item to concrete code. |
+| Order | Coding starts only after the design is approved and the instructions walkthrough is done. |
+
 ## 6. Before submission
 
 - [ ] Share the spec artifact, and the design artifact, so the reviewers can open them; put the links in the final report.
