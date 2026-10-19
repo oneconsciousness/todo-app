@@ -28,6 +28,7 @@ feature/<name>              ←  you work here, branched off the round branch
 - **The parent PR** is opened as a draft as soon as the round branch has its first merged child, and is titled for the round (`feat(round-1): run the to do app in containers`). It is the round's checklist: each child PR is linked from it. It leaves draft only when the round's exit criteria are met, and it merges only after the human lead's final review.
 - **`main` only ever receives finished, tested rounds.** Rebase-merging the parent lays the round's child commits onto `main` in order, so `main` stays linear with one commit per child PR. Each child's test-first commits stay visible in its merged PR on GitHub.
 - **Child PRs** target the round branch and are squash-merged, so the PR title becomes the commit subject (the PR-title hook and CI keep it Conventional). Every commit on the PR branch is still green, and the test-first order stays in the PR. A child that depends on an unmerged child targets that child's branch until it merges, then is rebased onto the round branch (`git rebase --onto origin/round/<n>-<name> <old tip of the merged child>`) and retargeted.
+- **After the parent PR is rebase-merged,** `main` holds the round's commits under new IDs, so the round branch is deleted and the next round's branch is created from `main`.
 - **The round branch is protected like `main`:** no direct commits or pushes, only merged PRs. It is created once from `main` by the human (`git push origin main:refs/heads/round/<n>-<name>`), because the hook refuses that push from an agent.
 
 **Never push directly to `main` or a round branch.** Always go through a PR. A wrong tag is fixed by cutting the next version, never by moving the existing one.
@@ -371,13 +372,29 @@ A commit message that mentions an env file trips `env-protection.py` when passed
 
 Use the § 8.2 shape with the rule reference `CONTRIBUTING.md § 12 (Secrets discipline)` and the specific action ("write to .env" / "read-and-print key.pem") in the "Why I'm pausing" line.
 
-### 12.6 Mechanical enforcement
+### 12.6 Mechanical enforcement, and what it cannot see
 
-- `.claude/settings.json` denies `Read` and `Edit` (which covers Write, MultiEdit and NotebookEdit) on `.env`, `*.pem`, `*.key`, and `credentials` and `secrets` files with a data extension (`.json`, `.yaml`, `.yml`, `.toml`) anywhere in the repo. Source files such as `credentials.py` stay readable. Permission rules cannot express "every `.env.*` except one", so the other `.env.*` names are enforced by the hook below.
-- `env-protection.py` blocks any Bash command whose `.env…` tokens, raw or after shell unquoting, are not exactly `.env.example` (case-insensitive, as macOS file systems are). It also blocks dotfile globs that would reach `.env` (`.e*`, `.[e]nv`), recursive `grep` (it reads hidden files; use `rg` or `git grep`), `rg --hidden` or `-uu`, `docker compose config` without `--no-interpolate`, `docker inspect`, and `env` or `printenv` inside a container.
-- `secrets-protection.py` blocks Read, Grep, Edit, Write, MultiEdit and NotebookEdit on the full pattern list, Grep globs aimed at env dotfiles, a `.env.example` that resolves to another file, and Bash commands that print one of those files.
+**What the guards are for.** They stop an agent from *accidentally* reading, printing, committing or pushing what it should not: a stray `cat .env`, a recursive search that sweeps up a key, a push to a protected branch. They are not a sandbox against a determined adversary, and they say so here rather than overclaim.
 
-Not covered: a path built at run time (`printf '\x2eenv'`) or a script the agent writes that prints a secret as a side effect. String matching cannot see those. Rule 12.1.3 is the contract for that case.
+- `.claude/settings.json` denies `Read` and `Edit` (which covers Write, MultiEdit and NotebookEdit) on `.env`, `*.pem`, `*.key`, and `credentials` and `secrets` files with the common data extensions (`.json`, `.yaml`, `.yml`, `.toml`). `secrets-protection.py` covers the full extension list. Source files such as `credentials.py` stay readable. Permission rules cannot express "every `.env.*` except one", so the other `.env.*` names are enforced by the hooks.
+- The three Bash guards read a command through `shell_words.py`, the way the shell would: quotes removed, `{a,b}` and `{a..c}` expanded, zsh `(a|b)` groups, backticks and `$( … )` split out, and wrappers (`sudo -u x`, `env`, `command`, `timeout`, `if … then`, `{ … }`) peeled off. Long options are matched by any abbreviation git and grep accept (`--recur`, `--no-verif`).
+- `env-protection.py` blocks any command whose `.env…` words are not exactly `.env.example`, dotfile globs that reach `.env`, and bulk reads that could sweep it up. `find -exec` and `xargs` may only run programs that print no file contents (or a quiet grep, or `sed -i`), unless xargs is fed by a gitignore-aware lister (`git ls-files`, `rg -l`). Also blocked: recursive grep or ugrep, `git grep --no-index`, `rg`/`ug` on hidden or ignored files, `git add --force`, `git stash --all`, `tar` to stdout, and the docker commands that print resolved secrets.
+- `secrets-protection.py` blocks Read, Grep, Edit, Write, MultiEdit and NotebookEdit on the full pattern list, Grep globs aimed at env dotfiles, a `.env.example` that resolves to another file, and Bash commands that print one of those files: by program (`cat`, `sed` without `-i`, `base64`, `openssl`, `dd if=`, `perl`, `ln`, …), by input redirection (`< key`), and through git (`git diff --no-index`, `git show`).
+- `branch-protection.py` follows `cd` and `git -C` to the repo each git command runs in, so a commit into a worktree on `main` is caught. It refuses `git -c` keys that could redirect a push or skip hooks (`remote.*`, `alias.*`, `core.hooksPath`), wildcard refspecs that reach a protected branch, and `git update-ref` on protected refs.
+- Every guard fails closed: an unreadable payload, a crash, or a missing `shell_words.py` denies the call.
+
+**What string matching cannot see,** and what covers it instead:
+
+| Gap | Example | Backstop |
+|---|---|---|
+| A path built at run time | `cat "$(printf '\x2eenv')"` | The agent rules (§ 12.1) and the transcript, which is reviewed |
+| File names fed through a loop or a substitution | `find . -type f \| while read f; do cat "$f"; done`, `cat $(find .)` | `find`, `grep` and loops are not on the no-prompt allow list, so they need permission |
+| A script the agent writes, then runs | `python3 dump.py` | Rule 12.1.3: a script never prints a secret; the human reviews every PR |
+| Anything a git hook would catch | `--no-verify` variants the parser misses | `git push` always asks, and every change reaches `main` only through a reviewed PR |
+
+**What makes a leak cheap if one happens:** in round 1, `.env` holds only local development values (the same kind `.env.example` documents). Real secrets for rounds 2 and 3 live in Kubernetes Secrets and Azure Key Vault, never in a file in the repo.
+
+The hook tests (`.claude/hooks/tests/`) pin every bypass a review has found, as a deny case, and every false positive, as an allow case. A new bypass becomes a new test first.
 
 ---
 

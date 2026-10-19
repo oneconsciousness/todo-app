@@ -32,7 +32,8 @@ This repo sits inside a larger workspace whose `.claude/rules/` also load. The g
 ## Gotchas
 - `transcript-backup.py` snapshots the session transcript into `.ai-transcripts/` before and after every compaction and at session end, and blocks a compaction it could not back up. The snapshots are the record of AI use; never delete them.
 - macOS ships bash 3.2 and Python 3.9. Repo scripts and hooks are Python standard library and start with `from __future__ import annotations`, so they run on a reviewer's Mac; CI tests them on 3.9 and 3.13. The guard hooks fail closed: a crash denies the call.
-- A commit message that names an env file trips the env guard when passed with `-m`; use `git commit -F <file>`.
+- The Bash guards read every word of a command, heredoc bodies included. Text that names an env file or a reader program trips them: write prose with the Write tool, and commit such messages with `git commit -F <file>`.
+- The three Bash guards share `.claude/hooks/shell_words.py`. A change there changes all three; run `python3 -m unittest discover -s .claude/hooks/tests` under `/usr/bin/python3` as well as 3.13.
 - The branch-protection hook blocks every commit on `main`. Branch first.
 - FastAPI answers validation errors with 422 unless the app's handler maps them. Keep the handler; the contract says 400.
 
