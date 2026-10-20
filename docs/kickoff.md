@@ -249,6 +249,16 @@ The round 2 spec is `docs/specs/round-2.html`. The lead's answers to its seven c
 
 What it settled (spec revision 2, 2026-10-20): a three-node k3d cluster with the API spread across nodes; nginx stays the front of the app and Traefik only ends TLS; TLS on k3d with a mkcert certificate; a 20-second `preStop` sleep replaces the deployment rule's "`/readyz` fails once shutdown starts"; one deploy script, with each apply run on its own in the session. Restricted Pod Security, network policies and a k3d CI job are deferred to `FUTURE.md`. All of round 2 lands in one child PR into `round/2-k3d`, built and tested by the agent while the lead is away; the disruption and load runs happen without the lead and are written up for a walk-through. The README gets clear setup and run steps for k3d. Because the lead is away, the deploy script creates the two Secrets itself when they are missing (random values, never printed); the spec marks that for the lead's call on return.
 
+## 5k. The autoscaler moves into round 2 (verbatim)
+
+The lead, on seeing the hand-scaled run while round 2 was being built:
+
+> in k8s, I would expect pods to auto scale per load and req. Why are you timing it?
+>
+> yes, add the autoscaler in round 2. Its critical. Additionally, what about the postgres stateful set container? is that in?
+
+What it settled (spec revision 3, D34): a HorizontalPodAutoscaler keeps the API between 3 and 5 pods on CPU (70% of each pod's request), adding pods at once and removing them after two quiet minutes. Five is the most the database connection budget allows until a connection pooler arrives with Azure's managed Postgres in round 3. Postgres is in: one StatefulSet pod with its own volume, which grows by replication rather than by copies.
+
 ## 6. Before submission
 
 - [ ] Share the spec artifact, and the design artifact, so the reviewers can open them; put the links in the final report.

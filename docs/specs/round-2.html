@@ -104,17 +104,17 @@ footer { color: var(--muted); font-size: 0.88rem; border-top: 1px solid var(--li
 
 <main>
   <header>
-    <span class="eyebrow">todo-app · spec · revision 2 · signed off</span>
+    <span class="eyebrow">todo-app · spec · revision 3 · signed off</span>
     <h1>Round 2: the same app on a local Kubernetes cluster</h1>
-    <p class="lede">The high-level choices for running the round 1 app on k3d, and how the pieces fit, before the detailed plan is written. The app code and images stay the same; what surrounds them changes. Each choice names what it beat and what it costs. Revision 1 marked the choices that follow from the kickoff, the round 1 spec or the deployment rule as locked, and put the rest to the lead. Revision 2 records the lead's calls: every choice is now <span class="pill pill-locked">locked</span>, and two are <span class="pill pill-call">deferred</span>.</p>
-    <div class="meta"><span>2026-10-20 · revision 2</span><span>Lives at <code>docs/specs/round-2.html</code></span><span>Builds on <code>docs/specs/round-1.html</code> and <code>docs/kickoff.md</code></span><span>Rules: <code>.claude/rules/deployment.md</code></span></div>
+    <p class="lede">The high-level choices for running the round 1 app on k3d, and how the pieces fit, before the detailed plan is written. The app code and images stay the same; what surrounds them changes. Each choice names what it beat and what it costs. Revision 1 marked the choices that follow from the kickoff, the round 1 spec or the deployment rule as locked, and put the rest to the lead. Revision 2 records the lead's calls: every choice is now <span class="pill pill-locked">locked</span>, and two are <span class="pill pill-call">deferred</span>. Revision 3 adds the API autoscaler, which the lead moved into this round.</p>
+    <div class="meta"><span>2026-10-20 · revision 3</span><span>Lives at <code>docs/specs/round-2.html</code></span><span>Builds on <code>docs/specs/round-1.html</code> and <code>docs/kickoff.md</code></span><span>Rules: <code>.claude/rules/deployment.md</code></span></div>
     <div class="rounds" aria-label="The three rounds">
       <div><span class="eyebrow">Round 1 · merged</span><b>Containers</b><span><code>docker compose up</code> on a Mac. At least 1,000 users.</span></div>
-      <div class="now"><span class="eyebrow">Round 2 · this spec</span><b>Local k3d</b><span>Same images, Kubernetes manifests, three API replicas on three nodes.</span></div>
+      <div class="now"><span class="eyebrow">Round 2 · this spec</span><b>Local k3d</b><span>Same images, Kubernetes manifests, three to five API replicas spread over three nodes.</span></div>
       <div><span class="eyebrow">Round 3</span><b>AKS live</b><span>Azure, deployed by GitHub Actions, if time permits.</span></div>
     </div>
     <nav class="toc" aria-label="Sections">
-      <a href="#topology">Topology</a><a href="#decisions">Decisions</a><a href="#shutdown">Shutdown</a><a href="#deploy">Deploy order</a><a href="#proof">Proving it</a><a href="#tests">Tests</a><a href="#order">Order of work</a><a href="#round3">Round 3</a><a href="#done">Done means</a><a href="#calls">Sign-off</a>
+      <a href="#topology">Topology</a><a href="#decisions">Decisions</a><a href="#shutdown">Shutdown</a><a href="#deploy">Deploy order</a><a href="#proof">Proving it</a><a href="#tests">Tests</a><a href="#order">Order of work</a><a href="#round3">Round 3</a><a href="#outcome">Outcome</a><a href="#done">Done means</a><a href="#calls">Sign-off</a>
     </nav>
   </header>
 
@@ -203,7 +203,7 @@ footer { color: var(--muted); font-size: 0.88rem; border-top: 1px solid var(--li
           <text x="152" y="404" class="t-muted">drive :8443</text>
         </svg>
       </div>
-      <figcaption>The migrate Job uses the API image and gets the database address alone. It must complete before the API rolls out, so no pod serves an older schema. The connection budget from round 1 holds: 3 pods × 15 connections = 45, under 80% of Postgres's 100.</figcaption>
+      <figcaption>The migrate Job uses the API image and gets the database address alone. It must complete before the API rolls out, so no pod serves an older schema. An autoscaler adds up to two more API pods under load (D34). The connection budget holds at the most pods: 5 × 15 connections = 75, under 80% of Postgres's 100.</figcaption>
     </figure>
   </section>
 
@@ -220,6 +220,7 @@ footer { color: var(--muted); font-size: 0.88rem; border-top: 1px solid var(--li
           <dt>Instead of</dt><dd>One node, which is lighter but puts every replica on one machine.</dd>
           <dt>Why</dt><dd>Pods on different nodes talk over the cluster network, as they will on AKS. A node going away is something we can show, not only describe.</dd>
           <dt>Costs</dt><dd>About 1.5 GB more of Docker's memory. Docker has 8 GB here, which is enough.</dd>
+          <dt>Found</dt><dd>k3d's own load balancer allows 1,024 connections by default and dropped them past about 500 users. The cluster config raises it to 8,192.</dd>
         </dl>
       </div></div>
 
@@ -263,7 +264,7 @@ footer { color: var(--muted); font-size: 0.88rem; border-top: 1px solid var(--li
       <div class="decision"><div class="id">D26</div><div class="body">
         <div class="title-row"><h3>Three API pods that roll without dropping a request</h3><span class="pill pill-locked">locked</span></div>
         <dl>
-          <dt>Choice</dt><dd>A Deployment with 3 replicas, one uvicorn process each. A rolling update adds a new pod before removing an old one, and a disruption budget keeps at least 2 serving. CPU and memory requests and limits are set; the CPU limit is one core, the most one uvicorn process can use. Probes: <code>/livez</code> for liveness, <code>/readyz</code> for readiness.</dd>
+          <dt>Choice</dt><dd>A Deployment that starts with 3 replicas, one uvicorn process each; the autoscaler in D34 takes it to 5 under load. A rolling update adds a new pod before removing an old one, and a disruption budget keeps at least 2 serving. CPU and memory requests and limits are set; the CPU limit is one core, the most one uvicorn process can use. Probes: <code>/livez</code> for liveness, <code>/readyz</code> for readiness.</dd>
           <dt>Instead of</dt><dd>More uvicorn workers per pod, which hides failures inside one pod and splits the connection budget unevenly.</dd>
           <dt>Why</dt><dd>The round 1 spec planned 3 replicas and a budget of 45 connections for round 2. Scaling stays a replica count.</dd>
         </dl>
@@ -334,6 +335,16 @@ footer { color: var(--muted); font-size: 0.88rem; border-top: 1px solid var(--li
           <dt>Instead of</dt><dd>A k3d job on every PR, which revision 1 recommended.</dd>
           <dt>Why</dt><dd>The lead's call: local Mac only. A k3d CI job is in <code>FUTURE.md</code>.</dd>
           <dt>Costs</dt><dd>A change that breaks the cluster but not compose is caught only when someone runs it on k3d.</dd>
+        </dl>
+      </div></div>
+
+      <div class="decision"><div class="id">D34</div><div class="body">
+        <div class="title-row"><h3>The API scales itself between three and five pods</h3><span class="pill pill-locked">locked</span></div>
+        <dl>
+          <dt>Choice</dt><dd>A HorizontalPodAutoscaler on the API: at least 3 pods, at most 5. It adds a pod when the pods average over 70% of their CPU request, at once, and removes one only after two quiet minutes. It reads CPU from the metrics server k3s ships.</dd>
+          <dt>Instead of</dt><dd>A fixed 3 pods, scaled by hand, which revision 2 had and which left the autoscaler to round 3.</dd>
+          <dt>Why</dt><dd>The lead's call: "yes, add the autoscaler in round 2. Its critical." Kubernetes should follow the load, and k3d can prove it does.</dd>
+          <dt>Costs</dt><dd>Five is the ceiling: each pod opens up to 15 database connections, and 6 pods would pass 80% of Postgres's 100. Going higher needs a connection pooler in front of Postgres, which Azure's managed Postgres brings in round 3. Postgres itself stays one pod; a database grows by replication, not by copies of the pod.</dd>
         </dl>
       </div></div>
 
@@ -415,6 +426,7 @@ footer { color: var(--muted); font-size: 0.88rem; border-top: 1px solid var(--li
           <tr><td>A release drops no request</td><td>The same load through a rolling restart of the API</td><td>k6</td></tr>
           <tr><td>Nothing survives in pods, and nothing needs to</td><td>Every API pod is replaced while users are signed in. They stay signed in, and their tasks and order are intact</td><td>k6</td></tr>
           <tr><td>Scaling is a number</td><td>Scale the API from 3 to 5 pods and back under load; no request fails</td><td>k6</td></tr>
+          <tr><td>The API follows the load</td><td>Users rise past what 3 pods carry at 70% CPU; the autoscaler adds pods up to 5, then removes them once the load is gone. No request fails</td><td>k6</td></tr>
         </tbody>
       </table>
     </div>
@@ -439,28 +451,50 @@ footer { color: var(--muted); font-size: 0.88rem; border-top: 1px solid var(--li
 
   <section id="order">
     <span class="eyebrow">Order of work</span>
-    <h2>One child PR, built and tested while the lead is away</h2>
-    <p class="prose">The lead asked for all of round 2 in a single child PR into <code>round/2-k3d</code>, to save time, with the agent working alone until the round is built and tested end to end. The commits inside it stay small and each one green. The disruption and load runs are done without the lead, and their results are written up for a walk-through on return.</p>
+    <h2>One child PR, built and tested while the lead was away</h2>
+    <p class="prose">The lead asked for all of round 2 in a single child PR into <code>round/2-k3d</code>, built and tested by the agent alone. The commits inside it stay small and each was green when made. The as-built plan, <code>docs/plans/round-2.md</code>, records each commit, each decision the work made and each departure from the agreed process.</p>
     <div class="table-wrap">
       <table>
         <thead><tr><th>Commit</th><th>What</th></tr></thead>
         <tbody>
           <tr><td>1</td><td>This spec, revision 2, and the lead's decisions in <code>docs/kickoff.md</code></td></tr>
           <tr><td>2</td><td>nginx reads its DNS server and the API's address from its environment; compose behaves as before</td></tr>
-          <tr><td>3</td><td>Cluster config, Kustomize base and k3d overlay, the deploy script and its tests</td></tr>
-          <tr><td>4</td><td>The live, browser and load suites take the cluster's address and certificate</td></tr>
-          <tr><td>5</td><td>Disruption and capacity results on k3d</td></tr>
-          <tr><td>6</td><td>README, the deployment rule and the Claude Code docs</td></tr>
+          <tr><td>3</td><td>A round 1 bug the cluster exposed: <code>/api/</code> is no longer compressed, so ETags stay usable as <code>If-Match</code></td></tr>
+          <tr><td>4</td><td>Cluster config, Kustomize base and k3d overlay, the deploy script and its tests</td></tr>
+          <tr><td>5</td><td>The live, browser and load suites take the cluster's address</td></tr>
+          <tr><td>6</td><td>The Claude Code docs: the deployment rule, <code>CLAUDE.md</code>, the verify skill</td></tr>
+          <tr><td>7</td><td>The API autoscaler (D34), and the load balancer limit (D21)</td></tr>
+          <tr><td>8</td><td>README steps for k3d, and the load results</td></tr>
+          <tr><td>9</td><td>This spec's revision 3, and the as-built plan</td></tr>
         </tbody>
       </table>
     </div>
-    <p class="prose">Then: the lead reviews the PR and tries the app on k3d, the PR is squash-merged, and the round's parent PR goes into <code>main</code> after the exit check.</p>
+  </section>
+
+  <section id="outcome">
+    <span class="eyebrow">What the build showed</span>
+    <h2>Outcome</h2>
+    <p class="prose">Measured on 2026-10-20 on the lead's Mac. Details in <code>tests/load/results/round-2.md</code>.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Claim</th><th>Result</th></tr></thead>
+        <tbody>
+          <tr><td>The same suites pass on the cluster</td><td>Live 12 of 12 and browser 5 of 5 on k3d, over HTTPS; the same on compose; again on a cluster rebuilt from nothing</td></tr>
+          <tr><td>Any pod serves any request</td><td>One session's requests reached all three pods, and each saw the same task</td></tr>
+          <tr><td>Losing a pod loses nothing</td><td>200 users, one API pod deleted: 55,917 requests, none failed, data intact</td></tr>
+          <tr><td>A release drops no request; nothing lives in a pod</td><td>200 users, every API pod replaced by a rolling restart: 55,931 requests, none failed, users stayed signed in</td></tr>
+          <tr><td>The API follows the load</td><td>800 users: the autoscaler went from 3 to 4 to 5 pods and back to 3 two minutes after the load; 176,656 requests, none failed</td></tr>
+          <tr><td>Capacity</td><td><b>At least 1,500 concurrent users</b> with five pods and every budget met (round 1: at least 1,000)</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="prose">The build also found three things the design missed: nginx needed the cluster's DNS server, not Docker's; nginx's compression made the API's ETags unusable for <code>If-Match</code>, a bug since round 1; and k3d's load balancer ran out of connections near 500 users. Each is fixed, with a test or a run that failed first.</p>
   </section>
 
   <section id="round3">
     <span class="eyebrow">Looking ahead</span>
     <h2>What round 3 changes</h2>
-    <p class="prose">The base manifests stay. The AKS overlay swaps Postgres for Azure Database for PostgreSQL (with its built-in PgBouncer, since round 3 adds a pod autoscaler), uses the cluster's managed ingress with a real certificate, pulls images from Azure Container Registry and reads secrets from Key Vault. GitHub Actions deploys it after signing in to Azure with OIDC, with no stored keys. You run or approve everything that touches Azure.</p>
+    <p class="prose">The base manifests stay. The AKS overlay swaps Postgres for Azure Database for PostgreSQL (with its built-in PgBouncer, so the autoscaler can go past five pods), uses the cluster's managed ingress with a real certificate, pulls images from Azure Container Registry and reads secrets from Key Vault. GitHub Actions deploys it after signing in to Azure with OIDC, with no stored keys. You run or approve everything that touches Azure.</p>
   </section>
 
   <section id="done">
@@ -473,6 +507,7 @@ footer { color: var(--muted); font-size: 0.88rem; border-top: 1px solid var(--li
       <li>The live and browser suites pass against k3d, and still pass against compose.</li>
       <li>Under 200 users, deleting an API pod, a rolling restart and replacing every pod cause no failed request and no lost data; signed-in users stay signed in.</li>
       <li>No secret is in the repo, and no secret value is printed by any step.</li>
+      <li>Under rising load the autoscaler adds API pods, up to 5, and removes them when the load falls, with no failed request.</li>
       <li>The round's capacity figure on k3d is recorded next to round 1's.</li>
       <li>CI's round 1 jobs stay green.</li>
       <li>The README has clear steps for setting up and running on k3d, which the lead can follow to try the app.</li>
@@ -494,10 +529,11 @@ footer { color: var(--muted); font-size: 0.88rem; border-top: 1px solid var(--li
           <tr><td>5</td><td>Hardening (D31)</td><td>"defaults for now."</td><td>Deferred to <code>FUTURE.md</code></td></tr>
           <tr><td>6</td><td>Deploying (D32)</td><td>"Ok"</td><td>One script; in the session each apply runs on its own</td></tr>
           <tr><td>7</td><td>CI (D33)</td><td>"local mac only."</td><td>Deferred to <code>FUTURE.md</code></td></tr>
+          <tr><td>8</td><td>Autoscaler (D34), asked on return</td><td>"yes, add the autoscaler in round 2. Its critical."</td><td>3 to 5 API pods on CPU, proven under load</td></tr>
         </tbody>
       </table>
     </div>
   </section>
 
-  <footer>Revision 2, 2026-10-20: the lead's calls on revision 1, and the one-PR order of work they asked for.</footer>
+  <footer>Revision 2, 2026-10-20: the lead's calls on revision 1, and the one-PR order of work they asked for. Revision 3, the same day: the API autoscaler, the order of work as built, and the outcome.</footer>
 </main>
