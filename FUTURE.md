@@ -18,3 +18,7 @@ Ideas we chose not to build in rounds 1 to 3, and why each is worth doing. The R
 
 ## Security
 - **Self-host the API docs page, or turn it off in production.** `/api/docs` loads Swagger UI from jsDelivr under a floating major version, with no integrity check, and its CSP allows one inline script by hash. Serving pinned Swagger UI files from the API, or disabling the page where cookies are secure, removes the third-party script before the app is public.
+- **Restricted Pod Security and network policies on Kubernetes.** Enforce the `restricted` level on the namespace, and deny all traffic by default, then allow only nginx to the API and the API and the migration Job to Postgres. Round 2 kept Kubernetes's defaults, at the lead's call.
+
+## Delivery
+- **A k3d job in CI.** Create the cluster in the job, deploy the PR's images and run the live and browser suites and a rolling restart under load, so a change that breaks only the cluster fails its own PR. Round 2 runs k3d on the Mac only, at the lead's call.
