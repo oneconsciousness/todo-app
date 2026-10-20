@@ -1,0 +1,30 @@
+[project]
+name = "todo-e2e-live"
+version = "0.1.0"
+description = "Live API tests against the running stack on :8080."
+requires-python = "~=3.14.8"
+dependencies = [
+    "httpx==0.28.1",
+    "pytest==9.1.1",
+]
+
+[dependency-groups]
+dev = [
+    "mypy==2.4.0",
+    "ruff==0.16.10",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py314"
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "ANN", "B", "UP", "SIM", "I", "T20", "RUF"]
+
+[tool.mypy]
+python_version = "3.14"
+strict = true
+files = ["."]
+
+[tool.pytest.ini_options]
+addopts = ["--strict-markers", "--strict-config"]

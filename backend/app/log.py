@@ -16,7 +16,7 @@ user_id_var: ContextVar[str | None] = ContextVar("user_id", default=None)
 
 # Attributes every LogRecord has; anything else on a record came from the call's `extra`.
 RECORD_ATTRIBUTES: Final = frozenset(vars(logging.makeLogRecord({}))) | {"message", "asctime"}
-UVICORN_LOGGERS: Final = ("uvicorn", "uvicorn.error", "uvicorn.access")
+UVICORN_LOGGERS: Final = ("uvicorn", "uvicorn.error")
 
 
 class JsonFormatter(logging.Formatter):
@@ -39,7 +39,7 @@ class JsonFormatter(logging.Formatter):
 
 
 def configure_logging(settings: Settings) -> QueueListener:
-    """Send every log line, uvicorn's included, through one queue to stdout as JSON, and start the writer thread.
+    """Send every log line but uvicorn's access lines through one queue to stdout as JSON, and start the writer thread.
 
     Calling it again replaces the previous setup, so lines are never written twice.
     The formatter sits on the `QueueHandler`, which formats on the calling thread, so the
@@ -65,6 +65,10 @@ def configure_logging(settings: Settings) -> QueueListener:
         uvicorn_logger = logging.getLogger(name)
         uvicorn_logger.handlers.clear()
         uvicorn_logger.propagate = True
+    # RequestContextMiddleware writes the one access line per request, so uvicorn's own would be a second.
+    uvicorn_access = logging.getLogger("uvicorn.access")
+    uvicorn_access.handlers.clear()
+    uvicorn_access.propagate = False
 
     handler.listener.start()
     return handler.listener

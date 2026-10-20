@@ -1,0 +1,27 @@
+{
+  "capacity_vus": 1000,
+  "hold": "2m",
+  "sha": "1c1aded",
+  "steps": [
+    {
+      "vus": 200,
+      "passed": true
+    },
+    {
+      "vus": 400,
+      "passed": true
+    },
+    {
+      "vus": 600,
+      "passed": true
+    },
+    {
+      "vus": 800,
+      "passed": true
+    },
+    {
+      "vus": 1000,
+      "passed": true
+    }
+  ]
+}

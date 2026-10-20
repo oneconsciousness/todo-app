@@ -1,3 +1,16 @@
+# The stack: `docker compose up --build --wait`, then open http://localhost:8080.
+# Values come from .env (copy .env.example); a missing one stops compose before anything starts.
+
+# Shared by the app containers: nothing on the image's filesystem can change at run time, no Linux
+# capabilities, and no way to gain privileges (https://docs.docker.com/reference/compose-file/services/).
+x-hardening: &hardening
+  read_only: true
+  tmpfs: [/tmp]
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+
+x-database-url: &database-url postgresql+asyncpg://${POSTGRES_USER:?set POSTGRES_USER in .env, see .env.example}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env, see .env.example}@db:5432/${POSTGRES_DB:?set POSTGRES_DB in .env, see .env.example}
+
 services:
   db:
     image: postgres:18.6-alpine3.24
@@ -14,6 +27,83 @@ services:
       interval: 5s
       retries: 10
       start_period: 10s
+
+  # Runs the migrations once, then exits; the API starts only after it exits with 0.
+  # It gets the database URL alone, never the JWT secret.
+  migrate:
+    <<: *hardening
+    # The api service builds this image; two services building one tag would clash on export.
+    image: todo-api:${GIT_SHA:-local}
+    pull_policy: never
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      DATABASE_URL: *database-url
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  # Two replicas behind nginx; any replica can serve any request. Reachable only inside the compose network.
+  api:
+    <<: *hardening
+    build: ./backend
+    image: todo-api:${GIT_SHA:-local}
+    environment:
+      DATABASE_URL: *database-url
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env, see .env.example}
+      APP_ORIGIN: ${APP_ORIGIN:?set APP_ORIGIN in .env, see .env.example}
+      COOKIE_SECURE: ${COOKIE_SECURE:?set COOKIE_SECURE in .env, see .env.example}
+      LOG_LEVEL: ${LOG_LEVEL:?set LOG_LEVEL in .env, see .env.example}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      db:
+        condition: service_healthy
+    deploy:
+      replicas: 2
+    expose: ["8000"]
+    # Longer than uvicorn's 20 s drain, so in-flight requests finish before Docker kills the process.
+    stop_grace_period: 25s
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+  # nginx: the SPA and the proxy to the API. The stack's one published port, bound to the loopback address only.
+  web:
+    <<: *hardening
+    build: ./frontend
+    image: todo-web:${GIT_SHA:-local}
+    depends_on:
+      api:
+        condition: service_healthy
+    ports: ["127.0.0.1:8080:8080"]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+  # The load test, started on demand: `docker compose --profile load run --rm k6 run /scripts/journey.js`.
+  # It reaches nginx inside the compose network and writes its summaries to tests/load/results.
+  k6:
+    <<: *hardening
+    image: grafana/k6:2.3.0
+    profiles: ["load"]
+    depends_on:
+      web:
+        condition: service_healthy
+    environment:
+      BASE_URL: http://web:8080
+      APP_ORIGIN: ${APP_ORIGIN:?set APP_ORIGIN in .env, see .env.example}
+      VUS: ${VUS:-200}
+      HOLD: ${HOLD:-3m}
+    volumes:
+      - ./tests/load/k6:/scripts:ro
+      - ./tests/load/results:/results
 
   # A throwaway server for the backend test suite on the host: `docker compose --profile test up -d test-db`.
   test-db:

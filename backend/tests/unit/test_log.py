@@ -54,3 +54,12 @@ def test_exception_and_traceback_stay_in_one_json_line(capsys: pytest.CaptureFix
     assert isinstance(line["exc"], str)
     assert "Traceback" in line["exc"]
     assert "RuntimeError: boom" in line["exc"]
+
+
+def test_uvicorn_lines_reach_the_json_log_but_its_access_lines_do_not(capsys: pytest.CaptureFixture[str]) -> None:
+    listener = configure_logging(SETTINGS)
+    logging.getLogger("uvicorn.error").info("Application startup complete.")
+    logging.getLogger("uvicorn.access").info('172.24.0.5:59126 - "GET /readyz HTTP/1.1" 200')
+    listener.stop()
+    loggers = [json.loads(line)["logger"] for line in capsys.readouterr().out.splitlines()]
+    assert loggers == ["uvicorn.error"]
