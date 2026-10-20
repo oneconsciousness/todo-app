@@ -1,0 +1,5 @@
+14:09:54 before api-778b6d4d4c-lmlt4
+14:09:54 before api-778b6d4d4c-qnc7b
+14:09:54 delete pod api-778b6d4d4c-lmlt4 of 2 (users at full load)
+14:10:34 after api-778b6d4d4c-qnc7b Running
+14:10:34 after api-778b6d4d4c-sm999 Running

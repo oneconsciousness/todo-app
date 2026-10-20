@@ -259,6 +259,18 @@ The lead, on seeing the hand-scaled run while round 2 was being built:
 
 What it settled (spec revision 3, D34): a HorizontalPodAutoscaler keeps the API between 3 and 5 pods on CPU (70% of each pod's request), adding pods at once and removing them after two quiet minutes. Five is the most the database connection budget allows until a connection pooler arrives with Azure's managed Postgres in round 3. Postgres is in: one StatefulSet pod with its own volume, which grows by replication rather than by copies.
 
+## 5l. One replica of everything to start (verbatim)
+
+After #12 merged, the lead:
+
+> I think we should start off with just one replica of everything and then scale from there if required. Can you confirm that that is the case today? Because I have a feeling we may be starting with three replicas, assuming that our app is gonna get a lot of load initially. [...] Also, yeah, I ran a test using the browser and I also installed the certificate.
+>
+> go with option B. And since this is just local development, I would say like keep it to like two replicas at most. We don't know what the specifications of the reviewer's Mac may be, but we can drop a note in the README saying, you know, if you're doing a heavy load test, change the Mac's replicas accordingly. Let's assume the reviewer will be well versed with these technologies while dropping that note.
+>
+> we'll stop after the 1000 users test and proceed to wrap up round 2 in the interest of time. we have to keep an hour to discuss future scope.
+
+What it settled (spec revision 4): one replica of the API, nginx and Postgres at rest; the API autoscales from 1 to 2 pods; the disruption budgets allow one pod down at a time. The README tells a reviewer how to raise the limits for a heavy load test. Measured at that size: releases, scaling and losing one of two pods lost no request; losing the only API pod cost about 13 seconds of errors; 1,000 users met every budget on two pods. Load testing stopped there.
+
 ## 6. Before submission
 
 - [ ] Share the spec artifact, and the design artifact, so the reviewers can open them; put the links in the final report.
