@@ -221,6 +221,16 @@ What it settled: G3 is passed for PR E's deployment files (2026-10-19). (1) The 
 
 What it settled: the CI `e2e` job passed G3, and CP2 approved the k6 journey, budgets and stepped plan (2026-10-19). CP3 ran with the lead present: the 200-user run and every step to 1,000 users met all budgets with no failed request. The round-1 capacity figure is **at least 1,000 concurrent users**, the highest step tested, on the machine recorded in `load/results/`; the lead chose not to push past it to find the ceiling. Results and their reading are in `load/results/round-1.md`.
 
+## 5i. Containers merged, and the README's scope for now (verbatim)
+
+> SQ&M#10 - done!
+>
+> Have a quick point here, just to keep our folder tree clean. Should we push all the tests into one folder? The common tests, as in the overall tests like E2E and load. And should we name those folders more explicitly, like load could be load test instead, or if it all goes inside the test folder, then it's fine. It's pretty self-explanatory. That's just one recommendation I have.
+>
+> To be honest, I don't think we write the thorough readme right now. And as in, we don't worry about the future section right now, because we're not really done with our work. We still have to do at least round two before we proceed further and think about wrapping this assignment up. And yeah, it's more about agent time here. And we have to take into account human review time as well. So yeah, we'll discuss this later.
+
+What it settled: the stack-wide suites live under `tests/` (`tests/e2e/live`, `tests/e2e/browser`, `tests/load`), done in #10; each app's own tests stay in the app. Round 1's README covers running the stack and its tests on a Mac and the capacity figure, nothing more. The full write-up the brief asks for (approach, features, more time, robustness) waits until at least round 2 is done. When it is written, "how long it would have taken" is given in agent-pair time with the human review time counted in, not as human-solo days.
+
 ## 6. Before submission
 
 - [ ] Share the spec artifact, and the design artifact, so the reviewers can open them; put the links in the final report.
