@@ -31,6 +31,10 @@ const isExpectedApiAnswer = (message: ConsoleMessage): boolean =>
  */
 export const test = base.extend({
   page: async ({ page }, use) => {
+    // A CPU six times slower, like a low-end phone or a busy CI runner, so races a fast laptop hides show up here.
+    // https://chromedevtools.github.io/devtools-protocol/tot/Emulation/#method-setCPUThrottlingRate
+    const devtools = await page.context().newCDPSession(page);
+    await devtools.send("Emulation.setCPUThrottlingRate", { rate: 6 });
     const problems: string[] = [];
     page.on("console", (message) => {
       if (message.type() === "error" && !isExpectedApiAnswer(message))

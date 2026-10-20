@@ -46,7 +46,7 @@ This repo sits inside a larger workspace whose `.claude/rules/` also load. The g
 - Set `GIT_SHA` on every compose command that builds or runs, `docker compose run` included. Images are tagged with it and fall back to `local`; a command under another tag makes compose recreate the running stack.
 - `load/run_stepped.py` runs `docker compose down -v` before each step. That deletes the local database and every account in it.
 - The k6 image runs as uid 12345 and writes its summaries to `load/results/` through a bind mount. Docker Desktop on a Mac maps that user to yours; on a Linux host the folder must be writable by uid 12345 first.
-- The browser journeys fail on any `console.error`, uncaught exception or CSP violation in the page, except a 401 from `/api/` (`e2e/browser/fixtures.ts`).
+- The browser journeys fail on any `console.error`, uncaught exception or CSP violation in the page, except a 401 from `/api/` (`e2e/browser/fixtures.ts`). They run on a CPU throttled six times, so a race a fast laptop hides fails here, not only in CI.
 
 ## Branches and deploy
 - Each round has an integration branch, `round/<n>-<name>`, and one parent PR into `main` that merges only when the round is done and tested. Work on a branch off the round branch and open a child PR into it; the human lead reviews every PR. Child PRs are squash-merged, the parent is rebase-merged (`CONTRIBUTING.md` § 1). Releases are `vX.Y.Z` tags; a tag is never moved.
