@@ -56,6 +56,19 @@ def test_session_from_one_replica_is_accepted_by_the_other(client: httpx.Client)
     assert len({answer.headers["x-served-by"] for answer in answers}) == 2
 
 
+def test_etag_from_the_proxy_works_as_if_match_for_a_client_that_accepts_gzip(client: httpx.Client) -> None:
+    client.post("/api/v1/auth/register", json={"email": unique_email(), "password": PASSWORD})
+    task_id = client.post("/api/v1/tasks", json={"title": "edited by a script"}).json()["id"]
+    gzip = {"Accept-Encoding": "gzip"}
+
+    read = client.get(f"/api/v1/tasks/{task_id}", headers=gzip)
+    edited = client.patch(
+        f"/api/v1/tasks/{task_id}", json={"notes": "kept"}, headers={**gzip, "If-Match": read.headers["etag"]}
+    )
+
+    assert (read.headers["etag"], edited.status_code) == ('"1"', 200)
+
+
 SECURITY_HEADERS = {
     "x-content-type-options": "nosniff",
     "referrer-policy": "strict-origin-when-cross-origin",
