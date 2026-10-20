@@ -1,0 +1,8 @@
+12:03:41 before api-5dfc6c6c8d-bjrw6
+12:03:41 before api-5dfc6c6c8d-g8qfx
+12:03:41 before api-5dfc6c6c8d-ql8pm
+12:03:41 rollout restart deployment/api (users at full load)
+12:03:50 rollout complete
+12:04:15 after api-57b64bbb7c-82pbp Running k3d-todo-agent-0
+12:04:15 after api-57b64bbb7c-85chr Running k3d-todo-server-0
+12:04:15 after api-57b64bbb7c-k5snc Running k3d-todo-agent-1

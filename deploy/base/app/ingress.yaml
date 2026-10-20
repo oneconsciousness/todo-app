@@ -1,0 +1,16 @@
+# The cluster's front door sends every request to nginx. Each overlay sets the ingress class and the certificate.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: web
+spec:
+  rules:
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: web
+                port:
+                  name: http

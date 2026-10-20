@@ -1,0 +1,24 @@
+# The app on k3d: served at https://localhost:8443 through k3s's built-in Traefik, with a mkcert certificate.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../../base/app
+configMapGenerator:
+  - name: todo-config
+    behavior: merge
+    literals:
+      - APP_ORIGIN=https://localhost:8443
+      - COOKIE_SECURE=true
+patches:
+  - target:
+      kind: Ingress
+      name: web
+    patch: |-
+      - op: add
+        path: /spec/ingressClassName
+        value: traefik
+      - op: add
+        path: /spec/tls
+        value:
+          - hosts: [localhost]
+            secretName: todo-tls

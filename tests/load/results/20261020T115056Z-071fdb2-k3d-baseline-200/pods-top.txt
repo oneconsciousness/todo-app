@@ -1,0 +1,13 @@
+11:50:57 api-5dfc6c6c8d-2g854=4m/110Mi api-5dfc6c6c8d-bjrw6=4m/109Mi api-5dfc6c6c8d-g8qfx=3m/113Mi db-0=7m/143Mi web-bb9779f65-hl5xf=1m/11Mi web-bb9779f65-kd5z7=1m/5Mi 
+11:51:17 api-5dfc6c6c8d-2g854=89m/129Mi api-5dfc6c6c8d-bjrw6=82m/109Mi api-5dfc6c6c8d-g8qfx=87m/152Mi db-0=21m/146Mi web-bb9779f65-hl5xf=3m/11Mi web-bb9779f65-kd5z7=2m/6Mi 
+11:51:37 api-5dfc6c6c8d-2g854=74m/129Mi api-5dfc6c6c8d-bjrw6=66m/109Mi api-5dfc6c6c8d-g8qfx=61m/152Mi db-0=40m/147Mi web-bb9779f65-hl5xf=8m/11Mi web-bb9779f65-kd5z7=6m/6Mi 
+11:51:57 api-5dfc6c6c8d-2g854=109m/130Mi api-5dfc6c6c8d-bjrw6=99m/109Mi api-5dfc6c6c8d-g8qfx=93m/152Mi db-0=55m/148Mi web-bb9779f65-hl5xf=11m/11Mi web-bb9779f65-kd5z7=12m/6Mi 
+11:52:17 api-5dfc6c6c8d-2g854=144m/130Mi api-5dfc6c6c8d-bjrw6=142m/110Mi api-5dfc6c6c8d-g8qfx=147m/152Mi db-0=82m/148Mi web-bb9779f65-hl5xf=14m/11Mi web-bb9779f65-kd5z7=16m/6Mi 
+11:52:37 api-5dfc6c6c8d-2g854=152m/130Mi api-5dfc6c6c8d-bjrw6=155m/110Mi api-5dfc6c6c8d-g8qfx=162m/152Mi db-0=92m/148Mi web-bb9779f65-hl5xf=16m/11Mi web-bb9779f65-kd5z7=18m/6Mi 
+11:52:57 api-5dfc6c6c8d-2g854=167m/130Mi api-5dfc6c6c8d-bjrw6=164m/110Mi api-5dfc6c6c8d-g8qfx=172m/153Mi db-0=92m/148Mi web-bb9779f65-hl5xf=19m/11Mi web-bb9779f65-kd5z7=20m/6Mi 
+11:53:17 api-5dfc6c6c8d-2g854=165m/130Mi api-5dfc6c6c8d-bjrw6=156m/110Mi api-5dfc6c6c8d-g8qfx=164m/153Mi db-0=92m/149Mi web-bb9779f65-hl5xf=19m/11Mi web-bb9779f65-kd5z7=20m/6Mi 
+11:53:37 api-5dfc6c6c8d-2g854=157m/131Mi api-5dfc6c6c8d-bjrw6=157m/110Mi api-5dfc6c6c8d-g8qfx=158m/153Mi db-0=101m/150Mi web-bb9779f65-hl5xf=17m/11Mi web-bb9779f65-kd5z7=18m/6Mi 
+11:53:57 api-5dfc6c6c8d-2g854=155m/130Mi api-5dfc6c6c8d-bjrw6=149m/110Mi api-5dfc6c6c8d-g8qfx=154m/153Mi db-0=105m/137Mi web-bb9779f65-hl5xf=17m/11Mi web-bb9779f65-kd5z7=18m/6Mi 
+11:54:18 api-5dfc6c6c8d-2g854=147m/130Mi api-5dfc6c6c8d-bjrw6=147m/110Mi api-5dfc6c6c8d-g8qfx=152m/153Mi db-0=105m/129Mi web-bb9779f65-hl5xf=16m/11Mi web-bb9779f65-kd5z7=18m/6Mi 
+11:54:38 api-5dfc6c6c8d-2g854=160m/130Mi api-5dfc6c6c8d-bjrw6=158m/110Mi api-5dfc6c6c8d-g8qfx=171m/153Mi db-0=120m/124Mi web-bb9779f65-hl5xf=17m/11Mi web-bb9779f65-kd5z7=18m/6Mi 
+11:54:58 api-5dfc6c6c8d-2g854=151m/130Mi api-5dfc6c6c8d-bjrw6=151m/110Mi api-5dfc6c6c8d-g8qfx=159m/153Mi db-0=100m/121Mi web-bb9779f65-hl5xf=17m/11Mi web-bb9779f65-kd5z7=19m/6Mi 

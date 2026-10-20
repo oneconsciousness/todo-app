@@ -1,0 +1,18 @@
+# Filled in by the image's entrypoint at start, so one image runs in compose and in Kubernetes:
+# https://github.com/nginx/docker-nginx/blob/master/entrypoint/20-envsubst-on-templates.sh
+# NGINX_LOCAL_RESOLVERS is the DNS server from /etc/resolv.conf: Docker's in compose, the cluster's in Kubernetes.
+# A short validity picks up replicas whose addresses change.
+resolver ${NGINX_LOCAL_RESOLVERS} valid=10s ipv6=off;
+
+upstream api {
+    # "resolve" re-reads the replicas' addresses from DNS; it needs a shared zone.
+    # https://nginx.org/en/docs/http/ngx_http_upstream_module.html#resolve
+    zone api 64k;
+    # API_HOST is the API's DNS name: "api" in compose, the headless Service's full name in Kubernetes.
+    server ${API_HOST}:8000 resolve;
+    # At most 16 idle connections per worker, 32 in all, well under each replica's 200-connection limit.
+    # https://nginx.org/en/docs/http/ngx_http_upstream_module.html#keepalive
+    keepalive 16;
+    # Shorter than uvicorn's 75 s, so nginx never reuses a connection the API is closing.
+    keepalive_timeout 60s;
+}

@@ -1,0 +1,137 @@
+# The API: three to five pods, one uvicorn process each, spread over the nodes. Any pod serves any request.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  labels:
+    app.kubernetes.io/name: api
+spec:
+  # The starting count; the autoscaler (hpa.yaml) owns it after that. kubectl apply leaves a scaled count alone
+  # while this value stays the same, because it patches only fields that changed in the manifest.
+  replicas: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: api
+  strategy:
+    # A new pod is ready before an old one leaves, so three keep serving through a release.
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: api
+    spec:
+      automountServiceAccountToken: false
+      # Covers the 20 s preStop sleep, uvicorn's 20 s drain and a margin.
+      terminationGracePeriodSeconds: 45
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: api
+          # Counts only pods of the same release, so a rolling update can always place its new pod.
+          matchLabelKeys: [pod-template-hash]
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: api
+          image: todo-api
+          ports:
+            - name: http
+              containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: todo-config
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: todo-db
+                  key: password
+            # Kubernetes fills in $(POSTGRES_PASSWORD) from the variable above.
+            - name: DATABASE_URL
+              value: postgresql+asyncpg://todo:$(POSTGRES_PASSWORD)@db:5432/todo
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: todo-api
+                  key: jwt-secret
+          startupProbe:
+            httpGet:
+              path: /livez
+              port: http
+            periodSeconds: 2
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: /livez
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 5
+            failureThreshold: 2
+          lifecycle:
+            # Kubernetes takes the pod out of the Service at once, but nginx re-reads DNS only every 10 s and
+            # the cluster DNS caches for 5 s. Serving 20 s more covers that, then SIGTERM starts uvicorn's drain.
+            # https://kubernetes.io/docs/concepts/containers/container-lifecycle-hooks/#hook-handler-implementations
+            preStop:
+              sleep:
+                seconds: 20
+          resources:
+            requests:
+              cpu: 500m
+              memory: 256Mi
+            # One core is the most a single uvicorn process can use.
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+# Headless: DNS answers with every ready pod, so nginx balances each request across them itself
+# instead of holding kept-alive connections to whichever pod one virtual IP picked.
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+  labels:
+    app.kubernetes.io/name: api
+spec:
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: api
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+---
+# A drained node or a voluntary eviction never leaves fewer than two pods serving.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: api
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: api

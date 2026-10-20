@@ -1,0 +1,4 @@
+11:58:34 delete pod api-5dfc6c6c8d-2g854 (users at full load)
+11:59:22 pod api-5dfc6c6c8d-bjrw6 Running k3d-todo-agent-0
+11:59:22 pod api-5dfc6c6c8d-g8qfx Running k3d-todo-server-0
+11:59:22 pod api-5dfc6c6c8d-ql8pm Running k3d-todo-agent-1

@@ -21,6 +21,7 @@ A full-stack To Do list for an engineering challenge. A user signs in and manage
 python3 scripts/check_hygiene.py      # task markers, debuggers, focused tests, debug-only logs; CI runs it
 GIT_SHA=$(git rev-parse --short HEAD) docker compose up --build --wait   # the stack, on http://localhost:8080
 docker compose down                   # stop it; `down -v` also deletes the database
+python3 deploy/k3d/deploy.py up       # the same app on a local k3d cluster, on https://localhost:8443 (README; in a session, run its steps one by one)
 ```
 Each app's own commands are in its `CLAUDE.md`; `CONTRIBUTING.md` § 5 lists every gate.
 
@@ -28,6 +29,11 @@ The stack is Postgres, a one-shot `migrate` service, two API replicas and nginx.
 - Live-server e2e, `tests/e2e/live/` (pytest, Python 3.14.8): `cd tests/e2e/live && uv run pytest`. CI also runs ruff and mypy there.
 - Browser journeys, `tests/e2e/browser/` (Playwright, Chromium): from that folder, `npm ci && npx playwright install chromium` once, then `npm run check && npm test`. The HTML report goes to `playwright-report/`.
 - Load, `tests/load/` (k6 in a compose container): `GIT_SHA=$(git rev-parse --short HEAD) docker compose --profile load run --rm k6 run /scripts/journey.js`. `VUS` and `HOLD` set the users and the hold time (200 and 3m by default). `python3 tests/load/run_stepped.py` steps up the users to find the capacity. Results go to `tests/load/results/`. Run load tests with the lead present.
+
+The same suites run against the local k3d cluster at https://localhost:8443 (`.claude/rules/deployment.md`):
+- Live: `BASE_URL=https://localhost:8443 API_REPLICAS=3 SSL_CERT_FILE="$(mkcert -CAROOT)/rootCA.pem" uv run pytest`.
+- Browser: `BASE_URL=https://localhost:8443 npm test`. Add `IGNORE_HTTPS_ERRORS=1` only on a Mac that has not run `mkcert -install`.
+- Load: `GIT_SHA=$(git rev-parse --short HEAD) docker compose --profile load-k3d run --rm k6-k3d run /scripts/journey.js`. It reaches the cluster through `host.docker.internal:8443` and skips certificate checks.
 
 ## Config and secrets
 - `.env.example` is the only env file an agent may read or edit, by that exact name; it holds safe local values and never a real secret. Never read or edit `.env` or any other `.env.*` file, or key material. Hooks and the deny list block them, and a Bash command that only names such a file is blocked too. When a setting is needed, add it to `.env.example` with a safe local value; the human copies it into `.env` and sets real values there.
@@ -42,6 +48,7 @@ This repo sits inside a larger workspace whose `.claude/rules/` also load. The g
 - The Bash guards read every word of a command, heredoc bodies included. Text that names an env file or a reader program trips them: write prose with the Write tool, and commit such messages with `git commit -F <file>`.
 - The three Bash guards share `.claude/hooks/shell_words.py`. A change there changes all three; run `python3 -m unittest discover -s .claude/hooks/tests` under `/usr/bin/python3` as well as 3.13.
 - The branch-protection hook blocks every commit on `main`. Branch first.
+- A hook blocks `kubectl get secret` in any form, because it prints Secret data. Use `kubectl describe secret`, which shows only key names and sizes.
 - FastAPI answers validation errors with 422 unless the app's handler maps them. Keep the handler; the contract says 400.
 - Set `GIT_SHA` on every compose command that builds or runs, `docker compose run` included. Images are tagged with it and fall back to `local`; a command under another tag makes compose recreate the running stack.
 - `tests/load/run_stepped.py` runs `docker compose down -v` before each step. That deletes the local database and every account in it.
