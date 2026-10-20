@@ -1,0 +1,57 @@
+# Runs the migrations once per release, with the API image; the deploy waits for it before rolling out the API.
+# It gets the database address alone, never the JWT secret.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: migrate
+  labels:
+    app.kubernetes.io/name: migrate
+spec:
+  backoffLimit: 2
+  activeDeadlineSeconds: 300
+  # Kept a week for its logs. Running the same release again after that finds nothing left to migrate.
+  ttlSecondsAfterFinished: 604800
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: migrate
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: migrate
+          image: todo-api
+          command: ["alembic", "upgrade", "head"]
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: todo-db
+                  key: password
+            # Kubernetes fills in $(POSTGRES_PASSWORD) from the variable above.
+            - name: DATABASE_URL
+              value: postgresql+asyncpg://todo:$(POSTGRES_PASSWORD)@db:5432/todo
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

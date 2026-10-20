@@ -1,0 +1,14 @@
+# The local cluster: one server and two agent nodes, so the API's three pods run on three machines.
+# `k3d cluster create --config deploy/k3d/cluster.yaml`; format: https://k3d.io/stable/usage/configfile/
+apiVersion: k3d.io/v1alpha5
+kind: Simple
+metadata:
+  name: todo
+servers: 1
+agents: 2
+image: rancher/k3s:v1.36.4-k3s1
+ports:
+  # The cluster's HTTPS front door on the Mac's loopback address only, next to compose's 8080.
+  - port: 127.0.0.1:8443:443
+    nodeFilters:
+      - loadbalancer

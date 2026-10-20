@@ -31,6 +31,8 @@ CLAUDE.local.md
 # Scratch folders agents may create
 _temp/
 _ignore/
+# Per-release kustomizations that deploy/k3d/deploy.py writes
+deploy/.release/
 
 # Claude Code's own MCP config is per user
 .mcp.json

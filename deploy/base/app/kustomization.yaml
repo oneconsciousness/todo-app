@@ -1,0 +1,16 @@
+# The API, nginx and the front door. The settings' ConfigMap name carries a hash of its contents,
+# so a changed setting rolls the API: https://kubectl.docs.kubernetes.io/references/kustomize/kustomization/configmapgenerator/
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: todo
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: todo-app
+resources:
+  - api.yaml
+  - web.yaml
+  - ingress.yaml
+configMapGenerator:
+  - name: todo-config
+    literals:
+      - LOG_LEVEL=INFO

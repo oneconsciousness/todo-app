@@ -1,0 +1,10 @@
+# The namespace and Postgres. Applied first; the migration Job and the app follow once Postgres is ready.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: todo
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: todo-app
+resources:
+  - namespace.yaml
+  - db.yaml

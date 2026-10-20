@@ -1,0 +1,9 @@
+# The migration Job, kept apart so each release can give it a name of its own.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: todo
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: todo-app
+resources:
+  - job.yaml
