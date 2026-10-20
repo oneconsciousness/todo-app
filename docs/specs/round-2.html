@@ -1,0 +1,539 @@
+<title>todo-app Round 2 Spec</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one reading column with full-width figures; decisions as ruled rows, not cards. */
+:root {
+  --bg: #f5f6f8; --surface: #ffffff; --fg: #15181e; --muted: #596070; --line: #d8dce3;
+  --accent: #2a52c4; --accent-soft: #e2e8fa; --ok: #1d7448; --ok-soft: #dcefe4; --warn: #8f5500; --warn-soft: #f9ecd5;
+  --display: "IBM Plex Sans Condensed", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+  --body: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0f1216; --surface: #161a21; --fg: #e6e9ef; --muted: #9aa2b1; --line: #2a303a;
+  --accent: #91a9ff; --accent-soft: #1d2646; --ok: #6fd09b; --ok-soft: #142d1e; --warn: #efb75e; --warn-soft: #382811; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0f1216; --surface: #161a21; --fg: #e6e9ef; --muted: #9aa2b1; --line: #2a303a;
+  --accent: #91a9ff; --accent-soft: #1d2646; --ok: #6fd09b; --ok-soft: #142d1e; --warn: #efb75e; --warn-soft: #382811; color-scheme: dark }
+
+body { background: var(--bg); color: var(--fg); font: 400 16px/1.6 var(--body); padding-inline: 16px; padding-block: 40px 72px; }
+main { max-width: 920px; margin: 0 auto; display: grid; gap: 56px; }
+.prose { max-width: 68ch; }
+h1, h2, h3 { font-family: var(--display); font-weight: 600; line-height: 1.15; text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(2rem, 5vw, 2.75rem); letter-spacing: -0.01em; }
+h2 { font-size: 1.6rem; }
+h3 { font-size: 1.15rem; }
+p { margin: 0; }
+section { display: grid; gap: 18px; min-width: 0; }
+code, .mono { font-family: var(--mono); font-size: 0.88em; }
+code { background: var(--accent-soft); padding: 0.05em 0.35em; border-radius: 4px; overflow-wrap: anywhere; }
+a { color: var(--accent); }
+.eyebrow { font: 500 0.75rem/1 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.lede { font-size: 1.1rem; color: var(--muted); max-width: 64ch; }
+
+header { display: grid; gap: 16px; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px 20px; color: var(--muted); font-size: 0.9rem; }
+.rounds { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.rounds div { padding: 14px 16px; display: grid; gap: 4px; }
+.rounds div + div { border-left: 1px solid var(--line); }
+.rounds .now { background: var(--accent-soft); }
+.rounds b { font-family: var(--display); font-size: 1.05rem; }
+.rounds span { color: var(--muted); font-size: 0.9rem; }
+nav.toc { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 0.92rem; }
+
+figure { margin: 0; display: grid; gap: 10px; min-width: 0; }
+.fig-scroll { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 12px; }
+.fig-scroll svg { display: block; width: 100%; min-width: 640px; height: auto; color: var(--fg); }
+figcaption { color: var(--muted); font-size: 0.92rem; max-width: 72ch; }
+svg text { font-family: var(--body); font-size: 12.5px; fill: currentColor; }
+svg .t-strong { font-weight: 600; font-size: 13.5px; }
+svg .t-mono { font-family: var(--mono); font-size: 12px; }
+svg .t-muted { fill: var(--muted); }
+svg .t-accent { fill: var(--accent); font-weight: 600; }
+svg .box { fill: var(--surface); stroke: currentColor; stroke-width: 1.25; }
+svg .box-accent { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.5; }
+svg .box-dashed { fill: var(--surface); stroke: currentColor; stroke-width: 1.25; stroke-dasharray: 5 4; }
+svg .zone { fill: none; stroke: var(--muted); stroke-width: 1; stroke-dasharray: 6 5; }
+svg .edge { fill: none; stroke: currentColor; stroke-width: 1.4; }
+svg .edge-dashed { fill: none; stroke: currentColor; stroke-width: 1.4; stroke-dasharray: 5 4; }
+svg .edge-accent { fill: none; stroke: var(--accent); stroke-width: 1.6; }
+svg .head { fill: currentColor; }
+svg .head-accent { fill: var(--accent); }
+svg .row { fill: var(--surface); stroke: var(--line); stroke-width: 1; }
+svg .row-changed { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.4; }
+
+.decisions { display: grid; border-top: 1px solid var(--line); }
+.decision { display: grid; grid-template-columns: 4.5rem minmax(0, 1fr); gap: 4px 18px; padding: 20px 0; border-bottom: 1px solid var(--line); }
+.decision .id { font: 500 0.85rem/1.6 var(--mono); color: var(--muted); padding-top: 2px; }
+.decision .body { display: grid; gap: 8px; min-width: 0; }
+.decision .title-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; }
+.decision dl { display: grid; grid-template-columns: 7.5rem minmax(0, 1fr); gap: 4px 14px; margin: 0; font-size: 0.95rem; }
+.decision dt { color: var(--muted); }
+.decision dd { margin: 0; min-width: 0; }
+.pill { font: 500 0.72rem/1 var(--mono); letter-spacing: 0.04em; text-transform: uppercase; padding: 5px 8px; border-radius: 999px; white-space: nowrap; }
+.pill-call { background: var(--warn-soft); color: var(--warn); }
+.pill-locked { background: var(--ok-soft); color: var(--ok); }
+
+.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 0.92rem; }
+th, td { text-align: left; vertical-align: top; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+tr:last-child td { border-bottom: 0; }
+th { font: 500 0.75rem/1.4 var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); background: var(--bg); }
+td.mono, td code { white-space: nowrap; }
+.codes { font-family: var(--mono); font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+
+ol.calls { margin: 0; padding-left: 1.4rem; display: grid; gap: 10px; max-width: 72ch; }
+ol.calls li::marker { font-family: var(--mono); color: var(--muted); }
+ul.plain { margin: 0; padding-left: 1.2rem; display: grid; gap: 6px; max-width: 72ch; }
+.two-col { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+.two-col > div { display: grid; gap: 10px; align-content: start; min-width: 0; }
+footer { color: var(--muted); font-size: 0.88rem; border-top: 1px solid var(--line); padding-top: 16px; }
+
+@media (max-width: 640px) {
+  .rounds { grid-template-columns: 1fr; }
+  .rounds div + div { border-left: 0; border-top: 1px solid var(--line); }
+  .decision { grid-template-columns: 1fr; }
+  .decision dl { grid-template-columns: 1fr; gap: 0 0; }
+  .decision dd { margin-bottom: 8px; }
+  .two-col { grid-template-columns: 1fr; }
+}
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+</style>
+
+<main>
+  <header>
+    <span class="eyebrow">todo-app · spec · revision 3 · signed off</span>
+    <h1>Round 2: the same app on a local Kubernetes cluster</h1>
+    <p class="lede">The high-level choices for running the round 1 app on k3d, and how the pieces fit, before the detailed plan is written. The app code and images stay the same; what surrounds them changes. Each choice names what it beat and what it costs. Revision 1 marked the choices that follow from the kickoff, the round 1 spec or the deployment rule as locked, and put the rest to the lead. Revision 2 records the lead's calls: every choice is now <span class="pill pill-locked">locked</span>, and two are <span class="pill pill-call">deferred</span>. Revision 3 adds the API autoscaler, which the lead moved into this round.</p>
+    <div class="meta"><span>2026-10-20 · revision 3</span><span>Lives at <code>docs/specs/round-2.html</code></span><span>Builds on <code>docs/specs/round-1.html</code> and <code>docs/kickoff.md</code></span><span>Rules: <code>.claude/rules/deployment.md</code></span></div>
+    <div class="rounds" aria-label="The three rounds">
+      <div><span class="eyebrow">Round 1 · merged</span><b>Containers</b><span><code>docker compose up</code> on a Mac. At least 1,000 users.</span></div>
+      <div class="now"><span class="eyebrow">Round 2 · this spec</span><b>Local k3d</b><span>Same images, Kubernetes manifests, three to five API replicas spread over three nodes.</span></div>
+      <div><span class="eyebrow">Round 3</span><b>AKS live</b><span>Azure, deployed by GitHub Actions, if time permits.</span></div>
+    </div>
+    <nav class="toc" aria-label="Sections">
+      <a href="#topology">Topology</a><a href="#decisions">Decisions</a><a href="#shutdown">Shutdown</a><a href="#deploy">Deploy order</a><a href="#proof">Proving it</a><a href="#tests">Tests</a><a href="#order">Order of work</a><a href="#round3">Round 3</a><a href="#outcome">Outcome</a><a href="#done">Done means</a><a href="#calls">Sign-off</a>
+    </nav>
+  </header>
+
+  <section id="topology">
+    <span class="eyebrow">Solution diagram</span>
+    <h2>One front door, three API pods on three nodes, one database</h2>
+    <p class="prose">The browser talks to <code>https://localhost:8443</code>. k3s's built-in Traefik ends TLS and sends every request to the web pods. nginx in those pods does exactly what it does in compose: serves the SPA, sets the security headers and forwards <code>/api/*</code>. It reaches the API through a headless Service, which lists each pod, so every request is balanced across the three pods rather than pinned to one.</p>
+    <figure>
+      <div class="fig-scroll">
+        <svg viewBox="0 0 980 490" role="img" aria-label="Round 2 topology: the browser calls https://localhost:8443; Traefik ends TLS and sends traffic to two nginx web pods; nginx balances /api requests per request across three API pods, one on each node, through a headless Service; all three use one Postgres StatefulSet pod with a volume; a migrate Job runs first and must complete before the API rolls out; secrets are created by the lead; the tests drive the same front door.">
+          <defs>
+            <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="head"/></marker>
+            <marker id="arr-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="head-accent"/></marker>
+          </defs>
+          <rect class="zone" x="176" y="20" width="784" height="452" rx="10"/>
+          <text x="192" y="44" class="t-muted t-mono">k3d cluster · 1 server + 2 agents · namespace todo</text>
+
+          <rect class="box" x="20" y="196" width="124" height="64" rx="8"/>
+          <text x="82" y="224" text-anchor="middle" class="t-strong">Browser</text>
+          <text x="82" y="244" text-anchor="middle" class="t-muted">React SPA</text>
+
+          <rect class="box" x="196" y="196" width="136" height="64" rx="8"/>
+          <text x="264" y="224" text-anchor="middle" class="t-strong">Traefik</text>
+          <text x="264" y="244" text-anchor="middle" class="t-muted">Ingress · TLS</text>
+
+          <rect class="box" x="384" y="158" width="140" height="56" rx="8"/>
+          <text x="454" y="182" text-anchor="middle" class="t-strong">web · nginx</text>
+          <text x="454" y="201" text-anchor="middle" class="t-muted">SPA · /api proxy</text>
+          <rect class="box" x="384" y="242" width="140" height="56" rx="8"/>
+          <text x="454" y="266" text-anchor="middle" class="t-strong">web · nginx</text>
+          <text x="454" y="285" text-anchor="middle" class="t-muted">second replica</text>
+
+          <rect class="box-accent" x="620" y="90" width="150" height="56" rx="8"/>
+          <text x="695" y="114" text-anchor="middle" class="t-strong">api</text>
+          <text x="695" y="133" text-anchor="middle" class="t-muted t-mono">node: server-0</text>
+          <rect class="box-accent" x="620" y="200" width="150" height="56" rx="8"/>
+          <text x="695" y="224" text-anchor="middle" class="t-strong">api</text>
+          <text x="695" y="243" text-anchor="middle" class="t-muted t-mono">node: agent-0</text>
+          <rect class="box-accent" x="620" y="310" width="150" height="56" rx="8"/>
+          <text x="695" y="334" text-anchor="middle" class="t-strong">api</text>
+          <text x="695" y="353" text-anchor="middle" class="t-muted t-mono">node: agent-1</text>
+
+          <rect class="box" x="810" y="196" width="130" height="64" rx="8"/>
+          <text x="875" y="224" text-anchor="middle" class="t-strong">postgres-0</text>
+          <text x="875" y="244" text-anchor="middle" class="t-muted">StatefulSet · volume</text>
+
+          <rect class="box-dashed" x="810" y="70" width="140" height="56" rx="8"/>
+          <text x="880" y="94" text-anchor="middle" class="t-strong">Secrets</text>
+          <text x="880" y="113" text-anchor="middle" class="t-muted">you create them</text>
+
+          <rect class="box-dashed" x="620" y="402" width="150" height="52" rx="8"/>
+          <text x="695" y="424" text-anchor="middle" class="t-strong">migrate Job</text>
+          <text x="695" y="442" text-anchor="middle" class="t-muted t-mono">alembic upgrade head</text>
+
+          <rect class="box-dashed" x="20" y="380" width="124" height="64" rx="8"/>
+          <text x="82" y="408" text-anchor="middle" class="t-strong">Tests</text>
+          <text x="82" y="428" text-anchor="middle" class="t-muted">live · browser · k6</text>
+
+          <line class="edge" x1="144" y1="228" x2="194" y2="228" marker-end="url(#arr)"/>
+          <text x="169" y="218" text-anchor="middle" class="t-mono">:8443</text>
+
+          <path class="edge" d="M332 218 L382 190" marker-end="url(#arr)"/>
+          <path class="edge" d="M332 238 L382 266" marker-end="url(#arr)"/>
+
+          <path class="edge-accent" d="M524 186 L560 228"/>
+          <path class="edge-accent" d="M524 270 L560 228"/>
+          <circle cx="560" cy="228" r="4" class="head-accent"/>
+          <path class="edge-accent" d="M560 228 L618 120" marker-end="url(#arr-a)"/>
+          <path class="edge-accent" d="M560 228 L618 228" marker-end="url(#arr-a)"/>
+          <path class="edge-accent" d="M560 228 L618 336" marker-end="url(#arr-a)"/>
+          <text x="528" y="146" text-anchor="middle" class="t-accent">/api/* · per request</text>
+          <text x="556" y="322" text-anchor="end" class="t-muted t-mono">headless Service</text>
+
+          <path class="edge" d="M770 118 L808 214" marker-end="url(#arr)"/>
+          <path class="edge" d="M770 228 L808 228" marker-end="url(#arr)"/>
+          <path class="edge" d="M770 338 L808 242" marker-end="url(#arr)"/>
+          <text x="845" y="282" text-anchor="middle" class="t-mono">≤ 45 conns</text>
+
+          <path class="edge" d="M770 428 L900 428 L900 262" marker-end="url(#arr)"/>
+          <text x="892" y="380" text-anchor="end" class="t-muted">upgrades</text>
+          <text x="892" y="396" text-anchor="end" class="t-muted">schema</text>
+          <path class="edge-dashed" d="M695 402 L695 368" marker-end="url(#arr)"/>
+          <text x="560" y="390" class="t-muted">completes first</text>
+
+          <path class="edge-dashed" d="M144 412 L264 412 L264 262" marker-end="url(#arr)"/>
+          <text x="152" y="404" class="t-muted">drive :8443</text>
+        </svg>
+      </div>
+      <figcaption>The migrate Job uses the API image and gets the database address alone. It must complete before the API rolls out, so no pod serves an older schema. An autoscaler adds up to two more API pods under load (D34). The connection budget holds at the most pods: 5 × 15 connections = 75, under 80% of Postgres's 100.</figcaption>
+    </figure>
+  </section>
+
+  <section id="decisions">
+    <span class="eyebrow">High-level choices</span>
+    <h2>Decisions</h2>
+    <p class="prose">Numbering continues from round 1 (D1 to D20). Locked ones follow from documents you already signed off. The calls in revision 1 were my recommendations; the lead's answers are recorded under <a href="#calls">Sign-off</a>.</p>
+    <div class="decisions">
+
+      <div class="decision"><div class="id">D21</div><div class="body">
+        <div class="title-row"><h3>A three-node k3d cluster</h3><span class="pill pill-locked">locked</span></div>
+        <dl>
+          <dt>Choice</dt><dd>k3d 5.9.0 running k3s v1.36.4, one server and two agent nodes, from a config file at <code>deploy/k3d/cluster.yaml</code>. Port 8443 on the Mac maps to 443 on the cluster's load balancer. The three API pods are spread one per node.</dd>
+          <dt>Instead of</dt><dd>One node, which is lighter but puts every replica on one machine.</dd>
+          <dt>Why</dt><dd>Pods on different nodes talk over the cluster network, as they will on AKS. A node going away is something we can show, not only describe.</dd>
+          <dt>Costs</dt><dd>About 1.5 GB more of Docker's memory. Docker has 8 GB here, which is enough.</dd>
+          <dt>Found</dt><dd>k3d's own load balancer allows 1,024 connections by default and dropped them past about 500 users. The cluster config raises it to 8,192.</dd>
+        </dl>
+      </div></div>
+
+      <div class="decision"><div class="id">D22</div><div class="body">
+        <div class="title-row"><h3>One Kustomize base, one overlay per target</h3><span class="pill pill-locked">locked</span></div>
+        <dl>
+          <dt>Choice</dt><dd><code>deploy/base/</code> holds every resource once. <code>deploy/overlays/k3d/</code> sets what differs locally: hostname, TLS secret name, image tags, sizes. Round 3 adds <code>deploy/overlays/aks/</code>.</dd>
+          <dt>Instead of</dt><dd>A Helm chart, or copied manifests per environment.</dd>
+          <dt>Why</dt><dd>Plain YAML you can read line by line, and <code>kubectl</code> builds it with no extra tool. The deployment rule asks for this shape.</dd>
+        </dl>
+      </div></div>
+
+      <div class="decision"><div class="id">D23</div><div class="body">
+        <div class="title-row"><h3>The same images, tagged with the commit</h3><span class="pill pill-locked">locked</span></div>
+        <dl>
+          <dt>Choice</dt><dd>The compose build makes <code>todo-api:&lt;sha&gt;</code> and <code>todo-web:&lt;sha&gt;</code>; <code>k3d image import</code> copies them onto every node. Pods never pull, so no registry is needed in round 2.</dd>
+          <dt>Instead of</dt><dd>A local registry, or images built separately for the cluster.</dd>
+          <dt>Why</dt><dd>What passed in compose is exactly what runs in k3d. Round 3 pushes the same images to Azure Container Registry.</dd>
+        </dl>
+      </div></div>
+
+      <div class="decision"><div class="id">D24</div><div class="body">
+        <div class="title-row"><h3>Postgres as a one-pod StatefulSet</h3><span class="pill pill-locked">locked</span></div>
+        <dl>
+          <dt>Choice</dt><dd>The same Postgres 18.6 image as compose, one pod with a volume from k3s's local-path storage.</dd>
+          <dt>Instead of</dt><dd>A Postgres operator with replicas and backups, such as CloudNativePG.</dd>
+          <dt>Why</dt><dd>Round 3 uses Azure's managed Postgres, which brings its own replicas and backups. An operator here would be built once and thrown away.</dd>
+          <dt>Costs</dt><dd>The database is a single pod. Losing its node loses the service until it comes back; the data survives on the volume.</dd>
+        </dl>
+      </div></div>
+
+      <div class="decision"><div class="id">D25</div><div class="body">
+        <div class="title-row"><h3>Migrations run as a Job, before the API rolls out</h3><span class="pill pill-locked">locked</span></div>
+        <dl>
+          <dt>Choice</dt><dd>A Job named <code>migrate-&lt;sha&gt;</code> runs <code>alembic upgrade head</code> with the API image and the database address alone. The deploy waits for it to complete, then rolls out the API.</dd>
+          <dt>Instead of</dt><dd>Running migrations at start-up in every pod, or in an init container.</dd>
+          <dt>Why</dt><dd>One run per release, never three pods racing to migrate. A failed migration stops the release before any pod changes.</dd>
+        </dl>
+      </div></div>
+
+      <div class="decision"><div class="id">D26</div><div class="body">
+        <div class="title-row"><h3>Three API pods that roll without dropping a request</h3><span class="pill pill-locked">locked</span></div>
+        <dl>
+          <dt>Choice</dt><dd>A Deployment that starts with 3 replicas, one uvicorn process each; the autoscaler in D34 takes it to 5 under load. A rolling update adds a new pod before removing an old one, and a disruption budget keeps at least 2 serving. CPU and memory requests and limits are set; the CPU limit is one core, the most one uvicorn process can use. Probes: <code>/livez</code> for liveness, <code>/readyz</code> for readiness.</dd>
+          <dt>Instead of</dt><dd>More uvicorn workers per pod, which hides failures inside one pod and splits the connection budget unevenly.</dd>
+          <dt>Why</dt><dd>The round 1 spec planned 3 replicas and a budget of 45 connections for round 2. Scaling stays a replica count.</dd>
+        </dl>
+      </div></div>
+
+      <div class="decision"><div class="id">D27</div><div class="body">
+        <div class="title-row"><h3>nginx stays the front of the app; Traefik only ends TLS</h3><span class="pill pill-locked">locked</span></div>
+        <dl>
+          <dt>Choice</dt><dd>One Ingress sends everything to the web Service (2 nginx pods). nginx forwards <code>/api/*</code> to a headless API Service and re-reads its pod list from DNS, as it does in compose. The nginx image reads the DNS server and the API's address from its environment at start-up, through the image's own template step, so one image runs in both places.</dd>
+          <dt>Instead of</dt><dd>Traefik routing <code>/api</code> straight to the API. That needs the security headers, CSP, body limit and request id written a second time as Traefik middleware, and compose and k3d would no longer run the same front end. Or a normal Service, where nginx's kept-alive connections stick to one pod: the load skews and a rollout drains slowly.</dd>
+          <dt>Why</dt><dd>One nginx config, already tested by every suite, guards the app in all three rounds.</dd>
+          <dt>Costs</dt><dd>nginx learns about pod changes through DNS, up to about 15 seconds late. D29 covers that.</dd>
+        </dl>
+      </div></div>
+
+      <div class="decision"><div class="id">D28</div><div class="body">
+        <div class="title-row"><h3>TLS on k3d with a locally trusted certificate</h3><span class="pill pill-locked">locked</span></div>
+        <dl>
+          <dt>Choice</dt><dd>mkcert makes a certificate for <code>localhost</code> that this Mac trusts. You create it and load it as a TLS Secret. The cookie turns <code>Secure</code>, which the app allows only with a real JWT secret, never the example one.</dd>
+          <dt>Instead of</dt><dd>Traefik's own self-signed certificate: no setup, but the browser warns and the tests must skip certificate checks. Or plain HTTP until AKS: the simplest, but the <code>Secure</code> cookie, HTTPS origin and TLS ending would first be tried on Azure.</dd>
+          <dt>Why</dt><dd>The round 1 spec turns the cookie <code>Secure</code> once TLS exists. Rehearsing that locally finds a broken sign-in here rather than on AKS.</dd>
+          <dt>Costs</dt><dd>One <code>brew install mkcert</code> and <code>mkcert -install</code>, which adds a local certificate authority to the Mac's trust store. That is your step, and a reviewer's too.</dd>
+        </dl>
+      </div></div>
+
+      <div class="decision"><div class="id">D29</div><div class="body">
+        <div class="title-row"><h3>A pod leaves the rotation before it stops</h3><span class="pill pill-locked">locked</span></div>
+        <dl>
+          <dt>Choice</dt><dd>Each API pod has a 20-second <code>preStop</code> sleep, using Kubernetes's built-in sleep action so no shell is needed. Then uvicorn gets SIGTERM and finishes in-flight requests within its existing 20-second limit. The grace period is 45 seconds. The deployment rule's line "<code>/readyz</code> fails once shutdown starts" is replaced by this.</dd>
+          <dt>Instead of</dt><dd>Making <code>/readyz</code> fail after SIGTERM. Kubernetes already takes a terminating pod out of the Service the moment shutdown starts, so a failing probe adds nothing. The gap is DNS: nginx can keep sending to the pod for up to about 15 seconds, and only the sleep covers that.</dd>
+          <dt>Why</dt><dd>A rolling update or a killed pod should fail no requests. The timeline below shows why 20 seconds is enough.</dd>
+        </dl>
+      </div></div>
+
+      <div class="decision"><div class="id">D30</div><div class="body">
+        <div class="title-row"><h3>Settings in a ConfigMap; secrets you create</h3><span class="pill pill-locked">locked</span></div>
+        <dl>
+          <dt>Choice</dt><dd>A ConfigMap holds the origin, the cookie flag and the log level. Two Secrets hold the database password with the JWT secret, and the TLS certificate. The deploy script creates them on the first deploy, unless they already exist: random values for the first, a mkcert certificate for the second. Nothing is printed, kept on disk or committed. To use your own values, create the Secrets first with the commands in the README. The pod builds <code>DATABASE_URL</code> from the password at start, so the password is stored once.</dd>
+          <dt>Instead of</dt><dd>Secrets committed in any form, including encrypted ones.</dd>
+          <dt>Why</dt><dd>The kickoff and the deployment rule: secrets are never in the repo, and I never see them. Round 3 moves them to Key Vault.</dd>
+          <dt>Changed</dt><dd>Revision 1 had you type the commands. The lead asked for round 2 to be finished while away, so the script creates the Secrets instead; the values stay unseen. Your call on return.</dd>
+        </dl>
+      </div></div>
+
+      <div class="decision"><div class="id">D31</div><div class="body">
+        <div class="title-row"><h3>Kubernetes's defaults for Pod Security and the network, for now</h3><span class="pill pill-call">deferred</span></div>
+        <dl>
+          <dt>Choice</dt><dd>No Pod Security level on the namespace and no network policies yet. Each container still runs as a non-root user with a read-only filesystem and no capabilities, as the deployment rule asks and as in compose.</dd>
+          <dt>Instead of</dt><dd>The <code>restricted</code> Pod Security level and default-deny network policies, which revision 1 recommended.</dd>
+          <dt>Why</dt><dd>The lead's call: defaults for now. Both are in <code>FUTURE.md</code>.</dd>
+          <dt>Costs</dt><dd>Any pod in the cluster can reach Postgres. Only our pods run there.</dd>
+        </dl>
+      </div></div>
+
+      <div class="decision"><div class="id">D32</div><div class="body">
+        <div class="title-row"><h3>One deploy script, and every apply still asks you</h3><span class="pill pill-locked">locked</span></div>
+        <dl>
+          <dt>Choice</dt><dd><code>deploy/k3d/deploy.py</code> (Python standard library) runs the order below for the README and CI. In this session I run the same steps one at a time, so each <code>kubectl apply</code> and <code>delete</code> asks you first, as the guard intends.</dd>
+          <dt>Instead of</dt><dd>Me running the script in the session, which would apply manifests without asking you for each one.</dd>
+          <dt>Why</dt><dd>A reviewer gets one command, and you keep the say over every change to a running cluster.</dd>
+        </dl>
+      </div></div>
+
+      <div class="decision"><div class="id">D33</div><div class="body">
+        <div class="title-row"><h3>k3d runs on the Mac only</h3><span class="pill pill-call">deferred</span></div>
+        <dl>
+          <dt>Choice</dt><dd>CI keeps its round 1 jobs. The k3d suites and disruption runs are run on this Mac and their results recorded.</dd>
+          <dt>Instead of</dt><dd>A k3d job on every PR, which revision 1 recommended.</dd>
+          <dt>Why</dt><dd>The lead's call: local Mac only. A k3d CI job is in <code>FUTURE.md</code>.</dd>
+          <dt>Costs</dt><dd>A change that breaks the cluster but not compose is caught only when someone runs it on k3d.</dd>
+        </dl>
+      </div></div>
+
+      <div class="decision"><div class="id">D34</div><div class="body">
+        <div class="title-row"><h3>The API scales itself between three and five pods</h3><span class="pill pill-locked">locked</span></div>
+        <dl>
+          <dt>Choice</dt><dd>A HorizontalPodAutoscaler on the API: at least 3 pods, at most 5. It adds a pod when the pods average over 70% of their CPU request, at once, and removes one only after two quiet minutes. It reads CPU from the metrics server k3s ships.</dd>
+          <dt>Instead of</dt><dd>A fixed 3 pods, scaled by hand, which revision 2 had and which left the autoscaler to round 3.</dd>
+          <dt>Why</dt><dd>The lead's call: "yes, add the autoscaler in round 2. Its critical." Kubernetes should follow the load, and k3d can prove it does.</dd>
+          <dt>Costs</dt><dd>Five is the ceiling: each pod opens up to 15 database connections, and 6 pods would pass 80% of Postgres's 100. Going higher needs a connection pooler in front of Postgres, which Azure's managed Postgres brings in round 3. Postgres itself stays one pod; a database grows by replication, not by copies of the pod.</dd>
+        </dl>
+      </div></div>
+
+    </div>
+  </section>
+
+  <section id="shutdown">
+    <span class="eyebrow">Why D29 works</span>
+    <h2>A pod leaves the rotation before it stops</h2>
+    <p class="prose">When a pod is deleted, by a rolling update or by hand, Kubernetes removes it from the Service at once. nginx still holds the old pod list for up to about 15 seconds: its own 10-second re-read plus the cluster DNS's 5-second record lifetime. The pod keeps serving through that window, then drains.</p>
+    <figure>
+      <div class="fig-scroll">
+        <svg viewBox="0 0 940 250" role="img" aria-label="Timeline of an API pod's shutdown over 45 seconds. At 0 seconds Kubernetes marks the pod terminating and removes it from the Service. nginx may still send requests to it for up to 15 seconds. The pod sleeps for 20 seconds and keeps serving, then gets SIGTERM, and uvicorn finishes in-flight requests within 20 seconds. At 45 seconds Kubernetes would force it to stop.">
+          <defs>
+            <marker id="arr2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="head"/></marker>
+          </defs>
+          <text x="20" y="54" class="t-strong">Kubernetes</text>
+          <text x="20" y="104" class="t-strong">nginx</text>
+          <text x="20" y="154" class="t-strong">api pod</text>
+
+          <line class="edge-dashed" x1="130" y1="30" x2="130" y2="200"/>
+          <line class="edge-dashed" x1="472" y1="30" x2="472" y2="200"/>
+          <line class="edge-dashed" x1="814" y1="30" x2="814" y2="200"/>
+          <line class="edge-dashed" x1="900" y1="30" x2="900" y2="200"/>
+
+          <text x="140" y="54">pod marked terminating · out of the Service</text>
+
+          <rect class="box-dashed" x="130" y="86" width="257" height="28" rx="4"/>
+          <text x="140" y="105" class="t-muted">may still send here (≤ 15 s)</text>
+          <text x="482" y="105">uses the other pods</text>
+
+          <rect class="box-accent" x="130" y="136" width="342" height="28" rx="4"/>
+          <text x="140" y="155">preStop sleep · still serving</text>
+          <rect class="box" x="472" y="136" width="342" height="28" rx="4"/>
+          <text x="482" y="155">SIGTERM · uvicorn finishes in-flight (≤ 20 s)</text>
+          <text x="822" y="155" class="t-muted">exits</text>
+
+          <line class="edge" x1="130" y1="210" x2="904" y2="210" marker-end="url(#arr2)"/>
+          <text x="130" y="232" text-anchor="middle" class="t-mono">0 s</text>
+          <text x="472" y="232" text-anchor="middle" class="t-mono">20 s</text>
+          <text x="814" y="232" text-anchor="middle" class="t-mono">40 s</text>
+          <text x="900" y="232" text-anchor="middle" class="t-mono">45 s</text>
+        </svg>
+      </div>
+      <figcaption>The sleep outlasts nginx's stale window, so no new request reaches a pod after it starts closing. If one ever did, nginx retries a refused GET on another pod; it never retries a write. The 45-second grace period covers the sleep, the drain and a small margin.</figcaption>
+    </figure>
+  </section>
+
+  <section id="deploy">
+    <span class="eyebrow">Deploy order</span>
+    <h2>Each step waits for the one before</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Step</th><th>What happens</th><th>Who runs it</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td><code>k3d cluster create --config deploy/k3d/cluster.yaml</code>: three nodes, port 8443</td><td>Me, once you have reviewed the config</td></tr>
+          <tr><td>2</td><td>Build the images with compose, then <code>k3d image import</code> them onto the nodes</td><td>Me</td></tr>
+          <tr><td>3</td><td>Create the namespace, then the two Secrets from the commands I give you</td><td>You</td></tr>
+          <tr><td>4</td><td>Apply Postgres; wait until it is ready</td><td>Me, and the apply asks you</td></tr>
+          <tr><td>5</td><td>Apply the <code>migrate-&lt;sha&gt;</code> Job; wait until it completes. A failure stops here</td><td>Me, and the apply asks you</td></tr>
+          <tr><td>6</td><td>Apply the API, web, Ingress and network policies; wait for each rollout to finish</td><td>Me, and the apply asks you</td></tr>
+          <tr><td>7</td><td>Check <code>https://localhost:8443</code>: the app loads, and API responses come from all three pods</td><td>Me</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="prose">Running the same commit again changes nothing: the Job already completed and the manifests match what is running. A new commit makes a new Job name and a new image tag, so it rolls.</p>
+  </section>
+
+  <section id="proof">
+    <span class="eyebrow">Your round 1 point 3</span>
+    <h2>Proving the API keeps nothing in memory</h2>
+    <p class="prose">You asked in the round 1 review to prove that no replica holds state of its own, and moved it to this round. Each claim below has a run that would fail if it were false.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Claim</th><th>How it is shown</th><th>Where</th></tr></thead>
+        <tbody>
+          <tr><td>Any pod serves any request</td><td>One signed-in session makes requests until all three pods (by <code>X-Served-By</code>) have answered, and each one sees the same tasks</td><td>Live suite, every run</td></tr>
+          <tr><td>Losing a pod loses nothing</td><td>200 users under load; an API pod is deleted. No request fails, and every user's tasks check out afterwards</td><td>k6</td></tr>
+          <tr><td>A release drops no request</td><td>The same load through a rolling restart of the API</td><td>k6</td></tr>
+          <tr><td>Nothing survives in pods, and nothing needs to</td><td>Every API pod is replaced while users are signed in. They stay signed in, and their tasks and order are intact</td><td>k6</td></tr>
+          <tr><td>Scaling is a number</td><td>Scale the API from 3 to 5 pods and back under load; no request fails</td><td>k6</td></tr>
+          <tr><td>The API follows the load</td><td>Users rise past what 3 pods carry at 70% CPU; the autoscaler adds pods up to 5, then removes them once the load is gone. No request fails</td><td>k6</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="tests">
+    <span class="eyebrow">Tests</span>
+    <h2>The same suites, a new address</h2>
+    <p class="prose">Round 2 changes no app behaviour, so the unit and integration suites stay as they are. The stack-wide suites take the cluster's address and its certificate and run unchanged; each new test names a failure only the cluster can show.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Layer</th><th>Round 2 change</th></tr></thead>
+        <tbody>
+          <tr><td>Backend, frontend</td><td>None. CI runs them on every PR, as in round 1.</td></tr>
+          <tr><td>Live API</td><td>Runs against k3d as well as compose. Adds one test: a session reaches all three pods and each sees the same data.</td></tr>
+          <tr><td>Browser journeys</td><td>The same five journeys, run against k3d as well.</td></tr>
+          <tr><td>Load</td><td>The same journey and budgets, run against k3d. Adds the disruption scenarios above and a stepped capacity run for the round's figure.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="order">
+    <span class="eyebrow">Order of work</span>
+    <h2>One child PR, built and tested while the lead was away</h2>
+    <p class="prose">The lead asked for all of round 2 in a single child PR into <code>round/2-k3d</code>, built and tested by the agent alone. The commits inside it stay small and each was green when made. The as-built plan, <code>docs/plans/round-2.md</code>, records each commit, each decision the work made and each departure from the agreed process.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Commit</th><th>What</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td>This spec, revision 2, and the lead's decisions in <code>docs/kickoff.md</code></td></tr>
+          <tr><td>2</td><td>nginx reads its DNS server and the API's address from its environment; compose behaves as before</td></tr>
+          <tr><td>3</td><td>A round 1 bug the cluster exposed: <code>/api/</code> is no longer compressed, so ETags stay usable as <code>If-Match</code></td></tr>
+          <tr><td>4</td><td>Cluster config, Kustomize base and k3d overlay, the deploy script and its tests</td></tr>
+          <tr><td>5</td><td>The live, browser and load suites take the cluster's address</td></tr>
+          <tr><td>6</td><td>The Claude Code docs: the deployment rule, <code>CLAUDE.md</code>, the verify skill</td></tr>
+          <tr><td>7</td><td>The API autoscaler (D34), and the load balancer limit (D21)</td></tr>
+          <tr><td>8</td><td>README steps for k3d, and the load results</td></tr>
+          <tr><td>9</td><td>This spec's revision 3, and the as-built plan</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="outcome">
+    <span class="eyebrow">What the build showed</span>
+    <h2>Outcome</h2>
+    <p class="prose">Measured on 2026-10-20 on the lead's Mac. Details in <code>tests/load/results/round-2.md</code>.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Claim</th><th>Result</th></tr></thead>
+        <tbody>
+          <tr><td>The same suites pass on the cluster</td><td>Live 12 of 12 and browser 5 of 5 on k3d, over HTTPS; the same on compose; again on a cluster rebuilt from nothing</td></tr>
+          <tr><td>Any pod serves any request</td><td>One session's requests reached all three pods, and each saw the same task</td></tr>
+          <tr><td>Losing a pod loses nothing</td><td>200 users, one API pod deleted: 55,917 requests, none failed, data intact</td></tr>
+          <tr><td>A release drops no request; nothing lives in a pod</td><td>200 users, every API pod replaced by a rolling restart: 55,931 requests, none failed, users stayed signed in</td></tr>
+          <tr><td>The API follows the load</td><td>800 users: the autoscaler went from 3 to 4 to 5 pods and back to 3 two minutes after the load; 176,656 requests, none failed</td></tr>
+          <tr><td>Capacity</td><td><b>At least 1,500 concurrent users</b> with five pods and every budget met (round 1: at least 1,000)</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="prose">The build also found three things the design missed: nginx needed the cluster's DNS server, not Docker's; nginx's compression made the API's ETags unusable for <code>If-Match</code>, a bug since round 1; and k3d's load balancer ran out of connections near 500 users. Each is fixed, with a test or a run that failed first.</p>
+  </section>
+
+  <section id="round3">
+    <span class="eyebrow">Looking ahead</span>
+    <h2>What round 3 changes</h2>
+    <p class="prose">The base manifests stay. The AKS overlay swaps Postgres for Azure Database for PostgreSQL (with its built-in PgBouncer, so the autoscaler can go past five pods), uses the cluster's managed ingress with a real certificate, pulls images from Azure Container Registry and reads secrets from Key Vault. GitHub Actions deploys it after signing in to Azure with OIDC, with no stored keys. You run or approve everything that touches Azure.</p>
+  </section>
+
+  <section id="done">
+    <span class="eyebrow">Exit criteria</span>
+    <h2>Round 2 is done when</h2>
+    <ul class="plain">
+      <li>On a Mac with Docker Desktop and k3d, the README's steps create the cluster and deploy it. <code>https://localhost:8443</code> serves the app, and the three API pods run on three different nodes.</li>
+      <li>The cluster runs the same commit-tagged images as compose, from one Kustomize base and a k3d overlay. You reviewed every manifest before it was first applied.</li>
+      <li>The migration Job completes before the API rolls out, and deploying the same commit again changes nothing.</li>
+      <li>The live and browser suites pass against k3d, and still pass against compose.</li>
+      <li>Under 200 users, deleting an API pod, a rolling restart and replacing every pod cause no failed request and no lost data; signed-in users stay signed in.</li>
+      <li>No secret is in the repo, and no secret value is printed by any step.</li>
+      <li>Under rising load the autoscaler adds API pods, up to 5, and removes them when the load falls, with no failed request.</li>
+      <li>The round's capacity figure on k3d is recorded next to round 1's.</li>
+      <li>CI's round 1 jobs stay green.</li>
+      <li>The README has clear steps for setting up and running on k3d, which the lead can follow to try the app.</li>
+    </ul>
+  </section>
+
+  <section id="calls">
+    <span class="eyebrow">Sign-off record</span>
+    <h2>The lead's calls on revision 1</h2>
+    <p class="prose">Verbatim, numbered as the calls were. Also in <code>docs/kickoff.md</code>.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>#</th><th>Call</th><th>Lead's answer</th><th>Settled</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td>Cluster shape (D21)</td><td>"Ok"</td><td>Three nodes, the API spread across them</td></tr>
+          <tr><td>2</td><td>Front door (D27)</td><td>"Ok"</td><td>nginx stays the front of the app; Traefik ends TLS</td></tr>
+          <tr><td>3</td><td>TLS on k3d (D28)</td><td>"Ok"</td><td>A mkcert certificate the Mac trusts</td></tr>
+          <tr><td>4</td><td>Shutdown (D29)</td><td>"your recommendation"</td><td>A 20-second <code>preStop</code> sleep; the deployment rule's readiness line is replaced</td></tr>
+          <tr><td>5</td><td>Hardening (D31)</td><td>"defaults for now."</td><td>Deferred to <code>FUTURE.md</code></td></tr>
+          <tr><td>6</td><td>Deploying (D32)</td><td>"Ok"</td><td>One script; in the session each apply runs on its own</td></tr>
+          <tr><td>7</td><td>CI (D33)</td><td>"local mac only."</td><td>Deferred to <code>FUTURE.md</code></td></tr>
+          <tr><td>8</td><td>Autoscaler (D34), asked on return</td><td>"yes, add the autoscaler in round 2. Its critical."</td><td>3 to 5 API pods on CPU, proven under load</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer>Revision 2, 2026-10-20: the lead's calls on revision 1, and the one-PR order of work they asked for. Revision 3, the same day: the API autoscaler, the order of work as built, and the outcome.</footer>
+</main>

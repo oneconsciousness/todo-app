@@ -7,3 +7,4 @@ Breaks and session boundaries, recorded when the lead calls them, so the time ta
 | Session 1 start | 2026-10-18 10:01:50 | 2026-10-18T14:01:50Z | transcript | First event in the session transcript |
 | Break start | 2026-10-18 12:08:25 | 2026-10-18T16:08:25Z | agent, on the lead's request | Lead stepped away before the final review of spec revision 2. Transcript snapshot `20261018T160825992514Z-manual-break-start`. |
 | Break end | 2026-10-19 09:09:34 | 2026-10-19T13:09:34Z | agent, on the lead's return | Lead back to review spec revision 2. Break lasted 21 h 01 m 09 s. Transcript snapshot `20261019T130934436972Z-manual-break-end`. |
+| Break start | 2026-10-20 00:05:49 | 2026-10-20T04:05:49Z | agent, on the lead's request | Lead stepped away after deciding the round 2 calls and asked the agent to finish round 2 alone in one child PR. Transcript snapshot `20261020T040549592899Z-manual-break-start-round-2`. |

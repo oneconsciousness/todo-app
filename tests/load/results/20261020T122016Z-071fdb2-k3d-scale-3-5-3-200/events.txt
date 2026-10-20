@@ -1,0 +1,12 @@
+12:20:21 k6 started
+12:22:11 scale deployment/api to 5 (users at full load)
+12:22:14 pod api-57b64bbb7c-58jdw Running k3d-todo-agent-1
+12:22:14 pod api-57b64bbb7c-82pbp Running k3d-todo-agent-0
+12:22:14 pod api-57b64bbb7c-85chr Running k3d-todo-server-0
+12:22:14 pod api-57b64bbb7c-j7wsx Running k3d-todo-agent-0
+12:22:14 pod api-57b64bbb7c-k5snc Running k3d-todo-agent-1
+12:23:15 scale deployment/api to 3 (users at full load)
+12:23:51 pod api-57b64bbb7c-82pbp Running k3d-todo-agent-0
+12:23:51 pod api-57b64bbb7c-85chr Running k3d-todo-server-0
+12:23:51 pod api-57b64bbb7c-k5snc Running k3d-todo-agent-1
+12:25:32 k6 finished

@@ -7,9 +7,10 @@ description: Run the checks that make "done" true before reporting a task comple
 1. Gates. Run what CI runs for every part the change touched, from the repo root. Skip a part only when it does not exist yet, and say so.
    - Hygiene: `python3 scripts/check_hygiene.py`
    - Hooks, when `.claude/hooks/` changed: `python3 -m unittest discover -s .claude/hooks/tests`
+   - k3d deploy script, when `deploy/k3d/` changed: `python3 -m unittest discover -s deploy/k3d/tests`
    - Backend: `cd backend && uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pytest`
    - Frontend: `cd frontend && npm run check && npm run test && npm run build`
-   - When the change touches the running stack (Dockerfiles, compose, manifests, config, CORS, routing): bring the stack up and run the live-server e2e (`tests/e2e/live/`) and Playwright (`tests/e2e/browser/`) suites against it, with the commands in the root `CLAUDE.md`, following `CONTRIBUTING.md` § 14 for restarts.
+   - When the change touches the running stack (Dockerfiles, compose, manifests, config, CORS, routing): bring the stack up (and the k3d cluster too, when `deploy/` changed) and run the live-server e2e (`tests/e2e/live/`) and Playwright (`tests/e2e/browser/`) suites against it, with the commands in the root `CLAUDE.md`, following `CONTRIBUTING.md` § 14 for restarts.
    Report the exact counts per suite and the stack each ran against. A failure is reported as a failure, with the output.
 2. Read back. Read `git diff` for every file you changed. Check each hunk does what the task asked and nothing more.
 3. Logs. For every log line in the diff, say what it helps someone monitor. Delete any line added only to debug.

@@ -1,0 +1,16 @@
+11:55:15 api-5dfc6c6c8d-2g854=151m/130Mi api-5dfc6c6c8d-bjrw6=151m/110Mi api-5dfc6c6c8d-g8qfx=178m/153Mi db-0=112m/121Mi web-bb9779f65-hl5xf=13m/11Mi web-bb9779f65-kd5z7=15m/6Mi 
+11:55:35 api-5dfc6c6c8d-2g854=96m/149Mi api-5dfc6c6c8d-bjrw6=128m/148Mi api-5dfc6c6c8d-g8qfx=98m/153Mi db-0=52m/150Mi web-bb9779f65-hl5xf=4m/12Mi web-bb9779f65-kd5z7=6m/6Mi 
+11:55:55 api-5dfc6c6c8d-2g854=96m/149Mi api-5dfc6c6c8d-bjrw6=104m/148Mi api-5dfc6c6c8d-g8qfx=98m/153Mi db-0=31m/153Mi web-bb9779f65-hl5xf=8m/11Mi web-bb9779f65-kd5z7=6m/6Mi 
+11:56:15 api-5dfc6c6c8d-2g854=155m/149Mi api-5dfc6c6c8d-bjrw6=154m/148Mi api-5dfc6c6c8d-g8qfx=171m/153Mi db-0=80m/154Mi web-bb9779f65-hl5xf=17m/11Mi web-bb9779f65-kd5z7=17m/6Mi 
+11:56:35 api-5dfc6c6c8d-2g854=159m/150Mi api-5dfc6c6c8d-bjrw6=159m/148Mi api-5dfc6c6c8d-g8qfx=166m/153Mi db-0=81m/154Mi web-bb9779f65-hl5xf=16m/12Mi web-bb9779f65-kd5z7=18m/6Mi 
+11:56:55 api-5dfc6c6c8d-2g854=163m/149Mi api-5dfc6c6c8d-bjrw6=164m/148Mi api-5dfc6c6c8d-g8qfx=171m/153Mi db-0=91m/154Mi web-bb9779f65-hl5xf=18m/12Mi web-bb9779f65-kd5z7=20m/6Mi 
+11:57:15 api-5dfc6c6c8d-2g854=175m/149Mi api-5dfc6c6c8d-bjrw6=160m/148Mi api-5dfc6c6c8d-g8qfx=178m/153Mi db-0=102m/154Mi web-bb9779f65-hl5xf=19m/11Mi web-bb9779f65-kd5z7=21m/6Mi 
+11:57:35 api-5dfc6c6c8d-2g854=163m/150Mi api-5dfc6c6c8d-bjrw6=160m/148Mi api-5dfc6c6c8d-g8qfx=172m/153Mi db-0=90m/154Mi web-bb9779f65-hl5xf=18m/11Mi web-bb9779f65-kd5z7=20m/6Mi 
+11:57:55 api-5dfc6c6c8d-2g854=163m/150Mi api-5dfc6c6c8d-bjrw6=162m/149Mi api-5dfc6c6c8d-g8qfx=167m/153Mi db-0=104m/150Mi web-bb9779f65-hl5xf=19m/11Mi web-bb9779f65-kd5z7=20m/6Mi 
+11:58:16 api-5dfc6c6c8d-2g854=152m/150Mi api-5dfc6c6c8d-bjrw6=147m/149Mi api-5dfc6c6c8d-g8qfx=163m/153Mi db-0=95m/135Mi web-bb9779f65-hl5xf=17m/11Mi web-bb9779f65-kd5z7=19m/6Mi 
+11:58:36 api-5dfc6c6c8d-2g854=155m/149Mi api-5dfc6c6c8d-bjrw6=155m/149Mi api-5dfc6c6c8d-g8qfx=152m/153Mi db-0=93m/134Mi web-bb9779f65-hl5xf=17m/11Mi web-bb9779f65-kd5z7=18m/6Mi 
+11:58:56 api-5dfc6c6c8d-bjrw6=142m/149Mi api-5dfc6c6c8d-g8qfx=144m/153Mi db-0=93m/134Mi web-bb9779f65-hl5xf=16m/11Mi web-bb9779f65-kd5z7=18m/6Mi 
+11:59:16 api-5dfc6c6c8d-bjrw6=151m/149Mi api-5dfc6c6c8d-g8qfx=160m/153Mi api-5dfc6c6c8d-ql8pm=159m/72Mi db-0=114m/117Mi web-bb9779f65-hl5xf=16m/12Mi web-bb9779f65-kd5z7=19m/6Mi 
+11:59:36 api-5dfc6c6c8d-bjrw6=141m/149Mi api-5dfc6c6c8d-g8qfx=146m/153Mi api-5dfc6c6c8d-ql8pm=147m/73Mi db-0=94m/121Mi web-bb9779f65-hl5xf=16m/11Mi web-bb9779f65-kd5z7=17m/6Mi 
+11:59:56 api-5dfc6c6c8d-bjrw6=162m/149Mi api-5dfc6c6c8d-g8qfx=150m/153Mi api-5dfc6c6c8d-ql8pm=154m/72Mi db-0=118m/121Mi web-bb9779f65-hl5xf=16m/11Mi web-bb9779f65-kd5z7=22m/6Mi 
+12:00:16 api-5dfc6c6c8d-bjrw6=142m/149Mi api-5dfc6c6c8d-g8qfx=146m/153Mi api-5dfc6c6c8d-ql8pm=150m/72Mi db-0=83m/120Mi web-bb9779f65-hl5xf=16m/11Mi web-bb9779f65-kd5z7=18m/6Mi 

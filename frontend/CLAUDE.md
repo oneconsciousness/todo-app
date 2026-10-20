@@ -34,6 +34,7 @@ Every commit passes `check`, `test` and `build`.
 - `src/test/fixtures.ts`: the sample data and view props that both the tests and the gallery use.
 - `src/test/server.ts`, `handlers.ts`: MSW at the `fetch` boundary, answering from the fixtures. `render-app.tsx` renders the whole app at a path, wired like `main.tsx`.
 - `Dockerfile`, `nginx.conf`: the stack's front door. nginx serves `dist/`, proxies `/api/` to the API replicas, sets the security headers and the CSP, caps request bodies at 64 KB, and answers 404 on `/livez` and `/readyz`.
+- `nginx-upstream.conf.template`: the DNS resolver and the API upstream. The image's entrypoint fills it in at start into `/tmp/upstream.conf`, with the DNS server from `/etc/resolv.conf` and `API_HOST` (`api` by default; k3d sets the Service's full name). One image runs in compose and in Kubernetes.
 - `design/`: the gallery, a second Vite entry. `screens.tsx` lists every state; `Scripted` drives a view the way a user would to reach states held in local state. `screenshots/` is committed.
 
 ## Gotchas
@@ -45,6 +46,7 @@ Every commit passes `check`, `test` and `build`.
 - `data-hover`, `data-focus-visible` and `data-active` exist for the gallery only. Never set them in app code.
 - The design build inlines everything; the app build must not inline anything (the nginx CSP is `'self'` only).
 - Zod runs `jitless`, set in `src/lib/schema/zod-config.ts`. Otherwise it probes for eval when a schema is built, and the CSP reports a violation on every page load. `main.tsx` imports that file first; keep it first, before any module that builds a schema.
+- `/api/` is proxied with `gzip off`. nginx's gzip turns the API's strong ETags weak, and `If-Match` never matches a weak ETag, so a client that sends back the ETag it read would have every edit refused.
 - The CSP for `/api/docs` allows Swagger UI's one inline script by its hash. A FastAPI upgrade can change that script; the live test on the docs CSP then fails, and the hash in `nginx.conf` needs updating.
 - The dev server sends `/api` to `http://localhost:8080` with that as its `Origin`, because the API refuses writes from any other origin. When port 5173 is taken, Vite moves to the next free port, so open the URL it prints, or choose one with `npm run dev -- --port <n>`.
 - A request with no MSW handler fails the test. Add one with `server.use` in the test; handlers reset after each test.
