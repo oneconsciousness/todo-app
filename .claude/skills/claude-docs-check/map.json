@@ -32,8 +32,8 @@
     {
       "paths": [
         "docker-compose*.yml",
-        "e2e/*",
-        "load/*"
+        "tests/e2e/*",
+        "tests/load/*"
       ],
       "artifacts": [
         "CLAUDE.md (Commands, Gotchas)"
@@ -76,9 +76,9 @@
         "backend/tests/conftest.py",
         "frontend/src/test/*",
         "frontend/vitest.config.ts",
-        "e2e/browser/playwright.config.ts",
-        "e2e/*",
-        "load/*"
+        "tests/e2e/browser/playwright.config.ts",
+        "tests/e2e/*",
+        "tests/load/*"
       ],
       "artifacts": [
         ".claude/rules/testing.md",

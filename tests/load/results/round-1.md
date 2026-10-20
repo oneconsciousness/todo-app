@@ -2,7 +2,7 @@
 
 **Capacity: at least 1,000 concurrent users** on the compose stack (two API replicas), with every budget met. 1,000 was the highest step tested, so this is a floor, not the limit.
 
-Measured on 2026-10-19 with `load/k6/journey.js` and `load/run_stepped.py`, on an Apple M4 Max (16 cores, 48 GiB) whose Docker VM had 16 CPUs and 7.7 GiB. k6 ran inside the same VM as the stack, so it competed with the app for CPU; the figures are conservative.
+Measured on 2026-10-19 with `tests/load/k6/journey.js` and `tests/load/run_stepped.py`, on an Apple M4 Max (16 cores, 48 GiB) whose Docker VM had 16 CPUs and 7.7 GiB. k6 ran inside the same VM as the stack, so it competed with the app for CPU; the figures are conservative.
 
 ## Stepped run (`20261019T230758Z-1c1aded/`)
 

@@ -1,9 +1,9 @@
 """Find the round's capacity: run the k6 journey at rising user counts until a budget fails.
 
 Each step starts from a fresh stack, so earlier steps' accounts and tasks never slow a later one.
-The capacity figure is the last step whose budgets all held. Results go to load/results/<UTC>-<sha>/.
+The capacity figure is the last step whose budgets all held. Results go to tests/load/results/<UTC>-<sha>/.
 
-Usage, from the repo root: python3 load/run_stepped.py [--steps 200,400,600,800,1000] [--hold 2m]
+Usage, from the repo root: python3 tests/load/run_stepped.py [--steps 200,400,600,800,1000] [--hold 2m]
 """
 
 from __future__ import annotations
@@ -17,8 +17,8 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
-RESULTS = ROOT / "load" / "results"
+ROOT = Path(__file__).resolve().parents[2]
+RESULTS = ROOT / "tests" / "load" / "results"
 log = logging.getLogger("run_stepped")
 
 

@@ -88,7 +88,7 @@ services:
       start_period: 5s
 
   # The load test, started on demand: `docker compose --profile load run --rm k6 run /scripts/journey.js`.
-  # It reaches nginx inside the compose network and writes its summaries to load/results.
+  # It reaches nginx inside the compose network and writes its summaries to tests/load/results.
   k6:
     <<: *hardening
     image: grafana/k6:2.3.0
@@ -102,8 +102,8 @@ services:
       VUS: ${VUS:-200}
       HOLD: ${HOLD:-3m}
     volumes:
-      - ./load/k6:/scripts:ro
-      - ./load/results:/results
+      - ./tests/load/k6:/scripts:ro
+      - ./tests/load/results:/results
 
   # A throwaway server for the backend test suite on the host: `docker compose --profile test up -d test-db`.
   test-db:
