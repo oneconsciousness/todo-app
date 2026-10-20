@@ -59,7 +59,8 @@ A full-stack To Do list: a React and TypeScript web app and a Python REST API, w
 | Document | What it holds |
 |---|---|
 | [`docs/kickoff.md`](docs/kickoff.md) | The requirements, the lead's words and every decision |
-| [`docs/specs/round-1.html`](docs/specs/round-1.html), [`docs/specs/round-2.html`](docs/specs/round-2.html) | The main choices with diagrams, per round |
+| [`docs/specs/round-1.html`](docs/specs/round-1.html), [`docs/specs/round-2.html`](docs/specs/round-2.html) | The main choices with diagrams, per round. GitHub shows HTML as source, so open them in a browser from a clone |
+| [`frontend/design/screenshots/`](frontend/design/screenshots/) | Every screen of the design, light and dark; `npm run design:dev` in `frontend/` opens the live gallery |
 | [`docs/plans/round-1.md`](docs/plans/round-1.md), [`docs/plans/round-2.md`](docs/plans/round-2.md) | The coding plans; round 2's is written as built |
 | [`tests/load/results/`](tests/load/results/) | Every load run, with how to read it |
 | [`FUTURE.md`](FUTURE.md) | Ideas for later, in priority order |
@@ -221,11 +222,11 @@ In priority order. [`FUTURE.md`](FUTURE.md) has the detail.
 | 1 | **Create tasks by describing them**, in text or by voice | The user says what they need, and the app writes the task; one simple way in | About 2 sessions: an AI layer over the existing task service, one endpoint, a voice and text box on the list; 2 to 3 PRs |
 | 2 | **Update tasks by voice**: a button, then "mark the report done and move the dentist to Monday" | The same agent, with tools to edit, complete and move tasks | 1 to 2 sessions on top of #1; 1 to 2 PRs |
 | 3 | **Ask about your work, with memory**: "summarise my backlog", "what does my week look like?"; the AI remembers what you tell it about yourself | A to-do manager that knows its user | About 2 sessions: a memory table and migration, 1 to 2 endpoints, a summary screen; 2 to 3 PRs |
-| 4 | **Tools behind an MCP server**, if the app becomes part of a bigger product | The tools then scale and change apart from the model | About 1 session when it is needed; 1 PR |
+| 4 | **Tools behind an MCP server, open to subscribers**: anyone with a subscription connects the AI agent they already use every day, such as ChatGPT, and it manages their list; the web or mobile app is there to look at it | Few people will build an agent just for their to-dos; they will use the one they have. The MCP server makes this app the place where the list lives. It also lets the tools scale apart from the model | About 2 to 3 sessions: an MCP server over the task service, sign-in for outside agents, 2 to 3 PRs. Waits: listing with each agent platform |
 | 5 | **API management in front of the models** (Azure API Management or the same on another cloud) | It picks a working model, retries and rate-limits, so the backend doesn't | About 1 session to wire up, plus the cloud setup |
 | 6 | **CI/CD with dev, UAT and prod environments**, and the app on a cloud cluster with **Terraform** and the existing Kubernetes manifests (AKS, EKS or GKE) | Versioned releases that move from dev to UAT to prod; start with dev, add UAT when there are users to test with | 2 to 3 sessions: Terraform modules, a cloud overlay, a deploy workflow; 3 to 4 PRs. Waits: cloud setup and approvals |
 | 7 | **Decide where the database lives**: in the cluster or managed (Azure Database for PostgreSQL, Cosmos DB, or the same elsewhere) | Managed brings replicas, backups and a connection pooler; in the cluster is portable and cheap | A team discussion first; then about 1 session |
-| 8 | **More designs** (three or four next to the vintage one), and **mobile, web or both** | Find out with users what fits a to-do app best | About 1 session per design in the existing design gallery; a mobile app on the same API, a few sessions |
+| 8 | **More designs** (three or four next to the vintage one), and **mobile, web or both**, with notifications on mobile | Find out with users what fits a to-do app best | About 1 session per design in the existing design gallery; a mobile app on the same API, a few sessions |
 | 9 | **A paid plan**: token-based or a subscription | Only if it launches as a paid MVP, chosen with users in UAT | 2 to 3 sessions, after UAT |
 | 10 | **Sign-in with Microsoft, Google or Apple** | Only once external users test it in UAT | 1 to 2 sessions; 2 PRs. Waits: registering the app with each provider |
 
@@ -235,6 +236,7 @@ In priority order. [`FUTURE.md`](FUTURE.md) has the detail.
 
 | What | Why | How long |
 |---|---|---|
+| **Monitoring with Grafana** | Dashboards and alerts for errors, response times, pods and the database, from metrics and the JSON logs the app already writes | 1 to 2 sessions: a metrics endpoint, Prometheus and Grafana in the cluster; 2 PRs |
 | **Pod Security and network policies** | Only nginx may reach the API, and only the API and the migration Job may reach Postgres | Within a session; 1 PR, checked on k3d |
 | **Two API pods at rest** | Losing the only pod costs about 15 seconds of errors; two pods remove that | One setting; 1 PR |
 | **A k3d job in CI** | A change that breaks only the cluster fails its own PR | Within a session; 1 PR; adds 6 to 8 minutes to CI |
@@ -242,20 +244,21 @@ In priority order. [`FUTURE.md`](FUTURE.md) has the detail.
 | **Self-host the API docs page**, or turn it off in production | Removes an outside script from the page | Within a session; 1 PR |
 | **Cleaner logs** | uvicorn's colour codes end up in the JSON logs; domain-error 400s are not logged yet | Within a session; 1 PR |
 | **Fix the hygiene check's folder list** | It skips `tests/`, which was checked by hand | A few minutes; 1 PR |
+| **Clean up merged branches** on GitHub | Twelve finished branches are still there | A few minutes |
 | Later: **split the frontend bundle by route** | The app ships as one 524 kB file; not urgent | Within a session |
 
 ## How it was made
 
 **How AI was used.** The code, tests, configuration and docs were written by an AI agent: Claude Code with Claude Opus. The agent planned, wrote the tests first and then the code, ran every suite, deployed to the local cluster and opened the pull requests. It also sent focused helper agents to review branches and keep the docs in step with the code. The lead set the direction, made every decision, signed off the specs and design, approved the guarded steps (pushing, opening PRs, applying to the cluster), and reviewed and merged every pull request. The lead wrote no code. Guard hooks kept the agent away from secrets and from the `main` and round branches.
 
-The session transcript is the full record of this work. It was saved before every compaction, and it goes into [`docs/ai-usage/`](docs/ai-usage/) after a scan for secrets and personal details. The lead's own words and decisions are in [`docs/kickoff.md`](docs/kickoff.md); breaks are in [`docs/ai-usage/time-log.md`](docs/ai-usage/time-log.md).
+The session transcript is the full record of this work, every message and every step. It is on the [`transcripts`](https://github.com/oneconsciousness/todo-app/tree/transcripts) branch, scanned for secrets first. The lead's own words and decisions are in [`docs/kickoff.md`](docs/kickoff.md); breaks are in [`docs/ai-usage/time-log.md`](docs/ai-usage/time-log.md).
 
-**Time taken** (US Eastern time).
+**Time taken.** Approximate hours of the lead's own time.
 
-| When | The lead | The agent |
+| Day | The lead | The agent |
 |---|---|---|
-| **Sunday 18 Oct**, 10:02 to 12:08 | Hands-on: the requirements, the repo setup, the round 1 spec review | Set up the repo, wrote the spec |
-| **Monday 19 Oct**, 09:09 to 23:58 | Working a full-time job. Reviewed each PR in breaks, about 30 minutes each, and merged #1 to #11. Joined each sign-off and checkpoint: the coding walkthrough, the design, the race tests and the load tests | Built the backend, the frontend, the containers and every test suite, alone between reviews |
-| **Tuesday 20 Oct**, from 00:03 | Made the round 2 calls, then took a break until #12 merged at 09:35. Reviewed and merged #12 to #14, chose the replica sizes, then planned this write-up | Built and tested round 2 alone. The Mac slept from about 00:16 to 07:35, so no work ran then |
+| **Sunday 18 Oct** | **About 2 hours**, hands-on: the requirements, the repo setup, the round 1 spec review | Set up the repo, wrote the spec |
+| **Monday 19 Oct** | **About 5 to 6 hours**, in breaks from a full-time job: about 30 minutes to review each of 11 PRs, and each sign-off and checkpoint (the coding walkthrough, the design, the race tests, the load tests) | Built the backend, the frontend, the containers and every test suite, alone between reviews |
+| **Tuesday 20 Oct** | **About 4 hours**: the round 2 calls, reviewing and merging #12 to #15, choosing the replica sizes, planning the future work and this write-up | Built and tested round 2 alone while the lead was away; the Mac slept for about 7 hours of that time |
 
-Round 2 was merged into `main` at 10:53 on Tuesday, about 49 hours after the first message. Most of that time the lead was at work or asleep, and the agent was building or waiting for a review.
+**In total, about 11 to 12 hours of the lead's time, over about two days.** The rest of the time the lead was at work or asleep, and the agent was building or waiting for a review.
