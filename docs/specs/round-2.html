@@ -104,13 +104,13 @@ footer { color: var(--muted); font-size: 0.88rem; border-top: 1px solid var(--li
 
 <main>
   <header>
-    <span class="eyebrow">todo-app · spec · revision 3 · signed off</span>
+    <span class="eyebrow">todo-app · spec · revision 4 · signed off</span>
     <h1>Round 2: the same app on a local Kubernetes cluster</h1>
-    <p class="lede">The high-level choices for running the round 1 app on k3d, and how the pieces fit, before the detailed plan is written. The app code and images stay the same; what surrounds them changes. Each choice names what it beat and what it costs. Revision 1 marked the choices that follow from the kickoff, the round 1 spec or the deployment rule as locked, and put the rest to the lead. Revision 2 records the lead's calls: every choice is now <span class="pill pill-locked">locked</span>, and two are <span class="pill pill-call">deferred</span>. Revision 3 adds the API autoscaler, which the lead moved into this round.</p>
-    <div class="meta"><span>2026-10-20 · revision 3</span><span>Lives at <code>docs/specs/round-2.html</code></span><span>Builds on <code>docs/specs/round-1.html</code> and <code>docs/kickoff.md</code></span><span>Rules: <code>.claude/rules/deployment.md</code></span></div>
+    <p class="lede">The high-level choices for running the round 1 app on k3d, and how the pieces fit, before the detailed plan is written. The app code and images stay the same; what surrounds them changes. Each choice names what it beat and what it costs. Revision 1 marked the choices that follow from the kickoff, the round 1 spec or the deployment rule as locked, and put the rest to the lead. Revision 2 records the lead's calls: every choice is now <span class="pill pill-locked">locked</span>, and two are <span class="pill pill-call">deferred</span>. Revision 3 adds the API autoscaler, which the lead moved into this round. Revision 4 starts everything at one replica, with the API autoscaling to two, the lead's call for a laptop.</p>
+    <div class="meta"><span>2026-10-20 · revision 4</span><span>Lives at <code>docs/specs/round-2.html</code></span><span>Builds on <code>docs/specs/round-1.html</code> and <code>docs/kickoff.md</code></span><span>Rules: <code>.claude/rules/deployment.md</code></span></div>
     <div class="rounds" aria-label="The three rounds">
       <div><span class="eyebrow">Round 1 · merged</span><b>Containers</b><span><code>docker compose up</code> on a Mac. At least 1,000 users.</span></div>
-      <div class="now"><span class="eyebrow">Round 2 · this spec</span><b>Local k3d</b><span>Same images, Kubernetes manifests, three to five API replicas spread over three nodes.</span></div>
+      <div class="now"><span class="eyebrow">Round 2 · this spec</span><b>Local k3d</b><span>Same images, Kubernetes manifests, one replica of everything; the API autoscales to two.</span></div>
       <div><span class="eyebrow">Round 3</span><b>AKS live</b><span>Azure, deployed by GitHub Actions, if time permits.</span></div>
     </div>
     <nav class="toc" aria-label="Sections">
@@ -120,8 +120,8 @@ footer { color: var(--muted); font-size: 0.88rem; border-top: 1px solid var(--li
 
   <section id="topology">
     <span class="eyebrow">Solution diagram</span>
-    <h2>One front door, three API pods on three nodes, one database</h2>
-    <p class="prose">The browser talks to <code>https://localhost:8443</code>. k3s's built-in Traefik ends TLS and sends every request to the web pods. nginx in those pods does exactly what it does in compose: serves the SPA, sets the security headers and forwards <code>/api/*</code>. It reaches the API through a headless Service, which lists each pod, so every request is balanced across the three pods rather than pinned to one.</p>
+    <h2>One front door, an API that grows from one pod with the load, one database</h2>
+    <p class="prose">The browser talks to <code>https://localhost:8443</code>. k3s's built-in Traefik ends TLS and sends every request to the web pods. nginx in those pods does exactly what it does in compose: serves the SPA, sets the security headers and forwards <code>/api/*</code>. It reaches the API through a headless Service, which lists each pod, so every request is balanced across the pods rather than pinned to one. The diagram shows the API at three pods, one per node, to show the spread; it ships at one pod, and the autoscaler adds a second under load (D34).</p>
     <figure>
       <div class="fig-scroll">
         <svg viewBox="0 0 980 490" role="img" aria-label="Round 2 topology: the browser calls https://localhost:8443; Traefik ends TLS and sends traffic to two nginx web pods; nginx balances /api requests per request across three API pods, one on each node, through a headless Service; all three use one Postgres StatefulSet pod with a volume; a migrate Job runs first and must complete before the API rolls out; secrets are created by the lead; the tests drive the same front door.">
@@ -145,7 +145,7 @@ footer { color: var(--muted); font-size: 0.88rem; border-top: 1px solid var(--li
           <text x="454" y="201" text-anchor="middle" class="t-muted">SPA · /api proxy</text>
           <rect class="box" x="384" y="242" width="140" height="56" rx="8"/>
           <text x="454" y="266" text-anchor="middle" class="t-strong">web · nginx</text>
-          <text x="454" y="285" text-anchor="middle" class="t-muted">second replica</text>
+          <text x="454" y="285" text-anchor="middle" class="t-muted">if scaled by hand</text>
 
           <rect class="box-accent" x="620" y="90" width="150" height="56" rx="8"/>
           <text x="695" y="114" text-anchor="middle" class="t-strong">api</text>
@@ -262,18 +262,19 @@ footer { color: var(--muted); font-size: 0.88rem; border-top: 1px solid var(--li
       </div></div>
 
       <div class="decision"><div class="id">D26</div><div class="body">
-        <div class="title-row"><h3>Three API pods that roll without dropping a request</h3><span class="pill pill-locked">locked</span></div>
+        <div class="title-row"><h3>API pods that roll without dropping a request</h3><span class="pill pill-locked">locked</span></div>
         <dl>
-          <dt>Choice</dt><dd>A Deployment that starts with 3 replicas, one uvicorn process each; the autoscaler in D34 takes it to 5 under load. A rolling update adds a new pod before removing an old one, and a disruption budget keeps at least 2 serving. CPU and memory requests and limits are set; the CPU limit is one core, the most one uvicorn process can use. Probes: <code>/livez</code> for liveness, <code>/readyz</code> for readiness.</dd>
+          <dt>Choice</dt><dd>A Deployment that starts with 1 replica, one uvicorn process each; the autoscaler in D34 adds a second under load. A rolling update adds a new pod before removing an old one, and a disruption budget lets at most one pod go at a time. CPU and memory requests and limits are set; the CPU limit is one core, the most one uvicorn process can use. Probes: <code>/livez</code> for liveness, <code>/readyz</code> for readiness.</dd>
           <dt>Instead of</dt><dd>More uvicorn workers per pod, which hides failures inside one pod and splits the connection budget unevenly.</dd>
-          <dt>Why</dt><dd>The round 1 spec planned 3 replicas and a budget of 45 connections for round 2. Scaling stays a replica count.</dd>
+          <dt>Why</dt><dd>Scaling stays a replica count. The round 1 spec planned 3 replicas; the lead chose to start at one and grow with the load (revision 4).</dd>
+          <dt>Costs</dt><dd>With one pod, losing it fails requests for about 15 seconds until its replacement is up and nginx finds it; measured at 13 seconds. Releases lose nothing, because the new pod is ready first.</dd>
         </dl>
       </div></div>
 
       <div class="decision"><div class="id">D27</div><div class="body">
         <div class="title-row"><h3>nginx stays the front of the app; Traefik only ends TLS</h3><span class="pill pill-locked">locked</span></div>
         <dl>
-          <dt>Choice</dt><dd>One Ingress sends everything to the web Service (2 nginx pods). nginx forwards <code>/api/*</code> to a headless API Service and re-reads its pod list from DNS, as it does in compose. The nginx image reads the DNS server and the API's address from its environment at start-up, through the image's own template step, so one image runs in both places.</dd>
+          <dt>Choice</dt><dd>One Ingress sends everything to the web Service (1 nginx pod). nginx forwards <code>/api/*</code> to a headless API Service and re-reads its pod list from DNS, as it does in compose. The nginx image reads the DNS server and the API's address from its environment at start-up, through the image's own template step, so one image runs in both places.</dd>
           <dt>Instead of</dt><dd>Traefik routing <code>/api</code> straight to the API. That needs the security headers, CSP, body limit and request id written a second time as Traefik middleware, and compose and k3d would no longer run the same front end. Or a normal Service, where nginx's kept-alive connections stick to one pod: the load skews and a rollout drains slowly.</dd>
           <dt>Why</dt><dd>One nginx config, already tested by every suite, guards the app in all three rounds.</dd>
           <dt>Costs</dt><dd>nginx learns about pod changes through DNS, up to about 15 seconds late. D29 covers that.</dd>
@@ -339,12 +340,12 @@ footer { color: var(--muted); font-size: 0.88rem; border-top: 1px solid var(--li
       </div></div>
 
       <div class="decision"><div class="id">D34</div><div class="body">
-        <div class="title-row"><h3>The API scales itself between three and five pods</h3><span class="pill pill-locked">locked</span></div>
+        <div class="title-row"><h3>The API scales itself from one pod to two</h3><span class="pill pill-locked">locked</span></div>
         <dl>
-          <dt>Choice</dt><dd>A HorizontalPodAutoscaler on the API: at least 3 pods, at most 5. It adds a pod when the pods average over 70% of their CPU request, at once, and removes one only after two quiet minutes. It reads CPU from the metrics server k3s ships.</dd>
+          <dt>Choice</dt><dd>A HorizontalPodAutoscaler on the API: at least 1 pod, at most 2 on a laptop. Revision 3 had 3 to 5. It adds a pod when the pods average over 70% of their CPU request, at once, and removes one only after two quiet minutes. It reads CPU from the metrics server k3s ships.</dd>
           <dt>Instead of</dt><dd>A fixed 3 pods, scaled by hand, which revision 2 had and which left the autoscaler to round 3.</dd>
           <dt>Why</dt><dd>The lead's call: "yes, add the autoscaler in round 2. Its critical." Kubernetes should follow the load, and k3d can prove it does.</dd>
-          <dt>Costs</dt><dd>Five is the ceiling: each pod opens up to 15 database connections, and 6 pods would pass 80% of Postgres's 100. Going higher needs a connection pooler in front of Postgres, which Azure's managed Postgres brings in round 3. Postgres itself stays one pod; a database grows by replication, not by copies of the pod.</dd>
+          <dt>Costs</dt><dd>Two keeps an unknown reviewer's Mac comfortable; the README says how to raise it for a heavy load test. Five is the most the database allows: each pod opens up to 15 database connections, and 6 pods would pass 80% of Postgres's 100. Going higher needs a connection pooler in front of Postgres, which Azure's managed Postgres brings in round 3. Postgres itself stays one pod; a database grows by replication, not by copies of the pod.</dd>
         </dl>
       </div></div>
 
@@ -406,7 +407,7 @@ footer { color: var(--muted); font-size: 0.88rem; border-top: 1px solid var(--li
           <tr><td>4</td><td>Apply Postgres; wait until it is ready</td><td>Me, and the apply asks you</td></tr>
           <tr><td>5</td><td>Apply the <code>migrate-&lt;sha&gt;</code> Job; wait until it completes. A failure stops here</td><td>Me, and the apply asks you</td></tr>
           <tr><td>6</td><td>Apply the API, web, Ingress and network policies; wait for each rollout to finish</td><td>Me, and the apply asks you</td></tr>
-          <tr><td>7</td><td>Check <code>https://localhost:8443</code>: the app loads, and API responses come from all three pods</td><td>Me</td></tr>
+          <tr><td>7</td><td>Check <code>https://localhost:8443</code>: the app loads, and the API answers</td><td>Me</td></tr>
         </tbody>
       </table>
     </div>
@@ -421,7 +422,7 @@ footer { color: var(--muted); font-size: 0.88rem; border-top: 1px solid var(--li
       <table>
         <thead><tr><th>Claim</th><th>How it is shown</th><th>Where</th></tr></thead>
         <tbody>
-          <tr><td>Any pod serves any request</td><td>One signed-in session makes requests until all three pods (by <code>X-Served-By</code>) have answered, and each one sees the same tasks</td><td>Live suite, every run</td></tr>
+          <tr><td>Any pod serves any request</td><td>One signed-in session makes requests until every API pod (by <code>X-Served-By</code>) has answered, and each one sees the same tasks</td><td>Live suite: two replicas in compose, every pod running in k3d</td></tr>
           <tr><td>Losing a pod loses nothing</td><td>200 users under load; an API pod is deleted. No request fails, and every user's tasks check out afterwards</td><td>k6</td></tr>
           <tr><td>A release drops no request</td><td>The same load through a rolling restart of the API</td><td>k6</td></tr>
           <tr><td>Nothing survives in pods, and nothing needs to</td><td>Every API pod is replaced while users are signed in. They stay signed in, and their tasks and order are intact</td><td>k6</td></tr>
@@ -484,7 +485,9 @@ footer { color: var(--muted); font-size: 0.88rem; border-top: 1px solid var(--li
           <tr><td>Losing a pod loses nothing</td><td>200 users, one API pod deleted: 55,917 requests, none failed, data intact</td></tr>
           <tr><td>A release drops no request; nothing lives in a pod</td><td>200 users, every API pod replaced by a rolling restart: 55,931 requests, none failed, users stayed signed in</td></tr>
           <tr><td>The API follows the load</td><td>800 users: the autoscaler went from 3 to 4 to 5 pods and back to 3 two minutes after the load; 176,656 requests, none failed</td></tr>
-          <tr><td>Capacity</td><td><b>At least 1,500 concurrent users</b> with five pods and every budget met (round 1: at least 1,000)</td></tr>
+          <tr><td>The API follows the load, as shipped</td><td>500 users: from 1 pod to 2 and back to 1; 110,067 requests, none failed</td></tr>
+          <tr><td>Losing the only pod</td><td>200 users, the one API pod deleted: about 13 seconds of 5xx (2,200 requests, 5%), data intact. With two pods, losing one lost nothing</td></tr>
+          <tr><td>Capacity</td><td><b>At least 1,000 concurrent users</b> as shipped, on two API pods; <b>at least 1,500</b> with the ceiling raised to five (round 1: at least 1,000)</td></tr>
         </tbody>
       </table>
     </div>
@@ -501,13 +504,13 @@ footer { color: var(--muted); font-size: 0.88rem; border-top: 1px solid var(--li
     <span class="eyebrow">Exit criteria</span>
     <h2>Round 2 is done when</h2>
     <ul class="plain">
-      <li>On a Mac with Docker Desktop and k3d, the README's steps create the cluster and deploy it. <code>https://localhost:8443</code> serves the app, and the three API pods run on three different nodes.</li>
+      <li>On a Mac with Docker Desktop and k3d, the README's steps create the cluster and deploy it. <code>https://localhost:8443</code> serves the app, with one pod of each at rest.</li>
       <li>The cluster runs the same commit-tagged images as compose, from one Kustomize base and a k3d overlay. You reviewed every manifest before it was first applied.</li>
       <li>The migration Job completes before the API rolls out, and deploying the same commit again changes nothing.</li>
       <li>The live and browser suites pass against k3d, and still pass against compose.</li>
-      <li>Under 200 users, deleting an API pod, a rolling restart and replacing every pod cause no failed request and no lost data; signed-in users stay signed in.</li>
+      <li>A rolling restart, scaling, and deleting one of two API pods under load cause no failed request and no lost data, and signed-in users stay signed in. Deleting the only API pod costs about 15 seconds of errors and no data, and the README says so.</li>
       <li>No secret is in the repo, and no secret value is printed by any step.</li>
-      <li>Under rising load the autoscaler adds API pods, up to 5, and removes them when the load falls, with no failed request.</li>
+      <li>Under rising load the autoscaler adds an API pod, up to 2, and removes it when the load falls, with no failed request.</li>
       <li>The round's capacity figure on k3d is recorded next to round 1's.</li>
       <li>CI's round 1 jobs stay green.</li>
       <li>The README has clear steps for setting up and running on k3d, which the lead can follow to try the app.</li>
@@ -530,10 +533,11 @@ footer { color: var(--muted); font-size: 0.88rem; border-top: 1px solid var(--li
           <tr><td>6</td><td>Deploying (D32)</td><td>"Ok"</td><td>One script; in the session each apply runs on its own</td></tr>
           <tr><td>7</td><td>CI (D33)</td><td>"local mac only."</td><td>Deferred to <code>FUTURE.md</code></td></tr>
           <tr><td>8</td><td>Autoscaler (D34), asked on return</td><td>"yes, add the autoscaler in round 2. Its critical."</td><td>3 to 5 API pods on CPU, proven under load</td></tr>
+          <tr><td>9</td><td>Replica floor (D26, D34), asked after #12 merged</td><td>"go with option B. And since this is just local development, I would say like keep it to like two replicas at most."</td><td>One replica of everything; the API autoscales to 2; README note for heavy load</td></tr>
         </tbody>
       </table>
     </div>
   </section>
 
-  <footer>Revision 2, 2026-10-20: the lead's calls on revision 1, and the one-PR order of work they asked for. Revision 3, the same day: the API autoscaler, the order of work as built, and the outcome.</footer>
+  <footer>Revision 2, 2026-10-20: the lead's calls on revision 1, and the one-PR order of work they asked for. Revision 3, the same day: the API autoscaler, the order of work as built, and the outcome. Revision 4: one replica of everything to start, the API autoscaled to two.</footer>
 </main>

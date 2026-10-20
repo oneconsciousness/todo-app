@@ -6,7 +6,8 @@ metadata:
   labels:
     app.kubernetes.io/name: web
 spec:
-  replicas: 2
+  # One is enough for local use; nginx used a tenth of a core at 1,500 users.
+  replicas: 1
   selector:
     matchLabels:
       app.kubernetes.io/name: web
@@ -97,7 +98,8 @@ kind: PodDisruptionBudget
 metadata:
   name: web
 spec:
-  minAvailable: 1
+  # "At least one" would block every node drain while there is only one pod.
+  maxUnavailable: 1
   selector:
     matchLabels:
       app.kubernetes.io/name: web

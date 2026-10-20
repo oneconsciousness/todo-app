@@ -1,0 +1,14 @@
+14:12:23 hpa=cpu:76%/70% pods=2 | api-778b6d4d4c-qnc7b=289m/156Mi api-778b6d4d4c-sm999=316m/155Mi db-0=151m/105Mi web-5d5c46d6f4-4nftg=19m/6Mi 
+14:12:43 hpa=cpu:60%/70% pods=2 | api-778b6d4d4c-qnc7b=289m/156Mi api-778b6d4d4c-sm999=433m/155Mi db-0=30m/127Mi web-5d5c46d6f4-4nftg=19m/6Mi 
+14:13:04 hpa=cpu:71%/70% pods=2 | api-778b6d4d4c-qnc7b=342m/156Mi api-778b6d4d4c-sm999=471m/155Mi db-0=104m/130Mi web-5d5c46d6f4-4nftg=37m/6Mi 
+14:13:24 hpa=cpu:81%/70% pods=2 | api-778b6d4d4c-qnc7b=546m/156Mi api-778b6d4d4c-sm999=660m/155Mi db-0=186m/130Mi web-5d5c46d6f4-4nftg=66m/6Mi 
+14:13:44 hpa=cpu:120%/70% pods=2 | api-778b6d4d4c-qnc7b=769m/156Mi api-778b6d4d4c-sm999=844m/155Mi db-0=260m/131Mi web-5d5c46d6f4-4nftg=86m/6Mi 
+14:14:04 hpa=cpu:166%/70% pods=2 | api-778b6d4d4c-qnc7b=738m/156Mi api-778b6d4d4c-sm999=743m/155Mi db-0=276m/117Mi web-5d5c46d6f4-4nftg=95m/6Mi 
+14:14:24 hpa=cpu:148%/70% pods=2 | api-778b6d4d4c-qnc7b=738m/156Mi api-778b6d4d4c-sm999=744m/155Mi db-0=274m/114Mi web-5d5c46d6f4-4nftg=93m/7Mi 
+14:14:44 hpa=cpu:148%/70% pods=2 | api-778b6d4d4c-qnc7b=732m/156Mi api-778b6d4d4c-sm999=741m/155Mi db-0=271m/115Mi web-5d5c46d6f4-4nftg=93m/6Mi 
+14:15:04 hpa=cpu:147%/70% pods=2 | api-778b6d4d4c-qnc7b=754m/156Mi api-778b6d4d4c-sm999=747m/155Mi db-0=275m/114Mi web-5d5c46d6f4-4nftg=94m/6Mi 
+14:15:24 hpa=cpu:150%/70% pods=2 | api-778b6d4d4c-qnc7b=783m/156Mi api-778b6d4d4c-sm999=770m/155Mi db-0=294m/111Mi web-5d5c46d6f4-4nftg=99m/6Mi 
+14:15:44 hpa=cpu:155%/70% pods=2 | api-778b6d4d4c-qnc7b=783m/156Mi api-778b6d4d4c-sm999=763m/155Mi db-0=302m/112Mi web-5d5c46d6f4-4nftg=99m/6Mi 
+14:16:04 hpa=cpu:148%/70% pods=2 | api-778b6d4d4c-qnc7b=718m/156Mi api-778b6d4d4c-sm999=716m/155Mi db-0=255m/111Mi web-5d5c46d6f4-4nftg=91m/6Mi 
+14:16:25 hpa=cpu:143%/70% pods=2 | api-778b6d4d4c-qnc7b=716m/156Mi api-778b6d4d4c-sm999=716m/155Mi db-0=259m/110Mi web-5d5c46d6f4-4nftg=90m/6Mi 
+14:16:45 hpa=cpu:143%/70% pods=2 | api-778b6d4d4c-qnc7b=716m/156Mi api-778b6d4d4c-sm999=711m/155Mi db-0=261m/111Mi web-5d5c46d6f4-4nftg=90m/6Mi 

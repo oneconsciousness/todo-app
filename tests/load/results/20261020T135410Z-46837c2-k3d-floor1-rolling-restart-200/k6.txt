@@ -1,0 +1,5 @@
+VUs 200, hold 3m
+requests 43877 (172.6/s), iterations 6011
+p95 ms: read 41.2, write 44.4, auth 22.5
+failed requests 0.000%, server errors 0, checks 100.00%
+budgets: all met

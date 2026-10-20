@@ -1,0 +1,2 @@
+13:56:05 rollout restart deployment/api, one pod (users at full load)
+13:56:09 rollout complete

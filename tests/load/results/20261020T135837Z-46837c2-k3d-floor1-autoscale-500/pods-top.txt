@@ -1,0 +1,23 @@
+13:58:37 hpa=cpu:52%/70% pods=1 | api-778b6d4d4c-qnc7b=442m/156Mi db-0=46m/88Mi web-5d5c46d6f4-4nftg=8m/6Mi 
+13:58:57 hpa=cpu:88%/70% pods=1 | api-778b6d4d4c-qnc7b=146m/156Mi db-0=17m/88Mi web-5d5c46d6f4-4nftg=8m/6Mi 
+13:59:17 hpa=cpu:101%/70% pods=2 | api-778b6d4d4c-6hn8v=124m/89Mi api-778b6d4d4c-qnc7b=509m/156Mi db-0=39m/97Mi web-5d5c46d6f4-4nftg=9m/6Mi 
+13:59:37 hpa=cpu:47%/70% pods=2 | api-778b6d4d4c-6hn8v=345m/90Mi api-778b6d4d4c-qnc7b=342m/156Mi db-0=123m/108Mi web-5d5c46d6f4-4nftg=37m/6Mi 
+13:59:57 hpa=cpu:68%/70% pods=2 | api-778b6d4d4c-6hn8v=419m/90Mi api-778b6d4d4c-qnc7b=421m/155Mi db-0=146m/116Mi web-5d5c46d6f4-4nftg=37m/6Mi 
+14:00:17 hpa=cpu:81%/70% pods=2 | api-778b6d4d4c-6hn8v=405m/90Mi api-778b6d4d4c-qnc7b=412m/156Mi db-0=149m/116Mi web-5d5c46d6f4-4nftg=47m/6Mi 
+14:00:37 hpa=cpu:80%/70% pods=2 | api-778b6d4d4c-6hn8v=406m/91Mi api-778b6d4d4c-qnc7b=407m/155Mi db-0=163m/122Mi web-5d5c46d6f4-4nftg=46m/6Mi 
+14:00:57 hpa=cpu:81%/70% pods=2 | api-778b6d4d4c-6hn8v=407m/91Mi api-778b6d4d4c-qnc7b=409m/155Mi db-0=163m/122Mi web-5d5c46d6f4-4nftg=46m/6Mi 
+14:01:18 hpa=cpu:82%/70% pods=2 | api-778b6d4d4c-6hn8v=411m/92Mi api-778b6d4d4c-qnc7b=413m/156Mi db-0=178m/106Mi web-5d5c46d6f4-4nftg=47m/6Mi 
+14:01:38 hpa=cpu:80%/70% pods=2 | api-778b6d4d4c-6hn8v=410m/92Mi api-778b6d4d4c-qnc7b=412m/156Mi db-0=173m/103Mi web-5d5c46d6f4-4nftg=45m/6Mi 
+14:01:58 hpa=cpu:82%/70% pods=2 | api-778b6d4d4c-6hn8v=400m/92Mi api-778b6d4d4c-qnc7b=405m/156Mi db-0=198m/105Mi web-5d5c46d6f4-4nftg=46m/7Mi 
+14:02:18 hpa=cpu:85%/70% pods=2 | api-778b6d4d4c-6hn8v=394m/94Mi api-778b6d4d4c-qnc7b=398m/156Mi db-0=201m/104Mi web-5d5c46d6f4-4nftg=44m/6Mi 
+14:02:38 hpa=cpu:79%/70% pods=2 | api-778b6d4d4c-6hn8v=390m/94Mi api-778b6d4d4c-qnc7b=399m/156Mi db-0=179m/106Mi web-5d5c46d6f4-4nftg=44m/6Mi 
+14:02:58 hpa=cpu:78%/70% pods=2 | api-778b6d4d4c-6hn8v=410m/94Mi api-778b6d4d4c-qnc7b=410m/156Mi db-0=209m/105Mi web-5d5c46d6f4-4nftg=46m/7Mi 
+14:03:19 hpa=cpu:75%/70% pods=2 | api-778b6d4d4c-6hn8v=320m/151Mi api-778b6d4d4c-qnc7b=279m/155Mi db-0=17m/127Mi web-5d5c46d6f4-4nftg=1m/6Mi 
+14:03:39 hpa=cpu:59%/70% pods=2 | api-778b6d4d4c-6hn8v=4m/151Mi api-778b6d4d4c-qnc7b=4m/155Mi db-0=15m/127Mi web-5d5c46d6f4-4nftg=1m/6Mi 
+14:03:59 hpa=cpu:0%/70% pods=2 | api-778b6d4d4c-6hn8v=4m/151Mi api-778b6d4d4c-qnc7b=4m/155Mi db-0=6m/127Mi web-5d5c46d6f4-4nftg=1m/6Mi 
+14:04:19 hpa=cpu:0%/70% pods=2 | api-778b6d4d4c-6hn8v=4m/151Mi api-778b6d4d4c-qnc7b=4m/155Mi db-0=8m/127Mi web-5d5c46d6f4-4nftg=1m/5Mi 
+14:04:39 hpa=cpu:0%/70% pods=2 | api-778b6d4d4c-6hn8v=4m/151Mi api-778b6d4d4c-qnc7b=4m/155Mi db-0=7m/127Mi web-5d5c46d6f4-4nftg=1m/5Mi 
+14:04:59 hpa=cpu:0%/70% pods=2 | api-778b6d4d4c-6hn8v=3m/151Mi api-778b6d4d4c-qnc7b=4m/155Mi db-0=7m/127Mi web-5d5c46d6f4-4nftg=1m/5Mi 
+14:05:19 hpa=cpu:0%/70% pods=2 | api-778b6d4d4c-6hn8v=4m/151Mi api-778b6d4d4c-qnc7b=4m/155Mi db-0=6m/127Mi web-5d5c46d6f4-4nftg=1m/5Mi 
+14:05:40 hpa=cpu:0%/70% pods=2 | api-778b6d4d4c-6hn8v=4m/151Mi api-778b6d4d4c-qnc7b=4m/155Mi db-0=7m/127Mi web-5d5c46d6f4-4nftg=1m/5Mi 
+14:06:00 hpa=cpu:0%/70% pods=1 | api-778b6d4d4c-qnc7b=4m/155Mi db-0=8m/127Mi web-5d5c46d6f4-4nftg=1m/5Mi 
