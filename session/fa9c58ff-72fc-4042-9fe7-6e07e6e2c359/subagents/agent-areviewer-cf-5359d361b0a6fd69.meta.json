@@ -1,0 +1,1 @@
+{"agentType":"reviewer-cf","description":"Review backend foundation Cf","name":"reviewer-cf","spawnDepth":0,"requestShape":"background","requestNonInteractive":true,"model":"opus","taskKind":"in_process_teammate","teamName":"session-fa9c58ff","color":"green","planModeRequired":false,"customAgentType":"reviewer","spawnedAgentType":"reviewer","permissionMode":"auto"}

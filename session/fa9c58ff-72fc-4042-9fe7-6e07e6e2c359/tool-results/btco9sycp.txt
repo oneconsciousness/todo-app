@@ -1,0 +1,935 @@
+=== views/task-list-view.tsx
+import { type SubmitEvent, useId, useState } from "react";
+import { Button } from "../components/ui/button.tsx";
+import { EmptyState } from "../components/ui/empty-state.tsx";
+import { Icon } from "../components/ui/icon.tsx";
+import { Notice } from "../components/ui/notice.tsx";
+import { Page } from "../components/ui/page.tsx";
+import { SearchBox } from "../components/ui/search-box.tsx";
+import { Skeleton } from "../components/ui/skeleton.tsx";
+import { SortableList } from "../components/ui/sortable-list.tsx";
+import {
+  LedgerCells,
+  LedgerHead,
+  TaskRow,
+  ledgerLineClass,
+  taskLineClass,
+} from "../components/ui/task-row.tsx";
+import { TextField } from "../components/ui/text-field.tsx";
+import { longDate } from "../lib/due-date.ts";
+import { type Task, titleSchema } from "../lib/schema/task.ts";
+import { isSearching, listSummary } from "../lib/task-list.ts";
+
+/** What the list area shows: placeholders, a load error, or the tasks the server returned. */
+export type TaskListContent =
+  | { readonly status: "loading" }
+  | { readonly status: "error"; readonly message: string }
+  | { readonly status: "ready"; readonly tasks: readonly Task[] };
+
+/** An action that failed and was rolled back, with an optional way to try it again. */
+export interface TaskListFailure {
+  readonly message: string;
+  readonly onRetry?: () => void;
+}
+
+/** Props for `TaskListView`. Server data comes in; every user intent goes out as a callback. */
+export interface TaskListViewProps {
+  readonly content: TaskListContent;
+  /** Today as `YYYY-MM-DD`, so due dates read relative to it. */
+  readonly today: string;
+  /** The search box text. A non-empty term turns reordering off. */
+  readonly query: string;
+  /** True while the results for `query` are still loading; the previous results stay on screen. */
+  readonly searchPending: boolean;
+  /** The title of a task the server is still creating, shown at the top of the list. */
+  readonly pendingCreate: string | null;
+  readonly failure: TaskListFailure | null;
+  readonly onQueryChange: (query: string) => void;
+  readonly onCreate: (title: string) => void;
+  readonly onToggle: (taskId: string, completed: boolean) => void;
+  readonly onMove: (taskId: string, afterId: string | null) => void;
+  readonly onRetry: () => void;
+  readonly onDismissFailure: () => void;
+}
+
+const placeholderWidths = ["w-3/4", "w-1/2", "w-2/3", "w-2/5"] as const;
+
+const inset = "px-4 @wide:px-12";
+
+/** The task list screen: one ledger page with search, quick add, and the ruled list the user ticks off and reorders. */
+export function TaskListView(props: TaskListViewProps) {
+  const { content, today, query, searchPending, pendingCreate, failure } = props;
+  const headingId = useId();
+  const [draft, setDraft] = useState("");
+  const [draftError, setDraftError] = useState<string | undefined>(undefined);
+  const reorderable = !isSearching(query) && content.status === "ready";
+
+  const handleSubmit = (event: SubmitEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const title = titleSchema.safeParse(draft);
+    if (!title.success) {
+      setDraftError(title.error.issues[0]?.message);
+      return;
+    }
+    props.onCreate(title.data);
+    setDraft("");
+  };
+
+  return (
+    <Page labelledBy={headingId}>
+      <header
+        className={`flex flex-col gap-4 @wide:flex-row @wide:items-end @wide:justify-between ${inset}`}
+      >
+        <div className="flex flex-col gap-1">
+          <p className="text-caption font-medium tracking-caps text-ink-muted uppercase">
+            {longDate(today)}
+          </p>
+          <h1 id={headingId} className="font-display text-display font-medium text-balance">
+            Tasks
+          </h1>
+          <p role="status" className="min-h-5 text-caption text-ink-muted tabular-nums">
+            {content.status === "ready" && listSummary(content.tasks, query, searchPending)}
+          </p>
+        </div>
+        <SearchBox
+          label="Search tasks"
+          placeholder="Search titles and notes"
+          value={query}
+          busy={searchPending}
+          onChange={props.onQueryChange}
+          className="@wide:w-1/2"
+        />
+      </header>
+
+      <form noValidate onSubmit={handleSubmit} className={`flex items-start gap-2 ${inset}`}>
+        <TextField
+          label="New task"
+          hideLabel
+          placeholder="Add a task"
+          value={draft}
+          error={draftError}
+          onChange={(event) => {
+            setDraft(event.target.value);
+            setDraftError(undefined);
+          }}
+          className="flex-1"
+        />
+        <Button type="submit" variant="primary" disabled={pendingCreate !== null}>
+          <Icon name="plus" />
+          Add task
+        </Button>
+      </form>
+
+      {failure && (
+        <div className={inset}>
+          <Notice
+            actions={failure.onRetry && [{ label: "Try again", onAction: failure.onRetry }]}
+            onDismiss={props.onDismissFailure}
+          >
+            {failure.message}
+          </Notice>
+        </div>
+      )}
+
+      <div className="@wide:px-12">
+        <div className="border-t border-b-3 border-double border-rule-strong">
+          {content.status !== "error" && <LedgerHead reorderable={reorderable} />}
+          {pendingCreate !== null && <PendingRow title={pendingCreate} reorderable={reorderable} />}
+          <ListBody {...props} reorderable={reorderable} />
+        </div>
+      </div>
+    </Page>
+  );
+}
+
+interface ListBodyProps extends TaskListViewProps {
+  readonly reorderable: boolean;
+}
+
+function ListBody({
+  content,
+  today,
+  query,
+  pendingCreate,
+  reorderable,
+  onQueryChange,
+  onToggle,
+  onMove,
+  onRetry,
+}: ListBodyProps) {
+  switch (content.status) {
+    case "loading":
+      return <LoadingRows />;
+    case "error":
+      return (
+        <EmptyState
+          tone="alert"
+          title="Couldn't load your tasks"
+          actions={
+            <Button variant="primary" onClick={onRetry}>
+              Try again
+            </Button>
+          }
+        >
+          {content.message}
+        </EmptyState>
+      );
+    case "ready":
+      if (content.tasks.length === 0 && isSearching(query))
+        return (
+          <EmptyState
+            title={`No tasks match “${query.trim()}”`}
+            actions={
+              <Button
+                onClick={() => {
+                  onQueryChange("");
+                }}
+              >
+                Show all tasks
+              </Button>
+            }
+          >
+            Search looks through task titles and notes.
+          </EmptyState>
+        );
+      if (content.tasks.length === 0 && pendingCreate === null)
+        return (
+          <EmptyState title="No tasks yet">
+            Add your first task above. New tasks go to the top of the list.
+          </EmptyState>
+        );
+      return (
+        <SortableList
+          items={content.tasks}
+          label="Tasks"
+          itemLabel={(task) => task.title}
+          disabled={!reorderable}
+          onMove={onMove}
+          itemClassName={taskLineClass(reorderable)}
+        >
+          {(task, handle) => (
+            <TaskRow task={task} today={today} handle={handle} onToggle={onToggle} />
+          )}
+        </SortableList>
+      );
+    default: {
+      const unreachable: never = content;
+      return unreachable;
+    }
+  }
+}
+
+function PendingRow({
+  title,
+  reorderable,
+}: {
+  readonly title: string;
+  readonly reorderable: boolean;
+}) {
+  return (
+    <div aria-busy="true" className={ledgerLineClass(reorderable)}>
+      <LedgerCells
+        handle={reorderable && <span className="block size-touch" />}
+        control={<Skeleton className="size-5" />}
+      >
+        <span className="leading-(--text-lead--line-height) break-words text-ink-muted">
+          {title}
+        </span>
+        <span className="text-caption text-ink-muted motion-safe:animate-shimmer">Adding…</span>
+      </LedgerCells>
+    </div>
+  );
+}
+
+function LoadingRows() {
+  return (
+    <div role="status">
+      <span className="sr-only">Loading your tasks…</span>
+      {placeholderWidths.map((width) => (
+        <div key={width} aria-hidden="true" className={ledgerLineClass(false)}>
+          <LedgerCells handle={null} control={<Skeleton className="size-5" />}>
+            <Skeleton className={`my-2 h-3 ${width}`} />
+          </LedgerCells>
+        </div>
+      ))}
+    </div>
+  );
+}
+=== views/task-detail-view.tsx
+import { type ChangeEvent, type SubmitEvent, useId, useState } from "react";
+import { Button } from "../components/ui/button.tsx";
+import { Checkbox } from "../components/ui/checkbox.tsx";
+import { Icon } from "../components/ui/icon.tsx";
+import { InlineConfirm } from "../components/ui/inline-confirm.tsx";
+import { Link } from "../components/ui/link.tsx";
+import { Notice } from "../components/ui/notice.tsx";
+import { Page } from "../components/ui/page.tsx";
+import { Skeleton } from "../components/ui/skeleton.tsx";
+import { dueToneClass } from "../components/ui/task-row.tsx";
+import { TextArea } from "../components/ui/text-area.tsx";
+import { TextField } from "../components/ui/text-field.tsx";
+import { dueLabel, formatDay } from "../lib/due-date.ts";
+import { routes } from "../lib/routes.ts";
+import { type FieldErrors, fieldErrors } from "../lib/schema/field-errors.ts";
+import { type Task, type TaskDraft, type TaskEdit, taskDraftSchema } from "../lib/schema/task.ts";
+import { type TaskChanges, changedFieldNames, changesFrom, draftFrom } from "../lib/task-draft.ts";
+import { NotFoundView } from "./not-found-view.tsx";
+
+/** What the detail screen shows: a placeholder, not found (missing or someone else's), or the task. */
+export type TaskDetailContent =
+  | { readonly status: "loading" }
+  | { readonly status: "not-found" }
+  | { readonly status: "ready"; readonly task: Task };
+
+/** Props for `TaskDetailView`. The task comes in; saves, toggles and deletes go out as callbacks. */
+export interface TaskDetailViewProps {
+  readonly content: TaskDetailContent;
+  /** Today as `YYYY-MM-DD`, so the due date reads relative to it. */
+  readonly today: string;
+  readonly saving: boolean;
+  readonly deleting: boolean;
+  /** What the last save or delete failed with, in words for the user; null when nothing failed. */
+  readonly failure: string | null;
+  /** Save the changed fields. `version` is the one the edit started from; the API rejects the save if the task has changed since. */
+  readonly onSave: (taskId: string, changes: TaskChanges, version: number) => void;
+  readonly onToggle: (taskId: string, completed: boolean) => void;
+  readonly onDelete: (taskId: string) => void;
+}
+
+const inset = "px-4 @wide:px-12";
+const captionCaps = "text-caption font-medium tracking-caps text-ink-muted uppercase";
+
+/** The task detail screen: read every field, tick it off, edit and save it, or delete it after a confirm step. */
+export function TaskDetailView(props: TaskDetailViewProps) {
+  const { content } = props;
+  switch (content.status) {
+    case "loading":
+      return <LoadingEntry />;
+    case "not-found":
+      return <NotFoundView subject="task" />;
+    case "ready":
+      return <TaskEntry key={content.task.id} {...props} task={content.task} />;
+    default: {
+      const unreachable: never = content;
+      return unreachable;
+    }
+  }
+}
+
+interface Editing {
+  /** The version the draft started from, or was last rebased onto. */
+  readonly base: Task;
+  readonly draft: TaskDraft;
+  readonly errors: FieldErrors<TaskDraft>;
+  /** The edit sent with the last save, so the view can recognise its own save when it comes back. */
+  readonly submitted: TaskEdit | null;
+}
+
+interface TaskEntryProps extends Omit<TaskDetailViewProps, "content"> {
+  readonly task: Task;
+}
+
+const isEmpty = (changes: TaskChanges): boolean => Object.keys(changes).length === 0;
+
+function TaskEntry({
+  task,
+  today,
+  saving,
+  deleting,
+  failure,
+  onSave,
+  onToggle,
+  onDelete,
+}: TaskEntryProps) {
+  const headingId = useId();
+  const [editing, setEditing] = useState<Editing | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [seenVersion, setSeenVersion] = useState(task.version);
+
+  // A newer version came in (React's pattern for adjusting state when a prop changes). If it is our own save,
+  // leave edit mode; if it changes nothing the user can see, quietly rebase the draft onto it.
+  if (task.version !== seenVersion) {
+    setSeenVersion(task.version);
+    if (editing?.submitted && isEmpty(changesFrom(task, editing.submitted))) setEditing(null);
+    else if (editing && changedFieldNames(editing.base, task).length === 0)
+      setEditing({ ...editing, base: task });
+  }
+
+  const startFrom = (latest: Task) => {
+    setEditing({ base: latest, draft: draftFrom(latest), errors: {}, submitted: null });
+  };
+
+  const edit =
+    (field: keyof TaskDraft) => (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+      const { value } = event.target;
+      setEditing(
+        (current) =>
+          current && {
+            ...current,
+            draft: { ...current.draft, [field]: value },
+            errors: { ...current.errors, [field]: undefined },
+            submitted: null,
+          },
+      );
+    };
+
+  const save = (event: SubmitEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!editing) return;
+    const result = taskDraftSchema.safeParse(editing.draft);
+    if (!result.success) {
+      setEditing({ ...editing, errors: fieldErrors(result.error) });
+      return;
+    }
+    const changes = changesFrom(editing.base, result.data);
+    if (isEmpty(changes)) {
+      setEditing(null);
+      return;
+    }
+    onSave(task.id, changes, editing.base.version);
+    setEditing({ ...editing, submitted: result.data });
+  };
+
+  const changedElsewhere =
+    editing && task.version > editing.base.version ? changedFieldNames(editing.base, task) : null;
+  const due = task.dueDate ? dueLabel(task.dueDate, today, task.completed) : null;
+
+  return (
+    <Page labelledBy={headingId}>
+      <div className={inset}>
+        <Link
+          href={routes.tasks}
+          className={`inline-flex min-h-touch items-center gap-2 transition-colors hover:text-ink ${captionCaps}`}
+        >
+          <Icon name="back" className="size-4" />
+          All tasks
+        </Link>
+      </div>
+
+      {failure && (
+        <div className={inset}>
+          <Notice>{failure}</Notice>
+        </div>
+      )}
+
+      {editing ? (
+        <form noValidate onSubmit={save} className={`flex flex-col gap-6 ${inset}`}>
+          <h1 id={headingId} className="font-display text-title font-medium text-balance">
+            Edit task
+          </h1>
+          {changedElsewhere && (
+            <Notice
+              actions={[
+                {
+                  label: "Use the latest",
+                  onAction: () => {
+                    startFrom(task);
+                  },
+                },
+                {
+                  label: "Keep my edits",
+                  onAction: () => {
+                    setEditing({ ...editing, base: task });
+                  },
+                },
+              ]}
+            >
+              <strong className="font-semibold">Changed elsewhere.</strong> Another tab or device
+              saved a newer version ({changedElsewhere.join(", ")}). Use the latest, or keep your
+              edits and save over it.
+            </Notice>
+          )}
+          <fieldset disabled={saving} className="flex min-w-0 flex-col gap-4">
+            <TextField
+              label="Title"
+              value={editing.draft.title}
+              error={editing.errors.title}
+              onChange={edit("title")}
+            />
+            <TextField
+              label="Due date"
+              type="date"
+              value={editing.draft.dueDate}
+              error={editing.errors.dueDate}
+              onChange={edit("dueDate")}
+              className="@wide:w-1/2"
+            />
+            <TextArea
+              label="Notes"
+              rows={6}
+              value={editing.draft.notes}
+              error={editing.errors.notes}
+              onChange={edit("notes")}
+            />
+          </fieldset>
+          <div className="flex flex-wrap gap-2">
+            <Button type="submit" variant="primary" disabled={saving}>
+              {saving ? "Saving…" : "Save changes"}
+            </Button>
+            <Button
+              disabled={saving}
+              onClick={() => {
+                setEditing(null);
+              }}
+            >
+              Cancel
+            </Button>
+          </div>
+        </form>
+      ) : (
+        <>
+          <header className={`flex items-start gap-1 ${inset}`}>
+            <span className="-ml-3">
+              <Checkbox
+                label={`Completed: ${task.title}`}
+                checked={task.completed}
+                onChange={(completed) => {
+                  onToggle(task.id, completed);
+                }}
+              />
+            </span>
+            <div className="flex min-w-0 flex-col gap-2 pt-1">
+              <h1
+                id={headingId}
+                className={`font-display text-display font-medium text-balance break-words ${task.completed ? "text-ink-muted line-through decoration-2" : ""}`}
+              >
+                {task.title}
+              </h1>
+              {due && (
+                <p className="tabular-nums">
+                  <time dateTime={task.dueDate ?? undefined} className={dueToneClass[due.tone]}>
+                    {due.text}
+                  </time>
+                </p>
+              )}
+            </div>
+          </header>
+
+          <dl className={`grid grid-cols-3 gap-4 border-y border-rule py-4 ${inset}`}>
+            {[
+              ["Status", task.completed ? "Done" : "Open"],
+              ["Entered", formatDay(task.createdAt, today)],
+              ["Changed", formatDay(task.updatedAt, today)],
+            ].map(([term, detail]) => (
+              <div key={term} className="flex flex-col gap-1">
+                <dt className={captionCaps}>{term}</dt>
+                <dd className="tabular-nums">{detail}</dd>
+              </div>
+            ))}
+          </dl>
+
+          <section className={`flex flex-col gap-2 ${inset}`}>
+            <h2 className={captionCaps}>Notes</h2>
+            {task.notes ? (
+              <p className="ruled break-words whitespace-pre-line">{task.notes}</p>
+            ) : (
+              <p className="text-ink-muted">No notes yet. Edit the task to add some.</p>
+            )}
+          </section>
+
+          <div className={`flex flex-wrap gap-2 ${inset}`}>
+            {confirmingDelete ? (
+              <InlineConfirm
+                message={`Delete “${task.title}”? This can't be undone.`}
+                confirmLabel="Delete task"
+                busyLabel="Deleting…"
+                cancelLabel="Keep it"
+                busy={deleting}
+                onConfirm={() => {
+                  onDelete(task.id);
+                }}
+                onCancel={() => {
+                  setConfirmingDelete(false);
+                }}
+              />
+            ) : (
+              <>
+                <Button
+                  variant="primary"
+                  onClick={() => {
+                    startFrom(task);
+                  }}
+                >
+                  Edit task
+                </Button>
+                <Button
+                  onClick={() => {
+                    setConfirmingDelete(true);
+                  }}
+                >
+                  Delete
+                </Button>
+              </>
+            )}
+          </div>
+        </>
+      )}
+    </Page>
+  );
+}
+
+function LoadingEntry() {
+  return (
+    <Page>
+      <div role="status" className={`flex flex-col gap-4 ${inset}`}>
+        <span className="sr-only">Loading the task…</span>
+        <Skeleton className="h-3 w-1/4" />
+        <Skeleton className="h-8 w-3/4" />
+        <Skeleton className="h-3 w-1/2" />
+        <Skeleton className="mt-6 h-3 w-full" />
+        <Skeleton className="h-3 w-2/3" />
+      </div>
+    </Page>
+  );
+}
+=== views/sign-in-view.tsx
+import { AuthLayout } from "../components/auth-layout.tsx";
+import { CredentialsForm, unreachableMessage } from "../components/credentials-form.tsx";
+import { Link, textLinkClass } from "../components/ui/link.tsx";
+import { routes } from "../lib/routes.ts";
+import type { Credentials } from "../lib/schema/auth.ts";
+
+/** Why the last sign-in failed: a 401, or no answer from the server. */
+export type SignInFailure = "wrong-credentials" | "unreachable";
+
+/** Props for `SignInView`. */
+export interface SignInViewProps {
+  readonly submitting: boolean;
+  readonly failure: SignInFailure | null;
+  readonly initialEmail?: string | undefined;
+  readonly onSubmit: (credentials: Credentials) => void;
+}
+
+const messages: Readonly<Record<SignInFailure, string>> = {
+  "wrong-credentials": "That email and password don't match an account. Check both and try again.",
+  unreachable: unreachableMessage,
+};
+
+/** The landing page: sign in, or go and create an account. */
+export function SignInView({ submitting, failure, initialEmail, onSubmit }: SignInViewProps) {
+  return (
+    <AuthLayout
+      title="Sign in"
+      footer={
+        <>
+          New here?{" "}
+          <Link href={routes.signUp} className={textLinkClass}>
+            Create an account
+          </Link>
+        </>
+      }
+    >
+      <CredentialsForm
+        submitLabel="Sign in"
+        submittingLabel="Signing in…"
+        passwordAutoComplete="current-password"
+        submitting={submitting}
+        failure={failure && messages[failure]}
+        initialEmail={initialEmail}
+        onSubmit={onSubmit}
+      />
+    </AuthLayout>
+  );
+}
+=== views/sign-up-view.tsx
+import type { ReactNode } from "react";
+import { AuthLayout } from "../components/auth-layout.tsx";
+import { CredentialsForm, unreachableMessage } from "../components/credentials-form.tsx";
+import { Link, textLinkClass } from "../components/ui/link.tsx";
+import { routes } from "../lib/routes.ts";
+import type { Credentials } from "../lib/schema/auth.ts";
+
+/** Why the last sign-up failed: a 409 for a registered email, or no answer from the server. */
+export type SignUpFailure = "email-taken" | "unreachable";
+
+/** Props for `SignUpView`. */
+export interface SignUpViewProps {
+  readonly submitting: boolean;
+  readonly failure: SignUpFailure | null;
+  readonly onSubmit: (credentials: Credentials) => void;
+}
+
+const messages: Readonly<Record<SignUpFailure, ReactNode>> = {
+  "email-taken": (
+    <>
+      An account with this email already exists.{" "}
+      <Link href={routes.signIn} className={textLinkClass}>
+        Sign in instead
+      </Link>
+    </>
+  ),
+  unreachable: unreachableMessage,
+};
+
+/** Create an account with an email and a password of 12 to 128 characters. */
+export function SignUpView({ submitting, failure, onSubmit }: SignUpViewProps) {
+  return (
+    <AuthLayout
+      title="Create an account"
+      footer={
+        <>
+          Already have an account?{" "}
+          <Link href={routes.signIn} className={textLinkClass}>
+            Sign in
+          </Link>
+        </>
+      }
+    >
+      <CredentialsForm
+        submitLabel="Create account"
+        submittingLabel="Creating account…"
+        passwordAutoComplete="new-password"
+        passwordHint="At least 12 characters."
+        submitting={submitting}
+        failure={failure && messages[failure]}
+        onSubmit={onSubmit}
+      />
+    </AuthLayout>
+  );
+}
+=== views/not-found-view.tsx
+import { useId } from "react";
+import { buttonClass } from "../components/ui/button.tsx";
+import { EmptyState } from "../components/ui/empty-state.tsx";
+import { Link } from "../components/ui/link.tsx";
+import { Page } from "../components/ui/page.tsx";
+import { routes } from "../lib/routes.ts";
+
+/** Props for `NotFoundView`. */
+export interface NotFoundViewProps {
+  /** A missing page (any unknown route), or a task that is gone or belongs to someone else. */
+  readonly subject: "page" | "task";
+}
+
+const copy = {
+  page: {
+    title: "This page isn't in the ledger",
+    body: "The address may be mistyped, or the page has moved.",
+  },
+  task: {
+    title: "This task isn't in your ledger",
+    body: "It may have been deleted, or the link may be wrong.",
+  },
+} as const;
+
+/** Not found, for a route that doesn't exist or a task the user can't see. It never says which of the two. */
+export function NotFoundView({ subject }: NotFoundViewProps) {
+  const headingId = useId();
+  return (
+    <Page labelledBy={headingId}>
+      <EmptyState
+        level={1}
+        headingId={headingId}
+        stamp="No entry"
+        title={copy[subject].title}
+        actions={
+          <Link href={routes.tasks} className={buttonClass("primary")}>
+            Go to your tasks
+          </Link>
+        }
+      >
+        {copy[subject].body}
+      </EmptyState>
+    </Page>
+  );
+}
+=== views/error-view.tsx
+import { useId } from "react";
+import { Button } from "../components/ui/button.tsx";
+import { EmptyState } from "../components/ui/empty-state.tsx";
+import { Page } from "../components/ui/page.tsx";
+
+/** Props for `ErrorView`. */
+export interface ErrorViewProps {
+  /** What went wrong, in words a user can act on; a general line is shown without one. */
+  readonly message?: string | undefined;
+  readonly onRetry: () => void;
+  readonly onGoToTasks: () => void;
+}
+
+/** The route error boundary's screen: what went wrong, and two ways forward. */
+export function ErrorView({ message, onRetry, onGoToTasks }: ErrorViewProps) {
+  const headingId = useId();
+  return (
+    <Page labelledBy={headingId}>
+      <EmptyState
+        level={1}
+        headingId={headingId}
+        title="Something went wrong"
+        actions={
+          <>
+            <Button variant="primary" onClick={onRetry}>
+              Try again
+            </Button>
+            <Button onClick={onGoToTasks}>Go to tasks</Button>
+          </>
+        }
+      >
+        {message ?? "This page hit a problem it couldn't recover from. Your tasks are safe."}
+      </EmptyState>
+    </Page>
+  );
+}
+=== components/app-shell.tsx
+import type { ReactNode } from "react";
+import { routes } from "../lib/routes.ts";
+import { Button } from "./ui/button.tsx";
+import { LedgerTitle } from "./ui/ledger-title.tsx";
+import { Link } from "./ui/link.tsx";
+
+/** The signed-in account the masthead names, with its sign-out action. */
+export interface ShellAccount {
+  readonly email: string;
+  readonly signingOut: boolean;
+  readonly onSignOut: () => void;
+}
+
+/** Props for `AppShell`. */
+export interface AppShellProps {
+  /** The signed-in account, or null on a page a signed-out visitor can reach. */
+  readonly account: ShellAccount | null;
+  readonly children: ReactNode;
+}
+
+/** The frame around every signed-in screen: a binding band with the ledger's title, and the desk the page lies on. */
+export function AppShell({ account, children }: AppShellProps) {
+  return (
+    <div className="@container">
+      <header className="binding">
+        <div className="mx-auto flex max-w-measure items-center justify-between gap-4 px-4 py-3 @wide:px-0">
+          <Link href={routes.tasks} className="rounded-control">
+            <LedgerTitle size="band" />
+          </Link>
+          {account && (
+            <div className="flex min-w-0 items-center gap-4">
+              <span className="hidden truncate text-caption @wide:block">{account.email}</span>
+              <Button variant="binding" disabled={account.signingOut} onClick={account.onSignOut}>
+                Sign out
+              </Button>
+            </div>
+          )}
+        </div>
+      </header>
+      <main className="px-2 py-4 @wide:px-12 @wide:py-12">{children}</main>
+    </div>
+  );
+}
+=== components/credentials-form.tsx
+import { type ChangeEvent, type ReactNode, type SubmitEvent, useState } from "react";
+import { type Credentials, credentialsSchema } from "../lib/schema/auth.ts";
+import { type FieldErrors, fieldErrors } from "../lib/schema/field-errors.ts";
+import { Button } from "./ui/button.tsx";
+import { Notice } from "./ui/notice.tsx";
+import { TextField } from "./ui/text-field.tsx";
+
+/** What sign-in and sign-up both say when the server can't be reached. */
+export const unreachableMessage = "Couldn't reach the server. Check your connection and try again.";
+
+/** Props for `CredentialsForm`. */
+export interface CredentialsFormProps {
+  readonly submitLabel: string;
+  readonly submittingLabel: string;
+  readonly passwordAutoComplete: "current-password" | "new-password";
+  readonly passwordHint?: string | undefined;
+  readonly submitting: boolean;
+  /** What went wrong on the last attempt, shown above the fields; null when nothing did. */
+  readonly failure: ReactNode;
+  readonly initialEmail?: string | undefined;
+  readonly onSubmit: (credentials: Credentials) => void;
+}
+
+/** The email and password form behind sign-in and sign-up, validated by the same schema the API layer uses. */
+export function CredentialsForm({
+  submitLabel,
+  submittingLabel,
+  passwordAutoComplete,
+  passwordHint,
+  submitting,
+  failure,
+  initialEmail = "",
+  onSubmit,
+}: CredentialsFormProps) {
+  const [values, setValues] = useState<Credentials>({ email: initialEmail, password: "" });
+  const [errors, setErrors] = useState<FieldErrors<Credentials>>({});
+
+  const edit = (field: keyof Credentials) => (event: ChangeEvent<HTMLInputElement>) => {
+    setValues((current) => ({ ...current, [field]: event.target.value }));
+    setErrors((current) => ({ ...current, [field]: undefined }));
+  };
+
+  const handleSubmit = (event: SubmitEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const result = credentialsSchema.safeParse(values);
+    if (result.success) onSubmit(result.data);
+    else setErrors(fieldErrors(result.error));
+  };
+
+  return (
+    <form noValidate onSubmit={handleSubmit} className="flex flex-col gap-6">
+      {failure && <Notice>{failure}</Notice>}
+      <fieldset disabled={submitting} className="flex min-w-0 flex-col gap-4">
+        <TextField
+          label="Email"
+          type="email"
+          autoComplete="email"
+          value={values.email}
+          error={errors.email}
+          onChange={edit("email")}
+        />
+        <TextField
+          label="Password"
+          type="password"
+          autoComplete={passwordAutoComplete}
+          hint={passwordHint}
+          value={values.password}
+          error={errors.password}
+          onChange={edit("password")}
+        />
+      </fieldset>
+      <Button type="submit" variant="primary" disabled={submitting} className="w-full">
+        {submitting ? submittingLabel : submitLabel}
+      </Button>
+    </form>
+  );
+}
+=== components/auth-layout.tsx
+import { type ReactNode, useId } from "react";
+import { LedgerTitle } from "./ui/ledger-title.tsx";
+
+/** Props for `AuthLayout`. */
+export interface AuthLayoutProps {
+  readonly title: string;
+  readonly children: ReactNode;
+  readonly footer: ReactNode;
+}
+
+/**
+ * The ledger opened at its title page: the cloth cover with the title tooled in gilt inside a blind-stamped double
+ * frame, and beside it (below it on a phone) the first page, which holds the form.
+ */
+export function AuthLayout({ title, children, footer }: AuthLayoutProps) {
+  const headingId = useId();
+  return (
+    <div className="@container flex min-h-dvh items-center bg-binding text-on-binding">
+      <div className="mx-auto grid w-full max-w-book gap-6 px-4 py-6 @wide:grid-cols-2 @wide:gap-12 @wide:px-8 @wide:py-16">
+        <div className="flex flex-col items-center justify-center gap-4 border-3 border-double border-gilt/60 px-6 py-8 text-center @wide:aspect-3/4 @wide:gap-6 @wide:py-16">
+          <LedgerTitle size="cover" />
+          <span aria-hidden="true" className="h-px w-12 bg-gilt/60" />
+          <p className="text-caption font-medium tracking-caps text-balance uppercase">
+            A ledger for the things you mean to do
+          </p>
+        </div>
+        <article
+          aria-labelledby={headingId}
+          className="flex flex-col gap-6 rounded-sheet bg-sheet px-6 py-8 text-ink shadow-sheet @wide:justify-center @wide:px-12 @wide:py-12"
+        >
+          <h1 id={headingId} className="font-display text-title font-medium text-balance">
+            {title}
+          </h1>
+          {children}
+          <p className="text-ink-muted">{footer}</p>
+        </article>
+      </div>
+    </div>
+  );
+}

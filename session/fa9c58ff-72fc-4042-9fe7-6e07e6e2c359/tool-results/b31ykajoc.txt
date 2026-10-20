@@ -1,0 +1,304 @@
+# todo-app
+
+A full-stack To Do list for an engineering challenge. A user signs in and manages only their own tasks: create, read, update, delete, reorder and search, with a detail screen per task and a responsive UI. `backend/` is a REST API in Python (FastAPI, async SQLAlchemy, alembic, Postgres). `frontend/` is a React SPA in TypeScript (Vite, TanStack Query, Zod, Tailwind). The app is built to run as more than one backend replica: containers first, then a local k3d cluster, then AKS.
+
+## Read first
+- `docs/kickoff.md`: the requirements, the human's feedback and the locked decisions. It is the spec; plans in `docs/plans/` build on it.
+- `CONTRIBUTING.md`: branches and deploy stages (§1), branch names and PR labels (§2), test gates (§5), the kind-stop protocol (§8), human-runs-it for ops and deploys (§11), secrets (§12).
+- `.claude/rules/`: working agreement, coding standards, testing and git rules load every session. Python, database, API contract, TypeScript, React and deployment rules load when you touch matching files.
+- `backend/CLAUDE.md` and `frontend/CLAUDE.md`: each app's commands, config and layout.
+- Skills: `/repo-sync` at the start of a session, `/verify` before saying done or committing, `/claude-docs-check` then `/raise-pr` to open a PR.
+
+## Hard requirements that shape every change
+- Test-driven: red, green, refactor, and every commit is green. Each test layer owns different failures; no test repeats another layer's job (`testing.md`).
+- Functional and declarative: a pure core with an I/O shell, no mutated inputs, composition and higher-order functions, `map`/`filter`/`reduce` and comprehensions, the right data structure (`coding-standards.md`).
+- Async through high-level abstractions: async FastAPI and SQLAlchemy with `TaskGroup` on the backend, TanStack Query on the frontend.
+- Logs that help monitoring stay (startup, ready, caught errors with context); logs added only to debug go before the commit. No `TODO` or `FIXME` in code.
+- HTTP semantics as in `api-contract.md`, including 400 (not FastAPI's default 422) for validation errors and 404 for another user's task.
+
+## Commands
+```bash
+python3 scripts/check_hygiene.py      # task markers, debuggers, focused tests, debug-only logs; CI runs it
+```
+Each app's own commands are in its `CLAUDE.md`; `CONTRIBUTING.md` § 5 lists every gate.
+
+## Config and secrets
+- `.env.example` is the only env file an agent may read or edit, by that exact name; it holds safe local values and never a real secret. Never read or edit `.env` or any other `.env.*` file, or key material. Hooks and the deny list block them, and a Bash command that only names such a file is blocked too. When a setting is needed, add it to `.env.example` with a safe local value; the human copies it into `.env` and sets real values there.
+- `.mcp.json` configures Claude Code's own MCP servers. It is not the app's config.
+
+## Workspace rules
+This repo sits inside a larger workspace whose `.claude/rules/` also load. The general rules there apply (PR card, assignee, no auto-reviewers, typed boundaries, failure handling). The product-specific protocols do not: seed compile and migrate, planner templates, ThinkingBlock, user cleanup scripts, turbo logs, and sibling contract repos. There are no sibling repos here.
+
+## Gotchas
+- `transcript-backup.py` snapshots the session transcript into `.ai-transcripts/` before and after every compaction and at session end, and blocks a compaction it could not back up. The snapshots are the record of AI use; never delete them.
+- macOS ships bash 3.2 and Python 3.9. Repo scripts and hooks are Python standard library and start with `from __future__ import annotations`, so they run on a reviewer's Mac; CI tests them on 3.9 and 3.13. The guard hooks fail closed: a crash denies the call.
+- The Bash guards read every word of a command, heredoc bodies included. Text that names an env file or a reader program trips them: write prose with the Write tool, and commit such messages with `git commit -F <file>`.
+- The three Bash guards share `.claude/hooks/shell_words.py`. A change there changes all three; run `python3 -m unittest discover -s .claude/hooks/tests` under `/usr/bin/python3` as well as 3.13.
+- The branch-protection hook blocks every commit on `main`. Branch first.
+- FastAPI answers validation errors with 422 unless the app's handler maps them. Keep the handler; the contract says 400.
+
+## Branches and deploy
+- Each round has an integration branch, `round/<n>-<name>`, and one parent PR into `main` that merges only when the round is done and tested. Work on a branch off the round branch and open a child PR into it; the human lead reviews every PR. Child PRs are squash-merged, the parent is rebase-merged (`CONTRIBUTING.md` § 1). Releases are `vX.Y.Z` tags; a tag is never moved.
+- CI runs on every PR: hygiene, plus the backend and frontend gates as those apps land.
+- Deploy stages are in `.claude/rules/deployment.md`. The human reviews every deployment artifact before it is applied, and runs anything against AKS.
+- Guards: a hook blocks commits and pushes on `main` and on round branches, force pushes, `--no-verify` and tag moves. `git push`, `gh pr create`, `kubectl apply`/`delete`, `helm` and `az` always ask. PR titles must be Conventional Commits. A PR also needs a docs decision from `/claude-docs-check`.
+
+## Scope
+Change only what the task names. Do not fix nearby code or add tests the change does not need. Unrelated problems go in a one-line follow-up note.
+---
+paths:
+  - "backend/app/api/**"
+  - "backend/app/main.py"
+  - "backend/tests/integration/**"
+  - "frontend/src/lib/api/**"
+---
+# API contract
+
+The REST contract between `backend/` and `frontend/`. Change both sides in the same PR, or neither.
+
+- Resources are nouns under `/api/v1`: `/auth/...`, `/tasks`, `/tasks/{id}`. Standard methods: `GET` reads, `POST` creates, `PATCH` updates part of a resource, `DELETE` removes. JSON in and out.
+- Status codes:
+
+| Case | Code |
+|---|---|
+| Read or update succeeded | 200 |
+| Created; the response carries the resource and a `Location` header | 201 |
+| Deleted | 204, no body |
+| Body or query fails validation | **400** (FastAPI's default is 422; the app maps `RequestValidationError` to 400 in one handler) |
+| No token, bad token, expired token, wrong password | 401 |
+| Authenticated but not allowed to do this action | 403 |
+| Resource missing, **or owned by another user** (so ids of other users' tasks are never confirmed) | 404 |
+| Conflict with current state, such as an email already registered | 409 |
+| `If-Match` names an old version of the task | 412 |
+| Overloaded (in-flight limit, no free database connection) or database unreachable | 503 |
+
+- JSON field names are camelCase on the wire (`dueDate`, `createdAt`). Pydantic models use `alias_generator=to_camel` with `populate_by_name=True`; Python code keeps snake_case.
+- Tasks carry an integer `version`, returned as the `ETag` header. `PATCH` honours `If-Match` (412 on mismatch) and changes only the fields sent.
+- Every error body has one shape, a typed model: `{"error": {"code": "...", "message": "...", "details": [...]}}`. `code` is a stable machine string the frontend switches on; `message` is safe to show a user.
+- List endpoints return a typed envelope, not a bare array, so paging can be added without breaking clients.
+- The frontend parses every response with a Zod schema that mirrors the backend's Pydantic model. When a model changes, the schema changes in the same PR, and the integration test for that endpoint asserts the new shape.
+- Every endpoint has an integration test for its success code and each error code it can return.
+# Coding standards
+
+Applies to `backend/` (Python) and `frontend/` (TypeScript). The path-scoped rules add the language detail.
+
+## General
+- Minimal code. No speculative abstractions. No options nobody asked for.
+- Concise but descriptive. A name says what a thing is or does; a reader should not need the comment to follow the code.
+- Prefer editing an existing file to adding one. Delete what is unused. No dead branches.
+- Every public function, class, component and type carries a one-line summary in the language's doc format (Google-style docstrings in Python, JSDoc in TypeScript). Sections (`Args:`, `@param`) only when they add something the signature does not say. Other comments are single line and only where the code cannot say it. No comment blocks. No commented-out code.
+- Comments are written for someone new to the codebase. A hard-to-follow part gets a single-line comment above it saying concisely what happens there. Never cite the spec, the plan, decision or question ids (`D14`, `Q-4`), review rounds or the history of a choice. Where a library's behaviour is the reason, link that library's docs; where a module has its own page under `docs/`, link that page.
+- Every change is verifiable. If you cannot test it, say so before shipping it.
+- Match the surrounding code's style, not its gaps.
+
+## Functional and declarative style (a hard requirement)
+- Functional core, imperative shell. Domain logic (validation, ordering, search filters, mapping rows to responses) is pure functions with no I/O. Routers, repositories and React components are the thin shell that does I/O and calls the core.
+- Never mutate an input. Return a new value. Python: frozen dataclasses, Pydantic models with `frozen=True` where they flow through the core, tuples over lists for fixed data. TypeScript: `const`, `readonly`, spread, `toSorted`/`toSpliced`/`with` over `sort`/`splice`.
+- Prefer expressions to statements: `map`, `filter`, `reduce`, comprehensions and generator expressions over loops that append into an accumulator. Use a loop only when it reads more clearly, and never just to mutate an outer variable.
+- Compose small functions instead of writing one long one. Higher-order functions where they remove repetition: FastAPI `Depends` factories, decorators, hooks that take a query function, comparator builders. Do not add one for a single caller.
+- Pick the data structure for the access pattern: a dict or `Map` for lookup by id, a set for membership, a list or tuple for order. Say why in review when it is not obvious.
+- No hidden shared mutable state: no module-level caches that requests write to, no singletons holding request data.
+
+## Async and concurrency (a hard requirement)
+- Use the high-level abstraction, never hand-rolled threads or callbacks. Backend: `async def` handlers, the async SQLAlchemy session, `asyncio.TaskGroup` (or `gather`) when independent awaits can run together. Frontend: TanStack Query for all server state (caching, retries, cancellation, optimistic updates with rollback), never `useEffect` plus `fetch`.
+- Never block the event loop. CPU-heavy work (password hashing) runs through `asyncio.to_thread` or the library's async API.
+
+## Boundaries and types
+- Every value that crosses a boundary (HTTP body, database row, token claims, storage, URL params) is a typed model, validated right after it is read: Pydantic in Python, Zod in TypeScript. Field access happens on the validated value. No `dict[str, Any]`, `any` or `Record<string, unknown>` for a known shape.
+- Type hints on every parameter and return value, tests included. TypeScript is `strict`; no `any`, no `as unknown as`, no `@ts-ignore`.
+
+## Logging
+- Logs exist to monitor the running app and find bugs. Keep every line that does that: startup and ready, shutdown, a caught exception with its context, a request that failed auth or validation at WARNING, a degraded path taken.
+- Remove every line added only to chase a bug during development before the commit. A log line that would not help someone on call is noise.
+- Backend: `log = logging.getLogger(__name__)`, never `print`. Frontend: `console.info` for lifecycle, `console.warn` and `console.error` for failures; never `console.log` or `console.debug`. ESLint enforces the frontend list.
+- WARNING and ERROR lines say where, why and what happens next, with ids as key=value (`user_id=`, `task_id=`, `request_id=`). Never log secrets, passwords, tokens or full request bodies.
+
+## Hygiene
+- No `TODO`, `FIXME`, `XXX` or `HACK` in code. A follow-up goes in the PR description or an issue.
+- No `debugger`, `breakpoint()`, `pdb`, or focused tests (`.only`). `python3 scripts/check_hygiene.py` checks all of this and runs in CI and in `/verify`.
+- Secrets never appear in code, logs, tests, or chat. `.env` files and key material are off limits; a hook enforces this. Anything bundled into the frontend is public.
+---
+paths:
+  - "backend/alembic/**"
+  - "backend/app/db/**"
+  - "backend/**/models.py"
+  - "backend/**/repository.py"
+---
+# Database
+
+- Schema changes go through a new alembic migration, numbered after the last one. Never edit a migration that has been applied anywhere. Never change the database by hand.
+- Run migrations with `uv run alembic upgrade head` from `backend/`. Deployed environments run them as a one-shot step (a Kubernetes Job or init step) before the new pods take traffic, never from app startup, because several replicas would race.
+- Every migration has a working `downgrade`. CI runs upgrade, downgrade and upgrade again.
+- Every query is parameterized through SQLAlchemy. No string-built SQL. Index every column used in WHERE, JOIN or ORDER BY, starting with `tasks(owner_id, rank)`.
+- Transactions run at READ COMMITTED, Postgres's default. Do not raise it: the ordering lock below depends on each statement reading a fresh snapshot.
+- Creating or moving a task takes `pg_advisory_xact_lock(hashtextextended(owner_id::text, 0))` as the first statement of its transaction, then reads the neighbours. A unique index on `(owner_id, rank)` backs it up. Edits and deletes do not take the lock.
+- `rank` is `text COLLATE "C"` so Postgres sorts it byte by byte, like Python. Edits check `version` in the `UPDATE`'s `WHERE` and bump it.
+- Unique facts are enforced by unique indexes, and the insert's `IntegrityError` becomes 409. Never check-then-insert.
+- Pool: 10 connections plus 5 overflow per process, 5 s wait, `pool_pre_ping`; `statement_timeout` 5 s and `idle_in_transaction_session_timeout` 10 s on every connection.
+- Every query against `tasks` filters on the owner. A query without the owner filter is a bug, even in an admin path.
+- Writes that must stay consistent (create at the top, move) run in one transaction.
+---
+paths:
+  - "**/Dockerfile"
+  - "docker-compose*.yml"
+  - "deploy/**"
+  - ".github/workflows/**"
+---
+# Deployment
+
+## Stages, in order
+1. **Containers**: each service builds its own image; `docker compose up` runs the stack (database, backend, frontend). The whole test pyramid passes here first.
+2. **Local Kubernetes**: a k3d cluster runs the same images from the same manifests, with more than one backend replica. Development continues here once stage 1 is proven.
+3. **AKS**: an Azure Kubernetes Service cluster, deployed by GitHub Actions, only after stage 2 works end to end and the human signs off.
+
+Do not start a stage before the previous one is proven and the human says go.
+
+## The human reviews every deployment artifact
+- Dockerfiles, compose files, Kubernetes manifests, overlays and workflows are shown to the human and approved before they are applied or merged. Show the file and say what it will create or change.
+- The agent never applies anything to AKS or any shared cloud resource. It prepares the change and the exact command; the human runs it (`CONTRIBUTING.md` § 11). `kubectl apply`, `kubectl delete`, `helm` and `az` always ask, even against k3d.
+
+## Built for more than one replica
+- One uvicorn process per container; scale with replicas, never with in-container workers.
+- The backend is stateless: auth is a signed token checked on every request, with no in-memory sessions or caches that requests write to. Any replica can serve any request.
+- One set of manifests (Kustomize base) with one overlay per target (`k3d`, `aks`). No copy-pasted manifests per environment.
+- Images are tagged with the git sha, never `latest`, and the same image moves from one stage to the next.
+- Migrations run once per release as a Job before the backend rolls out, never from every pod at startup.
+- Every backend pod has a liveness probe (`/livez`, process up, checks no dependencies) and a readiness probe (`/readyz`, database reachable, fails once shutdown starts). Neither is routed by nginx or the ingress. Requests and limits are set. Containers run as a non-root user with a read-only root filesystem where the runtime allows.
+- Config comes from env vars through ConfigMaps; secrets come from Kubernetes Secrets the human creates. Neither is ever committed.
+# Git and pull requests
+
+## Branches
+- Each round has an integration branch, `round/<n>-<name>`, created from `main` by the human. Work on a branch off the current round branch: `feature/<name>`, `fix/<name>`, `chore/<name>`, `docs/<name>`, `refactor/<name>`, `perf/<name>`, `test/<name>`, `ci/<name>`. Lowercase, hyphens, no personal names.
+- Never commit on `main` or a round branch. Never force-push a shared branch. Never `--no-verify`. A hook blocks all three.
+- Releases are `vX.Y.Z` tags on `main`. A tag is never moved or deleted; a wrong tag is fixed by cutting the next version. A hook blocks tag moves.
+
+## Commits
+- One logical change per commit, and every commit is green (see `testing.md`). Conventional Commits: `type(scope): subject`. Types: feat, fix, chore, docs, refactor, perf, test, ci, build, revert, release. Scopes: `api`, `web`, `db`, `auth`, `deploy`, `claude`, `round-<n>` (a parent PR), or none. Subject starts lowercase, no trailing period, imperative mood.
+- The body says why, not what.
+- Add `Refs: #<issue>` or `Refs: docs/plans/<file>.md` when there is one.
+
+## Pull requests
+- Run `/raise-pr`. It shows the card (title, branch, base, assignee, label, summary) and waits for a yes.
+- The title follows the commit format. A hook blocks titles that do not.
+- Assignee is the human whose git identity is on the commits. No reviewers unless the human names them.
+- Label: exactly one, taken from the branch prefix through the table in `CONTRIBUTING.md` § 2. A prefix with no row in that table is a gap; ask before raising.
+- Description: what, why, how to test, risks and rollback. Link sources instead of restating them.
+- Child PRs target the round branch. One parent PR per round (`round/<n>-<name>` → `main`, label `round`) stays a draft until the round is done and tested; link each child PR from it.
+- The human lead reviews every PR. Child PRs are squash-merged (the PR title becomes the commit subject, so it must be Conventional), and the parent PR is rebase-merged into `main`. The human lead has the final call.
+- `git push` and `gh pr create` always ask before running. That is intended.
+---
+paths:
+  - "backend/**/*.py"
+---
+# Python
+
+## Boundaries and types
+- Pydantic models at every boundary: request and response bodies, database rows leaving the repository layer, token claims. `Model.model_validate(raw)` right after deserializing; field access happens on the model.
+- Request and response models are separate types (`TaskCreate`, `TaskUpdate`, `TaskRead`). A response never exposes a column the client should not see, such as a password hash.
+- Settings are one pydantic-settings class. With `extra="ignore"` a typo in an env var name fails silently, so check the name when a value is missing.
+- `X | None` and `dict[str, X]`. `Mapping` and `Sequence` for parameters you only read. A frozen dataclass or TypedDict for a value that stays inside the service; a Pydantic model for anything that crosses a boundary.
+- `uv run mypy` runs in strict mode and passes.
+
+## Docstrings
+- Google style: a summary line in the imperative, a blank line, then `Args:`, `Returns:`, `Raises:` as needed. Types stay in the hints, never repeated in the docstring. Private helpers and tests need only the summary line, and only when the name does not already say it.
+
+## FastAPI
+- Routers stay thin: parse, call the service or core, map the result to a response model. No SQL and no business rules in a router.
+- Dependencies (`Depends`) compose the request: settings, session, current user. Ownership is enforced in the query (`WHERE owner_id = :user_id`), not by loading a row and checking it afterwards.
+- Domain errors are exceptions raised by the service and turned into HTTP responses by one set of exception handlers in the app factory. Handlers never build error bodies by hand. The status code contract is in `api-contract.md`.
+- Build the app in a factory (`create_app(settings)`) so tests build their own app with their own settings.
+
+## Failure handling and logging
+- On a validation error at a boundary: log at WARNING with the function name, the error, and a sanitized snippet, then take the documented fail-soft path. Never silent.
+- `log = logging.getLogger(__name__)`. No `print`. The root logger is configured once, in the app factory, before any request is served.
+- WARNING and ERROR lines say where (`module.function`), why, and what happens next, with ids as key=value. Never log secrets.
+
+## Async and boot
+- asyncio throughout. Every route is `async def`; a plain `def` route would run on FastAPI's thread pool. Do not block the event loop: no sync database driver, no sync HTTP client, no blocking file I/O on the request path.
+- CPU-heavy work runs through `asyncio.to_thread` behind a semaphore that caps it per process. Password hashing (argon2id, OWASP parameters) is capped at 4 at a time.
+- One `AsyncSession` per request, from a dependency declared with `scope="function"` so it closes before the response is sent. Each service opens its one transaction with `async with session.begin()`: it commits before the router builds the response and rolls back on any exception. CPU work such as password hashing runs outside the transaction, so it never holds a pooled connection. Never share a session between concurrent coroutines; a `TaskGroup` that touches the database gives each task its own session.
+- Logging goes through a `QueueHandler` so a slow stdout never blocks the loop.
+- Never add a network call at import time; put it in the lifespan. A database the app cannot reach makes `/readyz` fail, not the import.
+---
+paths:
+  - "frontend/src/components/**"
+  - "frontend/src/pages/**"
+  - "frontend/src/hooks/**"
+  - "frontend/src/lib/query/**"
+---
+# React
+
+- Function components with hooks. Every hook is declared before any conditional `return`; hooks run in the same order every render. `react-hooks/rules-of-hooks` and `react-hooks/exhaustive-deps` are errors.
+- Server state lives in TanStack Query, and only there. Each resource has one module of query keys and hooks (`useTasks`, `useUpdateTask`); components never build query keys inline. Mutations that the user should see at once (reorder, toggle, delete) are optimistic, roll back on error and show the error.
+- `useState` is for local affordances only: an open menu, a draft form value. Auth state is one context. Never copy server data into local state.
+- Derive, do not mirror. A value computed from props or query data is computed during render (with `useMemo` only when it is measurably costly), never stored by an effect. `useEffect` is for syncing with something outside React, not for data flow.
+- Forms validate with the same Zod schema the API layer uses, and show errors next to the field.
+- Responsive by default, mobile first: Tailwind utilities, layouts that work from 320px wide up, touch targets of at least 44px, reorder that works by touch and by keyboard as well as by mouse.
+- Accessible by default: real buttons and links, a label on every input, visible focus, and roles and names that tests query by.
+- Styling: Tailwind utilities first. Inline `style` only for values the utility layer cannot express.
+# Testing
+
+Robust testing is a hard requirement, and so is test-driven development. Applies to every change.
+
+## Test first
+- Red, green, refactor. Write the test, run it and watch it fail for the expected reason, write the least code that makes it pass, then clean up with the test still green. Run the red step in the session so the transcript shows it.
+- Every commit is green. All suites that the change touches pass before `git commit`; a failing test is never committed. A commit holds the test and the code that passes it together.
+- New behaviour gets a test in the same commit. A bug fix starts with a test that reproduces the bug.
+
+## Each layer earns its place
+Test a behaviour once, at the lowest layer that can catch it. A higher layer covers only what the lower layers cannot see. Before adding a test, name the failure it catches that no existing test catches; if there is none, do not add it.
+
+| Layer | Tool | Owns | Does not re-test |
+|---|---|---|---|
+| Backend unit | pytest | pure functions in the core: ordering, search filters, validation, token and password helpers | anything HTTP or SQL |
+| Backend integration | pytest, httpx `ASGITransport`, a real database | each endpoint's contract: status codes, response shape, auth, ownership, persistence | the pure rules already unit-tested, beyond one case that proves the wiring |
+| Frontend unit and component | Vitest (its API matches Jest's), React Testing Library, MSW at the `fetch` boundary | pure helpers, hooks, and each screen's states: loading, empty, error, success, validation | backend rules |
+| Live-server e2e | pytest against the running stack (compose, then k3d) | what only a deployed stack shows: migrations ran, the proxy and cookie path, ingress and routing, a session issued by one replica accepted by another | endpoint contracts |
+| Browser e2e | Playwright against the running stack | a few complete user journeys: sign in, create, reorder, search, edit, delete, sign out; and the small-screen layout | screen states and endpoint contracts |
+| Load | k6 from its container against the running stack | latency and error budgets at 200 concurrent users, data consistency afterwards, and the round's capacity figure from a stepped run | correctness of single requests |
+
+## Concurrency
+- Each race in the spec has an integration test named after it that fires the requests together with `asyncio.TaskGroup` against a real Postgres. Each one must fail when its guard is removed; show that once, in the session.
+- A fixture runs the backend suite in asyncio debug mode with a 50 ms slow-callback threshold and fails any test during which the event loop was blocked.
+- The race tests and the load tests are run with the lead present: show the scripts and budgets first, then walk through the results.
+
+## Mechanics
+- Mock at the boundary (the HTTP client, `fetch`, the clock), never inside the code under test. Nothing in a unit suite opens a socket.
+- Tests are independent and order-free. Each builds its own data through factories or fixtures; none relies on another's leftovers.
+- Assert on behaviour a user or caller can see: status, body, rendered text and roles. Never on private attributes or CSS class names.
+- One reason to fail per test. The name says the behaviour: `test_reorder_rejects_task_owned_by_another_user`, `it("shows the empty state when the user has no tasks")`.
+- Coverage is a floor, not a target: CI fails below the threshold set in `pyproject.toml` and `vitest.config.ts`. A line covered by a test that asserts nothing is not covered.
+- Report results as they are. "128 passed" means you saw it. Name the suite and the stack it ran against.
+---
+paths:
+  - "frontend/src/**/*.ts"
+  - "frontend/src/**/*.tsx"
+---
+# TypeScript
+
+- `strict` is on in `tsconfig.json`. No `any`, no `as unknown as`, no `@ts-ignore`, no non-null `!` to silence a real `undefined`. Named exports. Function components with hooks; no classes, except `Error` subclasses (`ApiError`), which `instanceof` narrowing and TanStack Query's typed errors need.
+- Every boundary is a Zod schema under `src/lib/schema/`: API responses, form data, storage, URL params. `parse`, or `safeParse` with a typed error path, right after reading; field access on the parsed value. Types come from the schema with `z.infer`, never written twice.
+- Every API call goes through the one fetch wrapper in `src/lib/api/`, which sends the session cookie (same origin), parses the body and turns error bodies into a typed `ApiError`. No bare `fetch` in components or hooks.
+- Domain types live in `src/types/` or next to their schema, reachable from any layer. Never define a cross-cutting type inside `components/`.
+- Enums are `as const` objects, not `enum`. Use the typed constant, never the string literal.
+- Discriminated unions are closed. Switch on the discriminant, and make the switch exhaustive with a `never` check.
+- Environment values are read through one module, never raw `import.meta.env` in components. Build-time values are public; a secret never goes there.
+- JSDoc: a summary line on every exported function, component and type. `@param` and `@returns` only when they say something the signature does not.
+- Logic lives in exported pure helpers a test can reach (filtering, ordering, formatting), not inline in markup.
+- Filenames are kebab-case. Tests sit next to the code they test as `<name>.test.ts(x)`.
+- `npm run check` (ESLint, Prettier check, `tsc --noEmit`) is the gate.
+# Working agreement
+
+How this team works with Claude Code. Applies to every session in this repo.
+
+- Write in plain English: chat, docs, commit messages, PR text, code comments. Short sentences. If a simpler word carries the same meaning, use it.
+- Lead with the answer or the outcome. Supporting detail comes after; leave out steps that do not change what the reader does next. Bullets for parallel items.
+- Plan, align, execute. For anything beyond a small change, state the approach in a few lines and get a yes before building. Ask when different readings of the task would lead to different work. Do not ask about routine choices.
+- Estimate in agent-pair time, not human-solo time. A well-aligned agent and human pair finishes in roughly a twentieth of the solo-human time. Give estimates as bounded work ("4 file edits, 1 migration, 1 PR" or "within a session"), never as human days. Name external waits (CI, deploys, reviews) separately.
+- At the start of a session, run `/repo-sync` before writing code. Never switch or pull a repo that has uncommitted work without saying so.
+- Stay in scope. Change only what the task names. Unrelated problems become a one-line follow-up note, not an inline fix.
+- When a written plan or spec and the situation disagree, stop and ask. Never deviate silently, even when the deviation looks like an improvement. The spec for this repo is `docs/kickoff.md`, then the plan docs in `docs/plans/`.
+- Report outcomes as they are. Failing tests are reported as failing, with output. Skipped steps are named. "Done" means `/verify` passed.
+- The session transcript is shared with the reviewers as the record of how AI was used. Do the work inside the session: run the red test, then the green one, where the transcript shows both. Keep the human's decisions and the agent's work easy to tell apart.
+- Keep the Claude Code files true to the code. Before a PR, `/claude-docs-check` reads the branch diff against `.claude/skills/claude-docs-check/map.json` and updates CLAUDE.md or the mapped rule on Opus, or records why not. A hook blocks `gh pr create` until that decision is on the branch.
+- Before opening a PR, run `/raise-pr` and wait for a yes. One PR per branch.

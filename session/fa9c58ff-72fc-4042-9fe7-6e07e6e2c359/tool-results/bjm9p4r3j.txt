@@ -1,0 +1,1151 @@
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index 823ea91..a1f451e 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -20,7 +20,7 @@ jobs:
+     runs-on: ubuntu-latest
+     strategy:
+       matrix:
+-        python: ["3.9", "3.13"]  # 3.9 is what macOS ships; the hooks must run there
++        python: ["3.9", "3.13"]  # 3.9 is what macOS ships; the hooks and the k3d deploy script must run there
+     steps:
+       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+@@ -29,6 +29,7 @@ jobs:
+       - run: python3 scripts/check_hygiene.py
+       - run: python3 -m unittest discover -s scripts/tests
+       - run: python3 -m unittest discover -s .claude/hooks/tests
++      - run: python3 -m unittest discover -s deploy/k3d/tests
+ 
+   pr-title:
+     if: github.event_name == 'pull_request'
+diff --git a/.gitignore b/.gitignore
+index 075856f..5640ff3 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -31,6 +31,8 @@ CLAUDE.local.md
+ # Scratch folders agents may create
+ _temp/
+ _ignore/
++# Per-release kustomizations that deploy/k3d/deploy.py writes
++deploy/.release/
+ 
+ # Claude Code's own MCP config is per user
+ .mcp.json
+diff --git a/FUTURE.md b/FUTURE.md
+index 2da0472..6a965fb 100644
+--- a/FUTURE.md
++++ b/FUTURE.md
+@@ -18,3 +18,7 @@ Ideas we chose not to build in rounds 1 to 3, and why each is worth doing. The R
+ 
+ ## Security
+ - **Self-host the API docs page, or turn it off in production.** `/api/docs` loads Swagger UI from jsDelivr under a floating major version, with no integrity check, and its CSP allows one inline script by hash. Serving pinned Swagger UI files from the API, or disabling the page where cookies are secure, removes the third-party script before the app is public.
++- **Restricted Pod Security and network policies on Kubernetes.** Enforce the `restricted` level on the namespace, and deny all traffic by default, then allow only nginx to the API and the API and the migration Job to Postgres. Round 2 kept Kubernetes's defaults, at the lead's call.
++
++## Delivery
++- **A k3d job in CI.** Create the cluster in the job, deploy the PR's images and run the live and browser suites and a rolling restart under load, so a change that breaks only the cluster fails its own PR. Round 2 runs k3d on the Mac only, at the lead's call.
+diff --git a/deploy/base/app/api.yaml b/deploy/base/app/api.yaml
+new file mode 100644
+index 0000000..92102a1
+--- /dev/null
++++ b/deploy/base/app/api.yaml
+@@ -0,0 +1,135 @@
++# The API: three pods, one uvicorn process each, one per node. Any pod serves any request.
++apiVersion: apps/v1
++kind: Deployment
++metadata:
++  name: api
++  labels:
++    app.kubernetes.io/name: api
++spec:
++  replicas: 3
++  selector:
++    matchLabels:
++      app.kubernetes.io/name: api
++  strategy:
++    # A new pod is ready before an old one leaves, so three keep serving through a release.
++    rollingUpdate:
++      maxSurge: 1
++      maxUnavailable: 0
++  template:
++    metadata:
++      labels:
++        app.kubernetes.io/name: api
++    spec:
++      automountServiceAccountToken: false
++      # Covers the 20 s preStop sleep, uvicorn's 20 s drain and a margin.
++      terminationGracePeriodSeconds: 45
++      topologySpreadConstraints:
++        - maxSkew: 1
++          topologyKey: kubernetes.io/hostname
++          whenUnsatisfiable: DoNotSchedule
++          labelSelector:
++            matchLabels:
++              app.kubernetes.io/name: api
++          # Counts only pods of the same release, so a rolling update can always place its new pod.
++          matchLabelKeys: [pod-template-hash]
++      securityContext:
++        runAsNonRoot: true
++        runAsUser: 10001
++        runAsGroup: 10001
++        seccompProfile:
++          type: RuntimeDefault
++      containers:
++        - name: api
++          image: todo-api
++          ports:
++            - name: http
++              containerPort: 8000
++          envFrom:
++            - configMapRef:
++                name: todo-config
++          env:
++            - name: POSTGRES_PASSWORD
++              valueFrom:
++                secretKeyRef:
++                  name: todo-db
++                  key: password
++            # Kubernetes fills in $(POSTGRES_PASSWORD) from the variable above.
++            - name: DATABASE_URL
++              value: postgresql+asyncpg://todo:$(POSTGRES_PASSWORD)@db:5432/todo
++            - name: JWT_SECRET
++              valueFrom:
++                secretKeyRef:
++                  name: todo-api
++                  key: jwt-secret
++          startupProbe:
++            httpGet:
++              path: /livez
++              port: http
++            periodSeconds: 2
++            failureThreshold: 30
++          livenessProbe:
++            httpGet:
++              path: /livez
++              port: http
++            periodSeconds: 10
++            failureThreshold: 3
++          readinessProbe:
++            httpGet:
++              path: /readyz
++              port: http
++            periodSeconds: 5
++            failureThreshold: 2
++          lifecycle:
++            # Kubernetes takes the pod out of the Service at once, but nginx re-reads DNS only every 10 s and
++            # the cluster DNS caches for 5 s. Serving 20 s more covers that, then SIGTERM starts uvicorn's drain.
++            # https://kubernetes.io/docs/concepts/containers/container-lifecycle-hooks/#hook-handler-implementations
++            preStop:
++              sleep:
++                seconds: 20
++          resources:
++            requests:
++              cpu: 500m
++              memory: 256Mi
++            # One core is the most a single uvicorn process can use.
++            limits:
++              cpu: "1"
++              memory: 512Mi
++          securityContext:
++            allowPrivilegeEscalation: false
++            readOnlyRootFilesystem: true
++            capabilities:
++              drop: [ALL]
++          volumeMounts:
++            - name: tmp
++              mountPath: /tmp
++      volumes:
++        - name: tmp
++          emptyDir: {}
++---
++# Headless: DNS answers with every ready pod, so nginx balances each request across them itself
++# instead of holding kept-alive connections to whichever pod one virtual IP picked.
++apiVersion: v1
++kind: Service
++metadata:
++  name: api
++  labels:
++    app.kubernetes.io/name: api
++spec:
++  clusterIP: None
++  selector:
++    app.kubernetes.io/name: api
++  ports:
++    - name: http
++      port: 8000
++      targetPort: http
++---
++# A drained node or a voluntary eviction never leaves fewer than two pods serving.
++apiVersion: policy/v1
++kind: PodDisruptionBudget
++metadata:
++  name: api
++spec:
++  minAvailable: 2
++  selector:
++    matchLabels:
++      app.kubernetes.io/name: api
+diff --git a/deploy/base/app/ingress.yaml b/deploy/base/app/ingress.yaml
+new file mode 100644
+index 0000000..a40e899
+--- /dev/null
++++ b/deploy/base/app/ingress.yaml
+@@ -0,0 +1,16 @@
++# The cluster's front door sends every request to nginx. Each overlay sets the ingress class and the certificate.
++apiVersion: networking.k8s.io/v1
++kind: Ingress
++metadata:
++  name: web
++spec:
++  rules:
++    - http:
++        paths:
++          - path: /
++            pathType: Prefix
++            backend:
++              service:
++                name: web
++                port:
++                  name: http
+diff --git a/deploy/base/app/kustomization.yaml b/deploy/base/app/kustomization.yaml
+new file mode 100644
+index 0000000..302ccf8
+--- /dev/null
++++ b/deploy/base/app/kustomization.yaml
+@@ -0,0 +1,16 @@
++# The API, nginx and the front door. The settings' ConfigMap name carries a hash of its contents,
++# so a changed setting rolls the API: https://kubectl.docs.kubernetes.io/references/kustomize/kustomization/configmapgenerator/
++apiVersion: kustomize.config.k8s.io/v1beta1
++kind: Kustomization
++namespace: todo
++labels:
++  - pairs:
++      app.kubernetes.io/part-of: todo-app
++resources:
++  - api.yaml
++  - web.yaml
++  - ingress.yaml
++configMapGenerator:
++  - name: todo-config
++    literals:
++      - LOG_LEVEL=INFO
+diff --git a/deploy/base/app/web.yaml b/deploy/base/app/web.yaml
+new file mode 100644
+index 0000000..227a387
+--- /dev/null
++++ b/deploy/base/app/web.yaml
+@@ -0,0 +1,103 @@
++# nginx: serves the SPA, sets the security headers and forwards /api/ to the API pods, as in compose.
++apiVersion: apps/v1
++kind: Deployment
++metadata:
++  name: web
++  labels:
++    app.kubernetes.io/name: web
++spec:
++  replicas: 2
++  selector:
++    matchLabels:
++      app.kubernetes.io/name: web
++  strategy:
++    rollingUpdate:
++      maxSurge: 1
++      maxUnavailable: 0
++  template:
++    metadata:
++      labels:
++        app.kubernetes.io/name: web
++    spec:
++      automountServiceAccountToken: false
++      topologySpreadConstraints:
++        - maxSkew: 1
++          topologyKey: kubernetes.io/hostname
++          whenUnsatisfiable: ScheduleAnyway
++          labelSelector:
++            matchLabels:
++              app.kubernetes.io/name: web
++      securityContext:
++        # 101 is the nginx user in the unprivileged image.
++        runAsNonRoot: true
++        runAsUser: 101
++        runAsGroup: 101
++        seccompProfile:
++          type: RuntimeDefault
++      containers:
++        - name: web
++          image: todo-web
++          ports:
++            - name: http
++              containerPort: 8080
++          env:
++            # The full name, because nginx's resolver does not use the pod's DNS search list.
++            - name: API_HOST
++              value: api.todo.svc.cluster.local
++          readinessProbe:
++            httpGet:
++              path: /
++              port: http
++            periodSeconds: 5
++          livenessProbe:
++            tcpSocket:
++              port: http
++            periodSeconds: 10
++          lifecycle:
++            # Traefik follows the Service's endpoints directly, so a short pause covers it.
++            preStop:
++              sleep:
++                seconds: 5
++          resources:
++            requests:
++              cpu: 100m
++              memory: 32Mi
++            limits:
++              cpu: "1"
++              memory: 128Mi
++          securityContext:
++            allowPrivilegeEscalation: false
++            readOnlyRootFilesystem: true
++            capabilities:
++              drop: [ALL]
++          volumeMounts:
++            # The image's entrypoint writes the filled-in upstream config here at start.
++            - name: tmp
++              mountPath: /tmp
++      volumes:
++        - name: tmp
++          emptyDir: {}
++---
++apiVersion: v1
++kind: Service
++metadata:
++  name: web
++  labels:
++    app.kubernetes.io/name: web
++spec:
++  selector:
++    app.kubernetes.io/name: web
++  ports:
++    - name: http
++      port: 8080
++      targetPort: http
++---
++apiVersion: policy/v1
++kind: PodDisruptionBudget
++metadata:
++  name: web
++spec:
++  minAvailable: 1
++  selector:
++    matchLabels:
++      app.kubernetes.io/name: web
+diff --git a/deploy/base/migrate/job.yaml b/deploy/base/migrate/job.yaml
+new file mode 100644
+index 0000000..590da3a
+--- /dev/null
++++ b/deploy/base/migrate/job.yaml
+@@ -0,0 +1,57 @@
++# Runs the migrations once per release, with the API image; the deploy waits for it before rolling out the API.
++# It gets the database address alone, never the JWT secret.
++apiVersion: batch/v1
++kind: Job
++metadata:
++  name: migrate
++  labels:
++    app.kubernetes.io/name: migrate
++spec:
++  backoffLimit: 2
++  activeDeadlineSeconds: 300
++  # Kept a week for its logs. Running the same release again after that finds nothing left to migrate.
++  ttlSecondsAfterFinished: 604800
++  template:
++    metadata:
++      labels:
++        app.kubernetes.io/name: migrate
++    spec:
++      restartPolicy: Never
++      automountServiceAccountToken: false
++      securityContext:
++        runAsNonRoot: true
++        runAsUser: 10001
++        runAsGroup: 10001
++        seccompProfile:
++          type: RuntimeDefault
++      containers:
++        - name: migrate
++          image: todo-api
++          command: ["alembic", "upgrade", "head"]
++          env:
++            - name: POSTGRES_PASSWORD
++              valueFrom:
++                secretKeyRef:
++                  name: todo-db
++                  key: password
++            # Kubernetes fills in $(POSTGRES_PASSWORD) from the variable above.
++            - name: DATABASE_URL
++              value: postgresql+asyncpg://todo:$(POSTGRES_PASSWORD)@db:5432/todo
++          resources:
++            requests:
++              cpu: 100m
++              memory: 128Mi
++            limits:
++              cpu: "1"
++              memory: 256Mi
++          securityContext:
++            allowPrivilegeEscalation: false
++            readOnlyRootFilesystem: true
++            capabilities:
++              drop: [ALL]
++          volumeMounts:
++            - name: tmp
++              mountPath: /tmp
++      volumes:
++        - name: tmp
++          emptyDir: {}
+diff --git a/deploy/base/migrate/kustomization.yaml b/deploy/base/migrate/kustomization.yaml
+new file mode 100644
+index 0000000..ffd2df9
+--- /dev/null
++++ b/deploy/base/migrate/kustomization.yaml
+@@ -0,0 +1,9 @@
++# The migration Job, kept apart so each release can give it a name of its own.
++apiVersion: kustomize.config.k8s.io/v1beta1
++kind: Kustomization
++namespace: todo
++labels:
++  - pairs:
++      app.kubernetes.io/part-of: todo-app
++resources:
++  - job.yaml
+diff --git a/deploy/base/platform/db.yaml b/deploy/base/platform/db.yaml
+new file mode 100644
+index 0000000..fcdee1c
+--- /dev/null
++++ b/deploy/base/platform/db.yaml
+@@ -0,0 +1,100 @@
++# Postgres: one pod with its own volume, the same image compose runs. The password comes from the todo-db Secret.
++apiVersion: v1
++kind: Service
++metadata:
++  name: db
++  labels:
++    app.kubernetes.io/name: db
++spec:
++  # Headless: the name resolves straight to the pod, as a StatefulSet expects.
++  clusterIP: None
++  selector:
++    app.kubernetes.io/name: db
++  ports:
++    - name: postgres
++      port: 5432
++---
++apiVersion: apps/v1
++kind: StatefulSet
++metadata:
++  name: db
++  labels:
++    app.kubernetes.io/name: db
++spec:
++  serviceName: db
++  replicas: 1
++  selector:
++    matchLabels:
++      app.kubernetes.io/name: db
++  template:
++    metadata:
++      labels:
++        app.kubernetes.io/name: db
++    spec:
++      automountServiceAccountToken: false
++      securityContext:
++        # 70 is the postgres user in the Alpine image.
++        runAsNonRoot: true
++        runAsUser: 70
++        runAsGroup: 70
++        fsGroup: 70
++        seccompProfile:
++          type: RuntimeDefault
++      containers:
++        - name: postgres
++          image: postgres:18.6-alpine3.24
++          env:
++            - name: POSTGRES_USER
++              value: todo
++            - name: POSTGRES_DB
++              value: todo
++            - name: POSTGRES_PASSWORD
++              valueFrom:
++                secretKeyRef:
++                  name: todo-db
++                  key: password
++          ports:
++            - name: postgres
++              containerPort: 5432
++          readinessProbe:
++            exec:
++              command: ["pg_isready", "-U", "todo", "-d", "todo"]
++            periodSeconds: 5
++          livenessProbe:
++            tcpSocket:
++              port: postgres
++            periodSeconds: 10
++            failureThreshold: 6
++          resources:
++            requests:
++              cpu: 250m
++              memory: 256Mi
++            limits:
++              cpu: "2"
++              memory: 1Gi
++          securityContext:
++            allowPrivilegeEscalation: false
++            readOnlyRootFilesystem: true
++            capabilities:
++              drop: [ALL]
++          volumeMounts:
++            # Postgres 18 images keep PGDATA at /var/lib/postgresql/18/docker, under this mount.
++            - name: data
++              mountPath: /var/lib/postgresql
++            - name: run
++              mountPath: /var/run/postgresql
++            - name: tmp
++              mountPath: /tmp
++      volumes:
++        - name: run
++          emptyDir: {}
++        - name: tmp
++          emptyDir: {}
++  volumeClaimTemplates:
++    - metadata:
++        name: data
++      spec:
++        accessModes: [ReadWriteOnce]
++        resources:
++          requests:
++            storage: 1Gi
+diff --git a/deploy/base/platform/kustomization.yaml b/deploy/base/platform/kustomization.yaml
+new file mode 100644
+index 0000000..78d1648
+--- /dev/null
++++ b/deploy/base/platform/kustomization.yaml
+@@ -0,0 +1,10 @@
++# The namespace and Postgres. Applied first; the migration Job and the app follow once Postgres is ready.
++apiVersion: kustomize.config.k8s.io/v1beta1
++kind: Kustomization
++namespace: todo
++labels:
++  - pairs:
++      app.kubernetes.io/part-of: todo-app
++resources:
++  - namespace.yaml
++  - db.yaml
+diff --git a/deploy/base/platform/namespace.yaml b/deploy/base/platform/namespace.yaml
+new file mode 100644
+index 0000000..1d4893a
+--- /dev/null
++++ b/deploy/base/platform/namespace.yaml
+@@ -0,0 +1,4 @@
++apiVersion: v1
++kind: Namespace
++metadata:
++  name: todo
+diff --git a/deploy/k3d/cluster.yaml b/deploy/k3d/cluster.yaml
+new file mode 100644
+index 0000000..16c3074
+--- /dev/null
++++ b/deploy/k3d/cluster.yaml
+@@ -0,0 +1,14 @@
++# The local cluster: one server and two agent nodes, so the API's three pods run on three machines.
++# `k3d cluster create --config deploy/k3d/cluster.yaml`; format: https://k3d.io/stable/usage/configfile/
++apiVersion: k3d.io/v1alpha5
++kind: Simple
++metadata:
++  name: todo
++servers: 1
++agents: 2
++image: rancher/k3s:v1.36.4-k3s1
++ports:
++  # The cluster's HTTPS front door on the Mac's loopback address only, next to compose's 8080.
++  - port: 127.0.0.1:8443:443
++    nodeFilters:
++      - loadbalancer
+diff --git a/deploy/k3d/deploy.py b/deploy/k3d/deploy.py
+new file mode 100644
+index 0000000..6b3448a
+--- /dev/null
++++ b/deploy/k3d/deploy.py
+@@ -0,0 +1,195 @@
++#!/usr/bin/env python3
++"""Deploy the app to a local k3d cluster: `python3 deploy/k3d/deploy.py up`, then open https://localhost:8443.
++
++`up` creates the cluster if it is missing, builds and imports the images for the current commit, creates the
++secrets if they are missing, then applies Postgres, the migration Job and the app, each after the one before is
++ready. `build`, `render` and `secrets` run one of those steps alone; `down` deletes the cluster and its data.
++Every command is printed before it runs. Secret values reach kubectl on stdin and are never printed or kept.
++"""
++from __future__ import annotations
++
++import argparse
++import json
++import logging
++import re
++import secrets
++import shutil
++import subprocess
++import sys
++import tempfile
++from pathlib import Path
++
++REPO = Path(__file__).resolve().parents[2]
++CLUSTER = "todo"
++NAMESPACE = "todo"
++CLUSTER_CONFIG = "deploy/k3d/cluster.yaml"
++PARTS = ("platform", "migrate", "app")
++# Each image and the folder it is built from, the same build compose runs.
++IMAGES = {"todo-api": "backend", "todo-web": "frontend"}
++SHORT_SHA = re.compile(r"[0-9a-f]{7,40}")
++# The names a browser or a test on the Mac uses for the cluster's front door.
++CERT_NAMES = ("localhost", "127.0.0.1", "::1")
++TOOLS = ("docker", "k3d", "kubectl", "mkcert")
++URL = "https://localhost:8443"
++
++log = logging.getLogger("deploy")
++
++
++def release_files(sha: str) -> dict[str, str]:
++    """Return the kustomization for each part of a release, keyed by its path under `deploy/.release/<sha>/`.
++
++    Each part builds on its k3d overlay and pins both images to the commit. The migration Job's name also
++    carries the commit, so each release runs it once and a repeat deploy of the same commit changes nothing.
++    """
++    if not SHORT_SHA.fullmatch(sha):
++        raise ValueError(f"not a short lowercase git sha: {sha!r}")
++    images = "".join(f"  - name: {name}\n    newTag: {sha}\n" for name in IMAGES)
++
++    def kustomization(part: str) -> str:
++        suffix = f"nameSuffix: -{sha}\n" if part == "migrate" else ""
++        return (
++            "apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Kustomization\n"
++            f"resources:\n  - ../../../overlays/k3d/{part}\n{suffix}images:\n{images}"
++        )
++
++    return {f"{part}/kustomization.yaml": kustomization(part) for part in PARTS}
++
++
++def rollout_steps(sha: str) -> list[list[str]]:
++    """Return the kubectl commands that roll out a written release, each waiting for the one before."""
++    release = f"deploy/.release/{sha}"
++    namespace = ["-n", NAMESPACE]
++    return [
++        ["kubectl", "apply", "-k", f"{release}/platform"],
++        ["kubectl", "rollout", "status", "statefulset/db", *namespace, "--timeout=180s"],
++        ["kubectl", "apply", "-k", f"{release}/migrate"],
++        ["kubectl", "wait", "--for=condition=complete", f"job/migrate-{sha}", *namespace, "--timeout=180s"],
++        ["kubectl", "apply", "-k", f"{release}/app"],
++        ["kubectl", "rollout", "status", "deployment/api", *namespace, "--timeout=300s"],
++        ["kubectl", "rollout", "status", "deployment/web", *namespace, "--timeout=180s"],
++    ]
++
++
++def create_secret(name: str, data: dict[str, str], kind: str = "Opaque") -> tuple[list[str], str]:
++    """Return the command that creates a Secret and the manifest to send on its stdin, so no value is an argument."""
++    manifest = {
++        "apiVersion": "v1",
++        "kind": "Secret",
++        "metadata": {"name": name, "namespace": NAMESPACE},
++        "type": kind,
++        "stringData": data,
++    }
++    return ["kubectl", "create", "-f", "-"], json.dumps(manifest)
++
++
++def run(command: list[str], stdin: str | None = None) -> None:
++    """Print the command, run it from the repo root, and stop the deploy if it fails."""
++    log.info("+ %s", " ".join(command))
++    subprocess.run(command, cwd=REPO, input=stdin, text=True, check=True)
++
++
++def succeeds(command: list[str]) -> bool:
++    """Run a read-only check quietly and say whether it succeeded."""
++    return subprocess.run(command, cwd=REPO, capture_output=True).returncode == 0
++
++
++def current_sha() -> str:
++    """Return the short sha of the checked-out commit, the tag compose gives its images too."""
++    return subprocess.run(
++        ["git", "rev-parse", "--short", "HEAD"], cwd=REPO, capture_output=True, text=True, check=True
++    ).stdout.strip()
++
++
++def require_tools() -> None:
++    """Stop with the install command when a tool the deploy needs is missing."""
++    missing = [tool for tool in TOOLS if shutil.which(tool) is None]
++    if missing:
++        sys.exit(f"missing {', '.join(missing)}: brew install {' '.join(missing)} (see the README)")
++
++
++def ensure_cluster() -> None:
++    """Create the three-node cluster unless it already exists."""
++    if not succeeds(["k3d", "cluster", "get", CLUSTER]):
++        run(["k3d", "cluster", "create", "--config", CLUSTER_CONFIG])
++
++
++def build(sha: str) -> None:
++    """Build both images for the commit and copy them onto every node, so no pod pulls from a registry."""
++    tags = [f"{name}:{sha}" for name in IMAGES]
++    for tag, folder in zip(tags, IMAGES.values()):
++        run(["docker", "build", "-t", tag, folder])
++    run(["k3d", "image", "import", *tags, "--cluster", CLUSTER])
++
++
++def write_release(sha: str) -> Path:
++    """Write the release's kustomizations under `deploy/.release/<sha>/` and return that folder."""
++    folder = REPO / "deploy" / ".release" / sha
++    for path, text in release_files(sha).items():
++        (folder / path).parent.mkdir(parents=True, exist_ok=True)
++        (folder / path).write_text(text)
++    return folder
++
++
++def certificate() -> dict[str, str]:
++    """Make a certificate for the cluster's names, signed by mkcert's local authority, and return it as Secret data."""
++    with tempfile.TemporaryDirectory() as folder:
++        cert, key = Path(folder) / "tls.crt", Path(folder) / "tls.key"
++        run(["mkcert", "-cert-file", str(cert), "-key-file", str(key), *CERT_NAMES])
++        return {"tls.crt": cert.read_text(), "tls.key": key.read_text()}
++
++
++def ensure_secrets() -> None:
++    """Create the namespace and each Secret that does not exist yet; existing ones, including your own, are kept."""
++    if not succeeds(["kubectl", "get", "namespace", NAMESPACE]):
++        # "--save-config" lets the later apply of the same namespace take it over without a warning.
++        run(["kubectl", "create", "namespace", NAMESPACE, "--save-config"])
++    # Hex keeps the password safe inside DATABASE_URL.
++    wanted = {
++        "todo-db": lambda: ({"password": secrets.token_hex(24)}, "Opaque"),
++        "todo-api": lambda: ({"jwt-secret": secrets.token_hex(32)}, "Opaque"),
++        "todo-tls": lambda: (certificate(), "kubernetes.io/tls"),
++    }
++    for name, make in wanted.items():
++        # "-o name" prints only the Secret's name, never its data.
++        if succeeds(["kubectl", "get", "secret", name, "-n", NAMESPACE, "-o", "name"]):
++            continue
++        data, kind = make()
++        command, payload = create_secret(name, data, kind)
++        run(command, stdin=payload)
++
++
++def up(sha: str) -> None:
++    """Run every step, from the cluster to a rolled-out app."""
++    require_tools()
++    ensure_cluster()
++    build(sha)
++    ensure_secrets()
++    write_release(sha)
++    for step in rollout_steps(sha):
++        run(step)
++    log.info("todo-app %s is running at %s", sha, URL)
++
++
++def main() -> None:
++    """Parse the subcommand and run it."""
++    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
++    parser.add_argument("command", choices=("up", "build", "render", "secrets", "down"))
++    parser.add_argument("--sha", help="the commit to deploy (default: the checked-out one)")
++    args = parser.parse_args()
++    logging.basicConfig(level=logging.INFO, format="%(message)s")
++    sha = args.sha or current_sha()
++    actions = {
++        "up": lambda: up(sha),
++        "build": lambda: build(sha),
++        "render": lambda: log.info("wrote %s", write_release(sha)),
++        "secrets": ensure_secrets,
++        "down": lambda: run(["k3d", "cluster", "delete", CLUSTER]),
++    }
++    try:
++        actions[args.command]()
++    except subprocess.CalledProcessError as error:
++        sys.exit(f"stopped: {' '.join(error.cmd)} exited with {error.returncode}")
++
++
++if __name__ == "__main__":
++    main()
+diff --git a/deploy/k3d/tests/test_deploy.py b/deploy/k3d/tests/test_deploy.py
+new file mode 100644
+index 0000000..15eb97f
+--- /dev/null
++++ b/deploy/k3d/tests/test_deploy.py
+@@ -0,0 +1,72 @@
++"""Check the pure parts of deploy.py: the release it writes, the order of its steps, and how it passes secrets."""
++from __future__ import annotations
++
++import importlib.util
++import json
++import unittest
++from pathlib import Path
++
++SCRIPT = Path(__file__).resolve().parent.parent / "deploy.py"
++spec = importlib.util.spec_from_file_location("deploy", SCRIPT)
++assert spec is not None and spec.loader is not None
++deploy = importlib.util.module_from_spec(spec)
++spec.loader.exec_module(deploy)
++
++SHA = "abc1234"
++
++
++class ReleaseTest(unittest.TestCase):
++    def test_every_part_pins_both_images_to_the_commit(self) -> None:
++        for text in deploy.release_files(SHA).values():
++            self.assertIn("name: todo-api\n    newTag: abc1234", text)
++            self.assertIn("name: todo-web\n    newTag: abc1234", text)
++
++    def test_only_the_migration_job_name_carries_the_commit(self) -> None:
++        files = deploy.release_files(SHA)
++
++        self.assertIn("nameSuffix: -abc1234", files["migrate/kustomization.yaml"])
++        self.assertNotIn("nameSuffix", files["platform/kustomization.yaml"] + files["app/kustomization.yaml"])
++
++    def test_each_part_builds_on_its_k3d_overlay(self) -> None:
++        release = deploy.REPO / "deploy" / ".release" / SHA
++        for path, text in deploy.release_files(SHA).items():
++            [resource] = [line.strip()[2:] for line in text.splitlines() if line.startswith("  - ../")]
++            part = Path(path).parent.name
++            self.assertEqual((release / part / resource).resolve(), deploy.REPO / "deploy" / "overlays" / "k3d" / part)
++
++    def test_a_commit_that_is_not_a_short_hex_sha_is_refused(self) -> None:
++        for bad in ("", "main", "abc1234\nnameSuffix: x", "ABC1234"):
++            with self.subTest(bad=bad), self.assertRaises(ValueError):
++                deploy.release_files(bad)
++
++
++class StepsTest(unittest.TestCase):
++    def test_the_app_rolls_out_only_after_the_migration_completes(self) -> None:
++        steps = [" ".join(step) for step in deploy.rollout_steps(SHA)]
++
++        def index(fragment: str) -> int:
++            return next(n for n, step in enumerate(steps) if fragment in step)
++
++        self.assertLess(index("rollout status statefulset/db"), index("apply -k deploy/.release/abc1234/migrate"))
++        self.assertLess(index("apply -k deploy/.release/abc1234/migrate"), index("wait --for=condition=complete"))
++        self.assertLess(index("wait --for=condition=complete"), index("apply -k deploy/.release/abc1234/app"))
++        self.assertEqual(index("job/migrate-abc1234"), index("wait --for=condition=complete"))
++
++
++class SecretTest(unittest.TestCase):
++    def test_secret_values_go_on_stdin_never_in_the_command(self) -> None:
++        command, payload = deploy.create_secret("todo-db", {"password": "s3cret-value"})
++
++        self.assertNotIn("s3cret-value", " ".join(command))
++        self.assertEqual(command[-2:], ["-f", "-"])
++        self.assertEqual(json.loads(payload)["stringData"], {"password": "s3cret-value"})
++        self.assertEqual(json.loads(payload)["metadata"], {"name": "todo-db", "namespace": "todo"})
++
++    def test_a_tls_secret_has_the_tls_type(self) -> None:
++        _, payload = deploy.create_secret("todo-tls", {"tls.crt": "C", "tls.key": "K"}, kind="kubernetes.io/tls")
++
++        self.assertEqual(json.loads(payload)["type"], "kubernetes.io/tls")
++
++
++if __name__ == "__main__":
++    unittest.main()
+diff --git a/deploy/overlays/k3d/app/kustomization.yaml b/deploy/overlays/k3d/app/kustomization.yaml
+new file mode 100644
+index 0000000..2b32dd6
+--- /dev/null
++++ b/deploy/overlays/k3d/app/kustomization.yaml
+@@ -0,0 +1,24 @@
++# The app on k3d: served at https://localhost:8443 through k3s's built-in Traefik, with a mkcert certificate.
++apiVersion: kustomize.config.k8s.io/v1beta1
++kind: Kustomization
++resources:
++  - ../../../base/app
++configMapGenerator:
++  - name: todo-config
++    behavior: merge
++    literals:
++      - APP_ORIGIN=https://localhost:8443
++      - COOKIE_SECURE=true
++patches:
++  - target:
++      kind: Ingress
++      name: web
++    patch: |-
++      - op: add
++        path: /spec/ingressClassName
++        value: traefik
++      - op: add
++        path: /spec/tls
++        value:
++          - hosts: [localhost]
++            secretName: todo-tls
+diff --git a/deploy/overlays/k3d/migrate/kustomization.yaml b/deploy/overlays/k3d/migrate/kustomization.yaml
+new file mode 100644
+index 0000000..f7b2c69
+--- /dev/null
++++ b/deploy/overlays/k3d/migrate/kustomization.yaml
+@@ -0,0 +1,4 @@
++apiVersion: kustomize.config.k8s.io/v1beta1
++kind: Kustomization
++resources:
++  - ../../../base/migrate
+diff --git a/deploy/overlays/k3d/platform/kustomization.yaml b/deploy/overlays/k3d/platform/kustomization.yaml
+new file mode 100644
+index 0000000..3c14b3c
+--- /dev/null
++++ b/deploy/overlays/k3d/platform/kustomization.yaml
+@@ -0,0 +1,4 @@
++apiVersion: kustomize.config.k8s.io/v1beta1
++kind: Kustomization
++resources:
++  - ../../../base/platform
+diff --git a/docker-compose.yml b/docker-compose.yml
+index 3bda7cd..805acd8 100644
+--- a/docker-compose.yml
++++ b/docker-compose.yml
+@@ -105,6 +105,24 @@ services:
+       - ./tests/load/k6:/scripts:ro
+       - ./tests/load/results:/results
+ 
++  # The same load test against the k3d cluster, which must be running:
++  # `docker compose --profile load-k3d run --rm k6-k3d run /scripts/journey.js`. It reaches the cluster's
++  # front door through the Mac and skips certificate checks, which the live and browser suites already make.
++  k6-k3d:
++    <<: *hardening
++    image: grafana/k6:2.3.0
++    profiles: ["load-k3d"]
++    environment:
++      BASE_URL: https://host.docker.internal:8443
++      APP_ORIGIN: https://localhost:8443
++      K6_INSECURE_SKIP_TLS_VERIFY: "true"
++      VUS: ${VUS:-200}
++      HOLD: ${HOLD:-3m}
++      RESULTS_DIR: ${RESULTS_DIR:-/results}
++    volumes:
++      - ./tests/load/k6:/scripts:ro
++      - ./tests/load/results:/results
++
+   # A throwaway server for the backend test suite on the host: `docker compose --profile test up -d test-db`.
+   test-db:
+     image: postgres:18.6-alpine3.24
+diff --git a/docs/kickoff.md b/docs/kickoff.md
+index 0dbc6fd..37cbec3 100644
+--- a/docs/kickoff.md
++++ b/docs/kickoff.md
+@@ -231,6 +231,24 @@ What it settled: the CI `e2e` job passed G3, and CP2 approved the k6 journey, bu
+ 
+ What it settled: the stack-wide suites live under `tests/` (`tests/e2e/live`, `tests/e2e/browser`, `tests/load`), done in #10; each app's own tests stay in the app. Round 1's README covers running the stack and its tests on a Mac and the capacity figure, nothing more. The full write-up the brief asks for (approach, features, more time, robustness) waits until at least round 2 is done. When it is written, "how long it would have taken" is given in agent-pair time with the human review time counted in, not as human-solo days.
+ 
++## 5j. Round 2 calls, and finishing it in one PR (verbatim)
++
++The round 2 spec is `docs/specs/round-2.html`. The lead's answers to its seven calls, and the instruction that followed:
++
++> DECISIONS:
++>
++> 1. Ok
++> 2. Ok
++> 3. Ok
++> 4. your recommendation
++> 5. defaults for now.
++> 6. Ok
++> 7. local mac only.
++>
++> I'm going to take a break. Please continue autonomously with the work, setup and local testing. Stop only once you've tested e2e and completed round 2. This deviates from our original PR route. let's do all the work in one child PR to round 2 PR in the light of time constraints. When i'm back later, i'll review and should be able to test the app myself on the frontend! Please ensure you write clear instructions for local setup and runtime in the updated README.md!
++
++What it settled (spec revision 2, 2026-10-20): a three-node k3d cluster with the API spread across nodes; nginx stays the front of the app and Traefik only ends TLS; TLS on k3d with a mkcert certificate; a 20-second `preStop` sleep replaces the deployment rule's "`/readyz` fails once shutdown starts"; one deploy script, with each apply run on its own in the session. Restricted Pod Security, network policies and a k3d CI job are deferred to `FUTURE.md`. All of round 2 lands in one child PR into `round/2-k3d`, built and tested by the agent while the lead is away; the disruption and load runs happen without the lead and are written up for a walk-through. The README gets clear setup and run steps for k3d. Because the lead is away, the deploy script creates the two Secrets itself when they are missing (random values, never printed); the spec marks that for the lead's call on return.
++
+ ## 6. Before submission
+ 
+ - [ ] Share the spec artifact, and the design artifact, so the reviewers can open them; put the links in the final report.
+diff --git a/frontend/Dockerfile b/frontend/Dockerfile
+index 1b914df..6af1dac 100644
+--- a/frontend/Dockerfile
++++ b/frontend/Dockerfile
+@@ -10,5 +10,9 @@ RUN npm run build
+ FROM nginxinc/nginx-unprivileged:1.30.6-alpine3.24
+ # Replaces the main config, because worker_processes is only valid there, not in a conf.d include.
+ COPY nginx.conf /etc/nginx/nginx.conf
++# The entrypoint fills this in at start, into /tmp, the one folder the read-only container can write:
++# the DNS server from /etc/resolv.conf, and API_HOST. https://github.com/nginx/docker-nginx/tree/master/entrypoint
++COPY nginx-upstream.conf.template /etc/nginx/templates/upstream.conf.template
++ENV NGINX_ENTRYPOINT_LOCAL_RESOLVERS=1 NGINX_ENVSUBST_OUTPUT_DIR=/tmp API_HOST=api
+ COPY --from=build /app/dist /usr/share/nginx/html
+ EXPOSE 8080
+diff --git a/frontend/nginx-upstream.conf.template b/frontend/nginx-upstream.conf.template
+new file mode 100644
+index 0000000..1271407
+--- /dev/null
++++ b/frontend/nginx-upstream.conf.template
+@@ -0,0 +1,18 @@
++# Filled in by the image's entrypoint at start, so one image runs in compose and in Kubernetes:
++# https://github.com/nginx/docker-nginx/blob/master/entrypoint/20-envsubst-on-templates.sh
++# NGINX_LOCAL_RESOLVERS is the DNS server from /etc/resolv.conf: Docker's in compose, the cluster's in Kubernetes.
++# A short validity picks up replicas whose addresses change.
++resolver ${NGINX_LOCAL_RESOLVERS} valid=10s ipv6=off;
++
++upstream api {
++    # "resolve" re-reads the replicas' addresses from DNS; it needs a shared zone.
++    # https://nginx.org/en/docs/http/ngx_http_upstream_module.html#resolve
++    zone api 64k;
++    # API_HOST is the API's DNS name: "api" in compose, the headless Service's full name in Kubernetes.
++    server ${API_HOST}:8000 resolve;
++    # At most 16 idle connections per worker, 32 in all, well under each replica's 200-connection limit.
++    # https://nginx.org/en/docs/http/ngx_http_upstream_module.html#keepalive
++    keepalive 16;
++    # Shorter than uvicorn's 75 s, so nginx never reuses a connection the API is closing.
++    keepalive_timeout 60s;
++}
+diff --git a/frontend/nginx.conf b/frontend/nginx.conf
+index 421b6e4..051a34b 100644
+--- a/frontend/nginx.conf
++++ b/frontend/nginx.conf
+@@ -31,9 +31,6 @@ http {
+     gzip on;
+     gzip_types text/css application/javascript text/javascript application/json;
+ 
+-    # Docker's embedded DNS. A short validity picks up replicas whose addresses change.
+-    resolver 127.0.0.11 valid=10s ipv6=off;
+-
+     # Pass on the caller's request id, or make one, so nginx and the API log the same id.
+     map $http_x_request_id $req_id {
+         default $http_x_request_id;
+@@ -47,17 +44,8 @@ http {
+         /api/docs "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net 'sha256-eV3QMumkWxytVHa/LDvu+mnW+PcSAEI4SfFu0iIlbDc='; style-src 'self' https://cdn.jsdelivr.net; img-src 'self' data: https://fastapi.tiangolo.com; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'";
+     }
+ 
+-    upstream api {
+-        # "resolve" re-reads the replicas' addresses from DNS; it needs a shared zone.
+-        # https://nginx.org/en/docs/http/ngx_http_upstream_module.html#resolve
+-        zone api 64k;
+-        server api:8000 resolve;
+-        # At most 16 idle connections per worker, 32 in all, well under each replica's 200-connection limit.
+-        # https://nginx.org/en/docs/http/ngx_http_upstream_module.html#keepalive
+-        keepalive 16;
+-        # Shorter than uvicorn's 75 s, so nginx never reuses a connection the API is closing.
+-        keepalive_timeout 60s;
+-    }
++    # The resolver and the API upstream, written by the entrypoint from nginx-upstream.conf.template.
++    include /tmp/upstream.conf;
+ 
+     server {
+         listen 8080;
+@@ -86,6 +74,9 @@ http {
+         # Since nginx 1.29.7 the proxy speaks HTTP/1.1 and sends no Connection header by default,
+         # which upstream keep-alive needs. https://nginx.org/en/CHANGES-1.30
+         location /api/ {
++            # Compressing would turn the API's strong ETags weak, and If-Match never matches a weak one:
++            # https://nginx.org/en/CHANGES (1.7.3), https://www.rfc-editor.org/rfc/rfc9110#field.if-match
++            gzip off;
+             proxy_pass http://api;
+             proxy_set_header Host $host;
+             proxy_set_header X-Request-ID $req_id;
+diff --git a/tests/e2e/browser/playwright.config.ts b/tests/e2e/browser/playwright.config.ts
+index 4fa458f..55ad1f4 100644
+--- a/tests/e2e/browser/playwright.config.ts
++++ b/tests/e2e/browser/playwright.config.ts
+@@ -1,6 +1,6 @@
+ import { defineConfig, devices } from "@playwright/test";
+ 
+-/** The browser journeys run against the full stack that docker compose serves on port 8080. */
++/** The browser journeys run against the stack's front door: compose on port 8080, or `BASE_URL` (k3d: https://localhost:8443). */
+ export default defineConfig({
+   testDir: ".",
+   testMatch: "*.spec.ts",
+@@ -10,7 +10,9 @@ export default defineConfig({
+   retries: 0,
+   reporter: [["list"], ["html", { outputFolder: "playwright-report", open: "never" }]],
+   use: {
+-    baseURL: "http://localhost:8080",
++    baseURL: process.env.BASE_URL ?? "http://localhost:8080",
++    // Only on a Mac that has not yet trusted mkcert's local authority with `mkcert -install`.
++    ignoreHTTPSErrors: process.env.IGNORE_HTTPS_ERRORS === "1",
+     trace: "retain-on-failure",
+   },
+   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+diff --git a/tests/e2e/live/support.py b/tests/e2e/live/support.py
+index 7ac1b54..ef969e2 100644
+--- a/tests/e2e/live/support.py
++++ b/tests/e2e/live/support.py
+@@ -1,10 +1,13 @@
+ """Values and helpers the live tests share."""
+ 
++import os
+ from typing import Final
+ from uuid import uuid4
+ 
+-# The stack's one published port, where nginx serves the SPA and proxies the API.
+-BASE_URL: Final = "http://localhost:8080"
++# The stack's front door: compose's port by default, or the cluster's (https://localhost:8443) on k3d.
++BASE_URL: Final = os.environ.get("BASE_URL", "http://localhost:8080")
++# How many API replicas sit behind it: two in compose, three on k3d.
++API_REPLICAS: Final = int(os.environ.get("API_REPLICAS", "2"))
+ PASSWORD: Final = "correct horse battery staple"
+ 
+ 
+diff --git a/tests/e2e/live/test_stack.py b/tests/e2e/live/test_stack.py
+index 13264bf..bb267c5 100644
+--- a/tests/e2e/live/test_stack.py
++++ b/tests/e2e/live/test_stack.py
+@@ -9,7 +9,7 @@ from uuid import uuid4
+ import httpx
+ import pytest
+ 
+-from support import BASE_URL, PASSWORD, unique_email
++from support import API_REPLICAS, BASE_URL, PASSWORD, unique_email
+ 
+ 
+ def test_migrations_ran_and_signup_works_through_the_proxy(client: httpx.Client) -> None:
+@@ -46,14 +46,29 @@ def test_api_docs_are_served_through_the_proxy(client: httpx.Client) -> None:
+     assert (document.status_code, document.json()["info"]["title"]) == (200, "todo-app API")
+ 
+ 
+-def test_session_from_one_replica_is_accepted_by_the_other(client: httpx.Client) -> None:
++def test_session_from_one_replica_is_accepted_by_every_replica(client: httpx.Client) -> None:
+     client.post("/api/v1/auth/register", json={"email": unique_email(), "password": PASSWORD})
++    task_id = client.post("/api/v1/tasks", json={"title": "seen by every replica"}).json()["id"]
+ 
+-    # nginx spreads requests over the replicas, so a few dozen calls reach both.
+-    answers = [client.get("/api/v1/auth/me") for _ in range(40)]
++    # nginx spreads requests over the replicas, so twenty calls per replica reach them all.
++    answers = [client.get("/api/v1/tasks") for _ in range(20 * API_REPLICAS)]
+ 
+     assert {answer.status_code for answer in answers} == {200}
+-    assert len({answer.headers["x-served-by"] for answer in answers}) == 2
++    assert {tuple(item["id"] for item in answer.json()["items"]) for answer in answers} == {(task_id,)}
++    assert len({answer.headers["x-served-by"] for answer in answers}) == API_REPLICAS
++
++
++def test_etag_from_the_proxy_works_as_if_match_for_a_client_that_accepts_gzip(client: httpx.Client) -> None:
++    client.post("/api/v1/auth/register", json={"email": unique_email(), "password": PASSWORD})
++    task_id = client.post("/api/v1/tasks", json={"title": "edited by a script"}).json()["id"]
++    gzip = {"Accept-Encoding": "gzip"}
++
++    read = client.get(f"/api/v1/tasks/{task_id}", headers=gzip)
++    edited = client.patch(
++        f"/api/v1/tasks/{task_id}", json={"notes": "kept"}, headers={**gzip, "If-Match": read.headers["etag"]}
++    )
++
++    assert (read.headers["etag"], edited.status_code) == ('"1"', 200)
+ 
+ 
+ SECURITY_HEADERS = {
+@@ -100,7 +115,7 @@ def test_api_docs_csp_allows_the_inline_script_the_page_serves(client: httpx.Cli
+     assert f"'sha256-{digest}'" in page.headers["content-security-policy"]
+ 
+ 
+-async def fire_moves_through_both_replicas(moves: int, seed: int) -> tuple[list[httpx.Response], list[str], list[str]]:
++async def fire_moves_through_every_replica(moves: int, seed: int) -> tuple[list[httpx.Response], list[str], list[str]]:
+     """Sign up, create ten tasks, then send every move at once; return the answers, task ids and listed ids."""
+     async with httpx.AsyncClient(base_url=BASE_URL, headers={"Origin": BASE_URL}, timeout=30.0) as client:
+         await client.post("/api/v1/auth/register", json={"email": unique_email(), "password": PASSWORD})
+@@ -116,9 +131,9 @@ async def fire_moves_through_both_replicas(moves: int, seed: int) -> tuple[list[
+     return [move.result() for move in sent], task_ids, [item["rank"] for item in listed]
+ 
+ 
+-def test_concurrent_moves_through_both_replicas_keep_ranks_unique() -> None:
+-    answers, task_ids, ranks = asyncio.run(fire_moves_through_both_replicas(moves=50, seed=7))
++def test_concurrent_moves_through_every_replica_keep_ranks_unique() -> None:
++    answers, task_ids, ranks = asyncio.run(fire_moves_through_every_replica(moves=50, seed=7))
+ 
+     assert {answer.status_code for answer in answers} == {200}
+-    assert len({answer.headers["x-served-by"] for answer in answers}) == 2
++    assert len({answer.headers["x-served-by"] for answer in answers}) == API_REPLICAS
+     assert len(ranks) == len(set(ranks)) == len(task_ids)

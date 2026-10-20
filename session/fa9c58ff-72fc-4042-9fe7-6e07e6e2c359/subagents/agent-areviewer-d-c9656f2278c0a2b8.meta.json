@@ -1,0 +1,1 @@
+{"agentType":"reviewer-d","description":"Review frontend data layer D","name":"reviewer-d","spawnDepth":0,"requestShape":"background","requestNonInteractive":true,"model":"opus","taskKind":"in_process_teammate","teamName":"session-fa9c58ff","color":"yellow","planModeRequired":false,"customAgentType":"reviewer","spawnedAgentType":"reviewer","permissionMode":"auto"}
