@@ -9,7 +9,7 @@ from uuid import uuid4
 import httpx
 import pytest
 
-from support import BASE_URL, PASSWORD, unique_email
+from support import API_REPLICAS, BASE_URL, PASSWORD, unique_email
 
 
 def test_migrations_ran_and_signup_works_through_the_proxy(client: httpx.Client) -> None:
@@ -46,14 +46,16 @@ def test_api_docs_are_served_through_the_proxy(client: httpx.Client) -> None:
     assert (document.status_code, document.json()["info"]["title"]) == (200, "todo-app API")
 
 
-def test_session_from_one_replica_is_accepted_by_the_other(client: httpx.Client) -> None:
+def test_session_from_one_replica_is_accepted_by_every_replica(client: httpx.Client) -> None:
     client.post("/api/v1/auth/register", json={"email": unique_email(), "password": PASSWORD})
+    task_id = client.post("/api/v1/tasks", json={"title": "seen by every replica"}).json()["id"]
 
-    # nginx spreads requests over the replicas, so a few dozen calls reach both.
-    answers = [client.get("/api/v1/auth/me") for _ in range(40)]
+    # nginx spreads requests over the replicas, so twenty calls per replica reach them all.
+    answers = [client.get("/api/v1/tasks") for _ in range(20 * API_REPLICAS)]
 
     assert {answer.status_code for answer in answers} == {200}
-    assert len({answer.headers["x-served-by"] for answer in answers}) == 2
+    assert {tuple(item["id"] for item in answer.json()["items"]) for answer in answers} == {(task_id,)}
+    assert len({answer.headers["x-served-by"] for answer in answers}) == API_REPLICAS
 
 
 def test_etag_from_the_proxy_works_as_if_match_for_a_client_that_accepts_gzip(client: httpx.Client) -> None:
@@ -113,7 +115,7 @@ def test_api_docs_csp_allows_the_inline_script_the_page_serves(client: httpx.Cli
     assert f"'sha256-{digest}'" in page.headers["content-security-policy"]
 
 
-async def fire_moves_through_both_replicas(moves: int, seed: int) -> tuple[list[httpx.Response], list[str], list[str]]:
+async def fire_moves_through_every_replica(moves: int, seed: int) -> tuple[list[httpx.Response], list[str], list[str]]:
     """Sign up, create ten tasks, then send every move at once; return the answers, task ids and listed ids."""
     async with httpx.AsyncClient(base_url=BASE_URL, headers={"Origin": BASE_URL}, timeout=30.0) as client:
         await client.post("/api/v1/auth/register", json={"email": unique_email(), "password": PASSWORD})
@@ -129,9 +131,9 @@ async def fire_moves_through_both_replicas(moves: int, seed: int) -> tuple[list[
     return [move.result() for move in sent], task_ids, [item["rank"] for item in listed]
 
 
-def test_concurrent_moves_through_both_replicas_keep_ranks_unique() -> None:
-    answers, task_ids, ranks = asyncio.run(fire_moves_through_both_replicas(moves=50, seed=7))
+def test_concurrent_moves_through_every_replica_keep_ranks_unique() -> None:
+    answers, task_ids, ranks = asyncio.run(fire_moves_through_every_replica(moves=50, seed=7))
 
     assert {answer.status_code for answer in answers} == {200}
-    assert len({answer.headers["x-served-by"] for answer in answers}) == 2
+    assert len({answer.headers["x-served-by"] for answer in answers}) == API_REPLICAS
     assert len(ranks) == len(set(ranks)) == len(task_ids)
