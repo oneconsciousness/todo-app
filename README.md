@@ -2,7 +2,7 @@
 
 A full-stack To Do list: a React and TypeScript web client and a Python REST API. A user signs up or signs in, then creates, views, edits, completes, reorders, searches and deletes their own tasks, with a detail screen per task. The layout works from phone to desktop.
 
-It is built in rounds. Round 1 runs it as containers with Docker Compose: Postgres, a one-shot migration step, two API replicas and nginx in front. Round 2 runs the same images on a local Kubernetes cluster (k3d) with three nodes, behind HTTPS, where the API scales itself from three to five replicas with the load. Round 3, a cloud cluster on Azure, is next. The requirements and the decisions behind them are in [`docs/kickoff.md`](docs/kickoff.md) and the specs in [`docs/specs/`](docs/specs/); how we work is in [`CONTRIBUTING.md`](CONTRIBUTING.md).
+It is built in rounds. Round 1 runs it as containers with Docker Compose: Postgres, a one-shot migration step, two API replicas and nginx in front. Round 2 runs the same images on a local Kubernetes cluster (k3d) with three nodes, behind HTTPS, starting with one replica of everything, where the API adds a second under load. Round 3, a cloud cluster on Azure, is next. The requirements and the decisions behind them are in [`docs/kickoff.md`](docs/kickoff.md) and the specs in [`docs/specs/`](docs/specs/); how we work is in [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 There are two ways to run it on a Mac. Docker Compose is the quickest. k3d shows the app spread over a cluster.
 
@@ -26,7 +26,7 @@ To run anything beyond a laptop, replace `POSTGRES_PASSWORD` and `JWT_SECRET` in
 
 ## Run it on Kubernetes with k3d
 
-[k3d](https://k3d.io) runs a real Kubernetes cluster ([k3s](https://k3s.io)) inside Docker. The cluster has one server and two agent nodes. The app runs on it as Postgres with its own volume, a migration Job, three to five API pods (an autoscaler adds pods under load), two nginx pods and an HTTPS front door.
+[k3d](https://k3d.io) runs a real Kubernetes cluster ([k3s](https://k3s.io)) inside Docker. The cluster has one server and two agent nodes. The app runs on it as Postgres with its own volume, a migration Job, one API pod (an autoscaler adds a second under load), one nginx pod and an HTTPS front door.
 
 ### Once per Mac
 
@@ -65,12 +65,14 @@ kubectl create secret tls todo-tls -n todo --cert=<your-cert.pem> --key=<your-ke
 ### See it spread over the cluster
 
 ```bash
-kubectl get pods -n todo -o wide                                   # three api pods, each on its own node
+kubectl get pods -n todo -o wide                                   # one pod of each at rest; under load a second api pod, on another node
 curl -s --cacert "$(mkcert -CAROOT)/rootCA.pem" -D - -o /dev/null https://localhost:8443/api/v1/auth/me   # run it a few times: X-Served-By names the pod that answered
 kubectl get hpa -n todo --watch                                    # the autoscaler: CPU against its 70% target, and the pod count
 ```
 
-The autoscaler adds an API pod when the pods average over 70% of their CPU, up to five, and removes the extra pods after two quiet minutes. To see it work, put some load on the app (see the load test below) and watch `kubectl get hpa`. Postgres stays one pod with its data on a volume; it is not scaled.
+The autoscaler adds an API pod when the pods average over 70% of their CPU, up to two, and removes the extra pod after two quiet minutes. To see it work, put some load on the app (see the load test below) and watch `kubectl get hpa`. Postgres stays one pod with its data on a volume; it is not scaled.
+
+**Sized for a laptop.** Everything starts at one replica and the API stops at two, because we don't know the Mac it runs on. Releases and scaling lose no request at that size, but if the only API pod dies, requests fail for about 15 seconds until its replacement is up. For a heavy load test, or to keep a spare pod, raise the limits to suit your machine: `kubectl patch hpa api -n todo -p '{"spec":{"minReplicas":2,"maxReplicas":5}}'`, or change `deploy/base/app/hpa.yaml` and run `up` again. Five API pods is the most the database's connections allow.
 
 ### Update, stop and remove it
 
@@ -110,7 +112,7 @@ CI runs every layer but load on each pull request.
 The live, browser and load suites also run against the k3d cluster. Point them at it like this:
 
 ```bash
-cd tests/e2e/live && BASE_URL=https://localhost:8443 API_REPLICAS=3 SSL_CERT_FILE="$(mkcert -CAROOT)/rootCA.pem" uv run pytest
+cd tests/e2e/live && BASE_URL=https://localhost:8443 API_REPLICAS=1 SSL_CERT_FILE="$(mkcert -CAROOT)/rootCA.pem" uv run pytest
 cd tests/e2e/browser && BASE_URL=https://localhost:8443 npm test
 docker compose --profile load-k3d run --rm k6-k3d run /scripts/journey.js
 ```
@@ -124,7 +126,8 @@ Both figures are from an Apple M4 Max laptop, with every budget met: no failed r
 | Where | Capacity | Notes |
 |---|---|---|
 | Docker Compose, two API replicas | **at least 1,000 concurrent users** | The API's CPU runs out first. [`round-1.md`](tests/load/results/round-1.md) |
-| k3d, the API autoscaled to five pods | **at least 1,500 concurrent users** | No request failed while API pods were deleted, restarted or scaled under load. [`round-2.md`](tests/load/results/round-2.md) |
+| k3d as shipped, the API autoscaled from one pod to two | **at least 1,000 concurrent users** | Releases, scaling and losing one of two pods lost no request; losing the only pod cost about 13 seconds of errors. [`round-2.md`](tests/load/results/round-2.md) |
+| k3d with the API's ceiling raised to five pods | **at least 1,500 concurrent users** | Same runs, same budgets. [`round-2.md`](tests/load/results/round-2.md) |
 
 ## Status
 

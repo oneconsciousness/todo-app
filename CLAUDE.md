@@ -31,7 +31,7 @@ The stack is Postgres, a one-shot `migrate` service, two API replicas and nginx.
 - Load, `tests/load/` (k6 in a compose container): `GIT_SHA=$(git rev-parse --short HEAD) docker compose --profile load run --rm k6 run /scripts/journey.js`. `VUS` and `HOLD` set the users and the hold time (200 and 3m by default). `python3 tests/load/run_stepped.py` steps up the users to find the capacity. Results go to `tests/load/results/`. Run load tests with the lead present.
 
 The same suites run against the local k3d cluster at https://localhost:8443 (`.claude/rules/deployment.md`):
-- Live: `BASE_URL=https://localhost:8443 API_REPLICAS=3 SSL_CERT_FILE="$(mkcert -CAROOT)/rootCA.pem" uv run pytest`.
+- Live: `BASE_URL=https://localhost:8443 API_REPLICAS=1 SSL_CERT_FILE="$(mkcert -CAROOT)/rootCA.pem" uv run pytest`.
 - Browser: `BASE_URL=https://localhost:8443 npm test`. Add `IGNORE_HTTPS_ERRORS=1` only on a Mac that has not run `mkcert -install`.
 - Load: `GIT_SHA=$(git rev-parse --short HEAD) docker compose --profile load-k3d run --rm k6-k3d run /scripts/journey.js`. It reaches the cluster through `host.docker.internal:8443` and skips certificate checks.
 

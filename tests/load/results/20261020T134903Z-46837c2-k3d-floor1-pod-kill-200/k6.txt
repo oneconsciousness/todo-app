@@ -1,0 +1,9 @@
+time="2026-10-20T13:53:17Z" level=error msg="data check: 117 of 200 accounts do not hold exactly five tasks with unique ranks" source=console
+time="2026-10-20T13:53:17Z" level=error msg="test marked as failed: data check failed for 117 accounts"
+VUs 200, hold 3m
+requests 43936 (173.5/s), iterations 6381
+p95 ms: read 45.5, write 58.9, auth 24.0
+failed requests 5.007%, server errors 2200, checks 94.92%
+budgets missed: server_errors count==0; http_req_failed rate<0.001; checks rate>0.999
+time="2026-10-20T13:53:17Z" level=error msg="test run was marked as failed"
+

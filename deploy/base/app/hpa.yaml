@@ -1,5 +1,6 @@
-# Scales the API between 3 and 5 pods on CPU: a pod is added when the pods average over 70% of their CPU request.
-# Five is the ceiling the database allows: 5 pods × 15 connections = 75, under 80% of Postgres's 100.
+# Scales the API between 1 and 2 pods on CPU: a pod is added when the pods average over 70% of their CPU request.
+# Two keeps a laptop comfortable. For a heavy load test, raise maxReplicas; the database allows up to 5
+# (5 pods × 15 connections = 75, under 80% of Postgres's 100).
 # https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
@@ -10,8 +11,8 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: api
-  minReplicas: 3
-  maxReplicas: 5
+  minReplicas: 1
+  maxReplicas: 2
   metrics:
     - type: Resource
       resource:

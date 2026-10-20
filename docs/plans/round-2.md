@@ -2,8 +2,8 @@
 
 | | |
 |---|---|
-| Status | **As built.** Written after the work, at the lead's request, from what was built and tested on `feature/k3d-cluster`. For the lead's review with the round's one child PR. |
-| Builds on | `docs/specs/round-2.html` (revision 3, D21 to D34, the source of truth), then `docs/kickoff.md` §§ 5j and 5k |
+| Status | **As built.** Written after the work, at the lead's request, from what was built and tested on `feature/k3d-cluster` (#12) and `feature/k3d-scale-from-one`, which starts everything at one replica at the lead's call after #12 merged. |
+| Builds on | `docs/specs/round-2.html` (revision 4, D21 to D34, the source of truth), then `docs/kickoff.md` §§ 5j, 5k and 5l |
 | Out of scope | Round 3 (AKS), and the items deferred to `FUTURE.md`: restricted Pod Security, network policies, a k3d job in CI |
 | Written | 2026-10-20 |
 
@@ -26,7 +26,7 @@ How to read it. § 1 maps each spec decision to the files that build it. §§ 2 
 | D31 | Kubernetes's defaults for Pod Security and the network (deferred) | `FUTURE.md` |
 | D32 | One deploy script; in a session each apply runs on its own | `deploy/k3d/deploy.py`, `.claude/rules/deployment.md` |
 | D33 | k3d on the Mac only (deferred CI job) | `FUTURE.md` |
-| D34 | API autoscaler, 3 to 5 pods on CPU | `deploy/base/app/hpa.yaml` |
+| D34 | API autoscaler, 1 to 2 pods on CPU (3 to 5 before revision 4) | `deploy/base/app/hpa.yaml` |
 
 ## 2. Repo layout
 
@@ -55,9 +55,9 @@ deploy/
 
 - **Postgres** (`db.yaml`): `postgres:18.6-alpine3.24`, the image compose runs, as uid 70 with a read-only root filesystem; writable `emptyDir`s for `/var/run/postgresql` and `/tmp`; 1 GiB volume from k3s's local-path storage at `/var/lib/postgresql`. Readiness `pg_isready`, liveness TCP. Requests 250m CPU and 256 MiB, limits 2 CPUs and 1 GiB.
 - **Migration Job** (`job.yaml`): the API image runs `alembic upgrade head`; it gets the password and `DATABASE_URL` only. `backoffLimit` 2, a 300-second deadline, kept a week.
-- **API** (`api.yaml`): starts at 3 replicas, rolling update with surge 1 and none unavailable, spread one per node (`DoNotSchedule`, counted per release with `matchLabelKeys: [pod-template-hash]`). `DATABASE_URL` is built from `$(POSTGRES_PASSWORD)`, so the password is stored once. Startup and liveness on `/livez`, readiness on `/readyz`. `preStop` sleep 20 s, grace 45 s. Requests 500m and 256 MiB, limits 1 CPU and 512 MiB. Runs as uid 10001, read-only, no capabilities, no service account token. Headless Service `api`; PDB at least 2.
-- **Autoscaler** (`hpa.yaml`): 3 to 5 pods at 70% of the CPU request, scale up at once, scale down after 120 s. The Deployment keeps `replicas: 3`: a client-side apply patches only fields that changed in the manifest, so it leaves a scaled count alone.
-- **web** (`web.yaml`): 2 replicas spread across nodes, `API_HOST=api.todo.svc.cluster.local`, `/tmp` writable, `preStop` 5 s, uid 101. Service `web`; PDB at least 1.
+- **API** (`api.yaml`): starts at 1 replica, rolling update with surge 1 and none unavailable, spread one per node (`DoNotSchedule`, counted per release with `matchLabelKeys: [pod-template-hash]`). `DATABASE_URL` is built from `$(POSTGRES_PASSWORD)`, so the password is stored once. Startup and liveness on `/livez`, readiness on `/readyz`. `preStop` sleep 20 s, grace 45 s. Requests 500m and 256 MiB, limits 1 CPU and 512 MiB. Runs as uid 10001, read-only, no capabilities, no service account token. Headless Service `api`; PDB: at most one pod down at a time.
+- **Autoscaler** (`hpa.yaml`): 1 to 2 pods at 70% of the CPU request (the database allows up to 5), scale up at once, scale down after 120 s. The Deployment keeps `replicas: 1`: a client-side apply patches only fields that changed in the manifest, so it leaves a scaled count alone.
+- **web** (`web.yaml`): 1 replica, `API_HOST=api.todo.svc.cluster.local`, `/tmp` writable, `preStop` 5 s, uid 101. Service `web`; PDB: at most one pod down at a time, since "at least one" would block every node drain.
 - **Ingress** (`ingress.yaml` and the k3d overlay): everything to `web`; the overlay adds `ingressClassName: traefik` and TLS with `todo-tls` for `localhost`.
 - **Settings**: `todo-config` from a generator (`LOG_LEVEL` in the base; `APP_ORIGIN=https://localhost:8443` and `COOKIE_SECURE=true` merged in the overlay). Its name carries a content hash, so a changed setting rolls the API.
 
@@ -92,7 +92,20 @@ Load, 2026-10-20, same journey and budgets as round 1 (`tests/load/results/round
 | Capacity | 1,000 | 220,904 | 0% | 3 → 5 pods |
 | Capacity | 1,500 | 331,356 | 0% | 5 pods; about 0.74 of a core per API pod, Postgres about 0.68 |
 
-Every passing run met every budget and its data check: each account held exactly its five tasks with unique ranks. **Capacity on k3d: at least 1,500 concurrent users.**
+As shipped, one replica of everything and the API autoscaled to two:
+
+| Run | Users | Requests | Failed | Notes |
+|---|---|---|---|---|
+| Autoscaler stays at 1 | 200 | 43,779 | 0% | One pod at up to 64% of its CPU request, under the target |
+| **The only API pod deleted** | 200 | 43,936 | **5.0%** | **2,200 5xx, about 13 s** until the replacement was ready and found |
+| Rolling restart of the one pod | 200 | 43,877 | 0% | New pod ready before the old one left |
+| Autoscaler | 500 | 110,067 | 0% | 1 → 2 pods and back to 1 |
+| One of two pods deleted | 500 | 110,193 | 0% | |
+| Capacity | 1,000 | 221,170 | 0% | 2 pods at up to 0.84 of a core each |
+
+Load testing stopped at 1,000 users at the lead's call.
+
+Every passing run met every budget and its data check: each account held exactly its five tasks with unique ranks. **Capacity on k3d: at least 1,000 concurrent users as shipped (two API pods), at least 1,500 with the ceiling raised to five.**
 
 End to end from nothing: the cluster was deleted and recreated through `deploy.py`'s own `ensure_cluster`, then `build`, `secrets`, `render` and each rollout step, with no warning; the live and browser suites passed on it.
 
@@ -110,7 +123,8 @@ Each commit was green when made.
 | `46837c2` docs(claude): describe the k3d cluster and how sessions work with it | `CLAUDE.md`, the deployment rule, the verify skill, `frontend/CLAUDE.md` |
 | `b690bac` feat(deploy): scale the API between three and five pods with the load | The autoscaler and the load balancer limit |
 | `de3515b` docs: add the k3d run steps and round 2's load results | README and `tests/load/results/` |
-| (this commit) | Spec revision 3, kickoff § 5k, this plan |
+| `fbe2df7` docs(round-2): record the autoscaler, the outcome and the as-built plan | Spec revision 3, kickoff § 5k, this plan |
+| (child PR 2) feat(deploy): start every part of the app at one replica | Manifests at one replica, autoscaler 1 to 2, disruption budgets, spec revision 4, kickoff § 5l, the shipped runs, README, the rule and this plan |
 
 ## 8. Decisions the work made that the spec did not spell out
 
@@ -120,7 +134,7 @@ Each commit was green when made.
 4. Images are built with `docker build` from the same folders compose builds, so `deploy.py` needs no `.env`.
 5. nginx writes its filled-in config to `/tmp`, not `conf.d`: a compose tmpfs on `conf.d` was not writable by nginx's user, and the container failed to start.
 6. The load test skips certificate checks; the live and browser suites make them.
-7. The Deployment keeps `replicas: 3` alongside the autoscaler (§ 4).
+7. The Deployment keeps `replicas: 1` alongside the autoscaler (§ 4).
 8. Load runs on k3d do not wipe the database between runs, unlike round 1's stepped runner.
 9. The certificate covers `localhost`, `127.0.0.1` and `::1`.
 
@@ -136,8 +150,9 @@ The lead should confirm or reverse each of these.
 
 ## 10. Risks and follow-ups
 
+- **One pod of everything at rest.** Losing the only API or nginx pod fails requests for about 15 seconds; raising the floor to two removes that (README).
 - **One Postgres pod.** Losing its node stops the app until the pod returns; the data survives on the volume. Round 3 uses Azure's managed Postgres.
-- **The autoscaler's ceiling is five pods** while each pod may open 15 connections. A connection pooler (Azure's built-in PgBouncer in round 3) lifts it.
+- **The autoscaler's ceiling is two pods** for a laptop, and at most five while each pod may open 15 connections. A connection pooler (Azure's built-in PgBouncer in round 3) lifts it.
 - **`kubectl apply` prints "configured"** for the StatefulSet, Deployments and PDBs on a repeat apply of the same release, though no object's `resourceVersion` changes.
 - **`deploy.py secrets` runs `kubectl create`**, which no ask rule covers. It only creates missing Secrets.
 - **The hygiene check's roots** still name `e2e` and `load`, which moved under `tests/` in round 1, so it does not scan the stack-wide suites.

@@ -1,0 +1,13 @@
+13:49:03 hpa=cpu:0%/70% pods=1 | api-68594677ff-bdn68=4m/151Mi db-0=6m/88Mi web-5d5c46d6f4-4nftg=1m/5Mi 
+13:49:23 hpa=cpu:0%/70% pods=1 | api-68594677ff-bdn68=263m/151Mi db-0=6m/88Mi web-5d5c46d6f4-4nftg=5m/6Mi 
+13:49:43 hpa=cpu:52%/70% pods=1 | api-68594677ff-bdn68=177m/151Mi db-0=28m/88Mi web-5d5c46d6f4-4nftg=11m/5Mi 
+13:50:03 hpa=cpu:47%/70% pods=1 | api-68594677ff-bdn68=279m/152Mi db-0=55m/88Mi web-5d5c46d6f4-4nftg=20m/6Mi 
+13:50:23 hpa=cpu:55%/70% pods=1 | api-68594677ff-bdn68=319m/151Mi db-0=69m/89Mi web-5d5c46d6f4-4nftg=23m/6Mi 
+13:50:43 hpa=cpu:63%/70% pods=1 | api-68594677ff-bdn68=303m/151Mi db-0=87m/81Mi web-5d5c46d6f4-4nftg=24m/6Mi 
+13:51:04 hpa=cpu:<unknown>/70% pods=1 | api-68594677ff-bdn68=302m/152Mi db-0=89m/78Mi web-5d5c46d6f4-4nftg=23m/6Mi 
+13:51:24 hpa=cpu:<unknown>/70% pods=1 | api-68594677ff-wjrbn=87m/78Mi db-0=31m/79Mi web-5d5c46d6f4-4nftg=16m/6Mi 
+13:51:44 hpa=cpu:<unknown>/70% pods=1 | api-68594677ff-wjrbn=308m/79Mi db-0=126m/75Mi web-5d5c46d6f4-4nftg=19m/6Mi 
+13:52:04 hpa=cpu:60%/70% pods=1 | api-68594677ff-wjrbn=291m/79Mi db-0=103m/76Mi web-5d5c46d6f4-4nftg=19m/6Mi 
+13:52:24 hpa=cpu:58%/70% pods=1 | api-68594677ff-wjrbn=295m/80Mi db-0=108m/76Mi web-5d5c46d6f4-4nftg=19m/6Mi 
+13:52:44 hpa=cpu:59%/70% pods=1 | api-68594677ff-wjrbn=275m/80Mi db-0=99m/75Mi web-5d5c46d6f4-4nftg=16m/6Mi 
+13:53:04 hpa=cpu:50%/70% pods=1 | api-68594677ff-wjrbn=251m/80Mi db-0=80m/76Mi web-5d5c46d6f4-4nftg=16m/6Mi 
