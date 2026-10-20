@@ -1,0 +1,10 @@
+time="2026-10-20T12:32:56Z" level=error msg="data check: 285 of 800 accounts do not hold exactly five tasks with unique ranks" source=console
+time="2026-10-20T12:32:56Z" level=error msg="test marked as failed: data check failed for 285 accounts"
+VUs 800, hold 3m
+requests 166455 (645.0/s), iterations 31061
+p95 ms: read 5.3, write 7.1, auth 16.0
+failed requests 27.228%, server errors 0, checks 72.38%
+budgets missed: checks rate>0.999; http_req_failed rate<0.001
+time="2026-10-20T12:32:57Z" level=error msg="test run was marked as failed"
+
+(5992 "Request Failed" warnings removed; the most frequent were EOF from https://host.docker.internal:8443; the load balancer logged "1024 worker_connections are not enough")
