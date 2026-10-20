@@ -12,3 +12,10 @@ ports:
   - port: 127.0.0.1:8443:443
     nodeFilters:
       - loadbalancer
+options:
+  k3d:
+    loadbalancer:
+      # The load balancer is nginx, and every connection it passes on holds two of these. The default of 1,024
+      # dropped connections past about 500 users, and kubectl with them. https://k3d.io/stable/usage/configfile/
+      configOverrides:
+        - settings.workerConnections=8192
