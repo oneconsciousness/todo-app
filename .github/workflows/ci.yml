@@ -9,12 +9,14 @@ on:
 permissions:
   contents: read
 
+# A PR text edit only reruns the title check, in its own group, so it never cancels a run that checks the code.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.ref }}-${{ github.event.action == 'edited' && 'title' || 'code' }}
   cancel-in-progress: true
 
 jobs:
   hygiene:
+    if: github.event.action != 'edited'
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -51,6 +53,7 @@ jobs:
           PY
 
   backend:
+    if: github.event.action != 'edited'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -93,6 +96,7 @@ jobs:
       - run: uv run pytest
 
   frontend:
+    if: github.event.action != 'edited'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -114,7 +118,6 @@ jobs:
 
   e2e:
     needs: [backend, frontend]
-    # A title edit reruns the workflow for the pr-title check; it changes no code, so the stack is not rebuilt for it.
     if: github.event.action != 'edited'
     runs-on: ubuntu-latest
     timeout-minutes: 30
