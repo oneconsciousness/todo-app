@@ -1,0 +1,5 @@
+todo-app-k6-run-e8328ed9ac80 cpu=4.71% mem=234.6MiB / 7.653GiB
+todo-app-web-1 cpu=1.85% mem=7.191MiB / 7.653GiB
+todo-app-api-2 cpu=29.07% mem=149.9MiB / 7.653GiB
+todo-app-api-1 cpu=30.15% mem=130.3MiB / 7.653GiB
+todo-app-db-1 cpu=5.95% mem=89.15MiB / 7.653GiB

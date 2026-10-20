@@ -1,0 +1,10 @@
+.venv
+tests
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.coverage
+htmlcov
+**/__pycache__
+# Settings come from compose at run time; an env file must never ride along into an image.
+**/.env*

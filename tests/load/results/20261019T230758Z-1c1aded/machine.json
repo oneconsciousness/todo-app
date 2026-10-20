@@ -1,0 +1,8 @@
+{
+  "model": "Mac16,5",
+  "cpu": "Apple M4 Max",
+  "cores": "16",
+  "memory_gib": "48",
+  "docker_cpus": "16",
+  "docker_memory_gib": "7.7"
+}

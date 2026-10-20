@@ -1,0 +1,8 @@
+node_modules
+dist
+coverage
+design
+**/*.test.*
+src/test
+# Vite bakes env files into the public bundle at build time (https://vite.dev/guide/env-and-mode), so none may enter the image.
+**/.env*

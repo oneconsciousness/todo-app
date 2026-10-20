@@ -233,8 +233,9 @@ const removeFrom = (items: readonly Task[], taskId: string) =>
   items.filter((task) => task.id !== taskId);
 
 /**
- * Delete a task at once: it leaves every cached list and its detail entry before the server answers, and comes back
- * if the delete fails. A 404 leaves it gone, since it is gone either way.
+ * Delete a task at once: it leaves every cached list before the server answers, and comes back if the delete fails.
+ * A 404 leaves it gone, since it is gone either way. Its detail entry goes once no screen shows it: removing it while
+ * the detail screen is still mounted would make that screen fetch the deleted task again.
  */
 export const useDeleteTask = () => {
   const client = useQueryClient();
@@ -244,13 +245,14 @@ export const useDeleteTask = () => {
     mutationFn: deleteTask,
     onMutate: async (taskId: string) => {
       const lists = await updateLists(taskId);
-      client.removeQueries({ queryKey: taskKeys.detail(taskId) });
+      await client.cancelQueries({ queryKey: taskKeys.detail(taskId) });
       return lists;
     },
     onError: unlessSessionEnded((error, _taskId: string, snapshot: ListSnapshot | undefined) => {
       if (!isNotFound(error) && snapshot) restoreLists(client, snapshot);
     }),
-    onSettled: () => {
+    onSettled: (_data, _error, taskId) => {
+      client.removeQueries({ queryKey: taskKeys.detail(taskId), type: "inactive" });
       void refreshListsUnlessMoving(client);
     },
   });

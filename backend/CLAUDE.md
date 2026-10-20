@@ -42,13 +42,15 @@ Coverage below 90% fails the run. Unit tests never open a socket; integration te
 - `app/services/`: use cases. Each opens its own transaction.
 - `app/db/`: the engine and session factory, table mappings and repository functions. Rows leave as Pydantic records.
 - `app/security/`: argon2id password hashing on worker threads, at most four at a time. At start-up the hasher makes a dummy hash with its own parameters; sign-in checks an unknown email's password against it, so it costs the same as a wrong password.
-- `app/log.py`: JSON lines through a queue, carrying the request and user ids from context variables.
+- `app/log.py`: JSON lines through a queue, carrying the request and user ids from context variables. uvicorn's own lines join them, but its access lines are dropped.
 - `app/middleware.py`: the request id, `X-Served-By`, `Cache-Control: no-store` on `/api/`, one access line per request, and the 500 envelope for any error nothing else handled.
 - `app/main.py`: `create_app(settings)` and the lifespan; uvicorn runs it with `--factory`.
 - `alembic/versions/`: migrations, numbered. Never edit one that has been applied.
+- `Dockerfile`: one image for the API and the compose `migrate` service. It runs as a non-root user on a read-only filesystem, and starts one uvicorn process with `--factory`, uvloop, httptools and `--no-access-log`.
 
 ## Gotchas
 
+- `RequestContextMiddleware` writes the one access line per request, and none for a probe that succeeded. `configure_logging` stops `uvicorn.access` from reaching the JSON log, so running uvicorn without `--no-access-log` still writes no second line.
 - The access line's route is rebuilt from the request's `path` and `path_params`. FastAPI includes routers by reference, so `scope["route"].path` is relative to the innermost router (`/auth/me`, not `/api/v1/auth/me`).
 - `decode_session` turns off PyJWT's own time checks (`verify_exp`, `verify_iat`), which read the wall clock. Expiry is checked against the `now` argument, so tests set the time without mocking.
 - `SessionClaims` reads JWT times with `val_temporal_unit="seconds"`. Pydantic's default reads an integer above 2e10 as milliseconds.

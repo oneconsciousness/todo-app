@@ -15,3 +15,6 @@ Ideas we chose not to build in rounds 1 to 3, and why each is worth doing. The R
 - **Rank rebalancing.** A background job that rewrites long ranks in a list to short ones, run when a rank passes a length limit.
 - **Paging for long lists.** A cursor on `GET /api/v1/tasks`; the `{"items": [...]}` envelope already leaves room for it.
 - **Sign-in rate limiting.** It needs a store shared by every replica (Redis, or the ingress), so it waits for round 2 or 3.
+
+## Security
+- **Self-host the API docs page, or turn it off in production.** `/api/docs` loads Swagger UI from jsDelivr under a floating major version, with no integrity check, and its CSP allows one inline script by hash. Serving pinned Swagger UI files from the API, or disabling the page where cookies are secure, removes the third-party script before the app is public.
